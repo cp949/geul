@@ -8,8 +8,8 @@
  * - 기대값은 같은 HTML의 `importHtml` 결과다. 표는 자리만 비교한다.
  * - 항목 글자 총합은 래퍼 없는 입력과 같아야 한다. 글자를 잃지 않는지 본다.
  * - 비교만으로는 둘이 함께 틀려도 통과하므로, 대표 입력은 명시 값으로도 고정한다.
- * - 마크가 있는 조상(`b`)은 계속 항목 글자에 씌워지는지도 고정한다. `blockquote` 안에서 `b`·`a`가
- *   목록을 감싸면 지금은 목록 구조를 잃는다. 그 두 건은 `it.fails`다(importHtml 변환기 후속, #356).
+ * - 마크가 있는 조상(`b`·`a`)은 계속 항목 글자에 씌워지는지도 고정한다. `blockquote` 안에서
+ *   `b`·`a`가 목록을 감싸면 `quote` children의 목록 항목이다(Issue #356 RD-005 DELTA-04).
  */
 import { describe, expect, it } from "vitest";
 
@@ -266,15 +266,20 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
   });
 
   describe("마크가 있는 조상은 계속 항목 글자에 씌워진다", () => {
-    // importHtml 변환기가 div·span·b·a 안의 ul/ol을 문단으로 읽어 클립보드 표 경로도 목록 구조를 잃는다(후속, #356 댓글 모음). 변환기가 고쳐지면 it.fails 실패로 알려진다.
-    it.fails("blockquote 안 b가 목록을 감싸면 항목 글자가 굵다", () => {
+    it("blockquote 안 b가 목록을 감싸면 quote children 항목 글자가 굵다", () => {
       const blocks = parse(`<blockquote><b>${UL_A}</b></blockquote>${TABLE}`);
       expect(
         withoutIds(blocks.filter((block) => block.type !== "table")),
       ).toEqual([
         {
-          type: "bulletListItem",
-          content: [{ text: "a", marks: [{ type: "bold" }] }],
+          type: "quote",
+          content: [],
+          children: [
+            {
+              type: "bulletListItem",
+              content: [{ text: "a", marks: [{ type: "bold" }] }],
+            },
+          ],
         },
       ]);
     });
@@ -297,27 +302,29 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
       ]);
     });
 
-    // importHtml 변환기가 div·span·b·a 안의 ul/ol을 문단으로 읽어 클립보드 표 경로도 목록 구조를 잃는다(후속, #356 댓글 모음). 변환기가 고쳐지면 it.fails 실패로 알려진다.
-    it.fails(
-      "blockquote 안 링크가 목록을 감싸면 항목 글자에 링크가 남는다",
-      () => {
-        const blocks = parse(
-          `<blockquote><a href="https://x.test/">${UL_A}</a></blockquote>${TABLE}`,
-        );
-        expect(
-          withoutIds(blocks.filter((block) => block.type !== "table")),
-        ).toEqual([
-          {
-            type: "bulletListItem",
-            content: [
-              {
-                text: "a",
-                marks: [{ type: "link", href: "https://x.test/" }],
-              },
-            ],
-          },
-        ]);
-      },
-    );
+    it("blockquote 안 링크가 목록을 감싸면 quote children 항목 글자에 링크가 남는다", () => {
+      const blocks = parse(
+        `<blockquote><a href="https://x.test/">${UL_A}</a></blockquote>${TABLE}`,
+      );
+      expect(
+        withoutIds(blocks.filter((block) => block.type !== "table")),
+      ).toEqual([
+        {
+          type: "quote",
+          content: [],
+          children: [
+            {
+              type: "bulletListItem",
+              content: [
+                {
+                  text: "a",
+                  marks: [{ type: "link", href: "https://x.test/" }],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+    });
   });
 });

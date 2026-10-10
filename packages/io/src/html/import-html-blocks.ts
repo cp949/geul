@@ -122,6 +122,8 @@ export const defaultHtmlTableSeam: HtmlTableSeam = {
 // 안의 <p>/<hN> 자기 콘텐츠 하나(blocksFromNodes 참고). depth·context는
 // blockquote 세그먼트의 children 재귀(blocksFromNodes로 되돌아감)가 wrapper
 // 재귀와 같은 깊이 가드를 받기 위해서만 받는다(DELTA-06a).
+// precedingBlock은 이 구간 바로 앞 형제 블록이다. 래퍼 안 연속 ol의 번호
+// 재시작을 최상위 연속 ol과 같게 판정하려고 받는다.
 const blocksFromSegments = (
   nodes: readonly HtmlNode[],
   createId: IdFactory,
@@ -129,6 +131,7 @@ const blocksFromSegments = (
   context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
   tableSeam: HtmlTableSeam,
+  precedingBlock?: Block,
 ): Block[] => {
   const blocks: Block[] = [];
 
@@ -356,10 +359,30 @@ const blocksFromSegments = (
       );
       continue;
     }
-    // document import 정책은 isListTag를 넘기지 않아 도달하지 않는다 —
-    // 공유 union의 exhaustiveness 반영(DELTA-01, Issue #143 (b)), ul/ol
-    // 매핑은 이 파일의 blocksFromListElement가 이미 따로 담당한다.
-    if (segment.kind === "list") continue;
+    // 래퍼(div·span·b·a 등) 안의 ul/ol이다(Issue #336, Issue #356 RD-005
+    // DELTA-04). 노드 목록 직속 ul/ol과 같은 blocksFromListElement로 읽는다.
+    // segment.node는 마크 있는 조상을 글자에 씌운 복제다. li 속성 객체는
+    // 원본과 같아 보존 표시(context.preserved)가 원본에 닿는다.
+    // 번호 재시작은 blocksFromNodes와 같은 규칙이다. 직전 형제가 번호 목록
+    // 항목이면 기본 번호를 1부터 다시 센다.
+    if (segment.kind === "list") {
+      const listNode = segment.node;
+      if (!isListElement(listNode)) continue;
+      const previousBlock = blocks[blocks.length - 1] ?? precedingBlock;
+      blocks.push(
+        ...blocksFromListElement(
+          listNode,
+          createId,
+          depth,
+          context,
+          iframeEmbedConfig,
+          tableSeam,
+          listNode.tagName === "ol" &&
+            previousBlock?.type === "numberedListItem",
+        ),
+      );
+      continue;
+    }
     if (segment.kind === "codeBlock") {
       // caption이 있으면 export-html.ts가
       // <figure><pre>…</pre><figcaption>…</figcaption></figure>로 감싼다
@@ -672,6 +695,7 @@ const blocksFromNodes = (
         context,
         iframeEmbedConfig,
         tableSeam,
+        blocks[blocks.length - 1],
       ),
     );
     plainRun = [];

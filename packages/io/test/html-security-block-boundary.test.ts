@@ -311,45 +311,46 @@ describe("HTML 보안", () => {
         ],
       },
       {
-        // <a>가 <ul>을 직접 감싸면 SAFE_BLOCK_DOWNGRADED가 list item
-        // wrapper까지 평탄화한다(마크 상속과는 무관한 별도 구조 규칙,
-        // Issue #145 범위 밖) — 그 결과 li의 선두 텍스트("text")는 독립
-        // paragraph로 나와 <a> 마크를 그대로 물려받고, 뒤따르는 표는
-        // 별도 top-level 블록으로 나와 마크를 물려받지 않는다. 같은 조상
-        // 아래에서 텍스트는 상속하고 표는 상속하지 않는 대비를 한 번에
-        // 보여준다.
+        // <a>가 <ul>을 직접 감싸도 목록 항목이다(Issue #336, Issue #356 RD-005
+        // DELTA-04). li의 선두 텍스트("text")는 항목 content로 <a> 마크를
+        // 물려받고, 뒤따르는 표는 항목 children으로 나와 마크를 물려받지
+        // 않는다. 같은 조상 아래에서 텍스트는 상속하고 표는 상속하지 않는
+        // 대비를 한 번에 보여준다. <a>는 블록 자리의 미지원 태그라
+        // SAFE_BLOCK_DOWNGRADED는 이전처럼 난다.
         html: '<a href="https://example.com"><ul><li>text<table><tbody><tr><td>c</td></tr></tbody></table></li></ul></a>',
         blocks: [
           {
             id: "html-1",
-            type: "paragraph",
+            type: "bulletListItem",
             content: [
               {
                 text: "text",
                 marks: [{ type: "link", href: "https://example.com" }],
               },
             ],
-          },
-          {
-            id: "html-2",
-            type: "table",
-            columns: [{ id: "html-3", width: 160 }],
-            rows: [
+            children: [
               {
-                id: "html-4",
-                cells: [
+                id: "html-2",
+                type: "table",
+                columns: [{ id: "html-3", width: 160 }],
+                rows: [
                   {
-                    id: "html-5",
-                    columnId: "html-3",
-                    rowSpan: 1,
-                    columnSpan: 1,
-                    content: [{ text: "c" }],
+                    id: "html-4",
+                    cells: [
+                      {
+                        id: "html-5",
+                        columnId: "html-3",
+                        rowSpan: 1,
+                        columnSpan: 1,
+                        content: [{ text: "c" }],
+                      },
+                    ],
                   },
                 ],
+                headerRows: 0,
+                headerColumns: 0,
               },
             ],
-            headerRows: 0,
-            headerColumns: 0,
           },
         ],
       },

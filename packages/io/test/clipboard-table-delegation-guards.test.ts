@@ -113,11 +113,11 @@ describe("표 노드 판정이 조상 위치와 무관하다 (Issue #356 RD-005)
   });
 });
 
-// 인용 안 인라인 래퍼(span·b·a)가 표를 품으면 importHtml의 splitQuoteChildren이
-// 표를 quote content 글자로 접는다. 옛 파서는 표를 TabularData로 냈다.
-describe("인용 안 인라인 래퍼가 품은 표 (Issue #356 RD-005, 알려진 후속)", () => {
-  // importHtml 변환기가 인용 안 인라인 래퍼의 블록을 접는다(#336 계열, 후속)
-  it.fails.each([
+// 인용 안 인라인 래퍼(span·b·a)가 표를 품어도 표는 TabularData다. 블록을 품은
+// 인라인 요소는 splitQuoteChildren이 children 자리로 넘긴다(Issue #356 RD-005
+// DELTA-04). 그 전에는 표가 quote content 글자로 접혔다.
+describe("인용 안 인라인 래퍼가 품은 표 (Issue #356 RD-005)", () => {
+  it.each([
     ["span", `<blockquote><span>q${TABLE}</span></blockquote>`],
     ["b", `<blockquote><b>q${TABLE}</b></blockquote>`],
     [

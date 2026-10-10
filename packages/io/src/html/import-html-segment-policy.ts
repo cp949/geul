@@ -85,6 +85,10 @@ export const importBlockSegmentPolicy: BlockSegmentPolicy<
     NESTED_BOUNDARY_TAG_NAMES.has(tagName) ||
     importOnlyNestedBoundaryTagNames.has(tagName),
   isTransparent: isTransparentListTag,
+  // 래퍼(div·span·b·a 등) 안의 ul/ol도 목록 세그먼트로 받는다(Issue #336,
+  // Issue #356 RD-005 DELTA-04). 노드 목록 직속 ul/ol은 blocksFromNodes가 먼저
+  // 읽어 이 판정에 오지 않는다. isTransparent보다 먼저 판정된다.
+  isListTag: isTransparentListTag,
   omitStructuralAncestors: true,
   isTableNode: (node) => node.tagName === "table",
   isDividerTag: (tagName) => tagName === "hr",

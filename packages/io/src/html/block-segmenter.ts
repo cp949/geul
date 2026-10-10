@@ -10,8 +10,8 @@ import { tableNonSectionChildren } from "./table-layout.js";
 // (아키텍처 리뷰 2차 후보 G). 예전에는 import-html.ts와 클립보드 파서가 각자
 // 재구현했다. 지금 생산 소비자는 importHtml 변환기(import-html-blocks.ts)
 // 하나다. 클립보드 파서도 표 옆 블록을 그 변환기로 읽는다(Issue #356 RD-005).
-// 정책의 선택 필드 일부(isListTag, omitStructuralAncestors 끔)는 생산 소비자가
-// 쓰지 않고 이 모듈의 테스트만 쓴다.
+// 정책의 선택 필드 중 omitStructuralAncestors 끔은 생산 소비자가 쓰지 않고 이
+// 모듈의 테스트만 쓴다.
 //
 // 이 모듈은 의도적으로 "판정"만 하고 "해석"은 하지 않는다 — 각 세그먼트의
 // 텍스트 정규화(공백 접기 여부), 실질 텍스트 판정, id 발급, 표 셀 파싱은
@@ -76,10 +76,10 @@ export type BlockSegment<
   // 계층·명시적 startNumber를 담을 li 분할(첫 <p> 또는 첫 block-level
   // 자식 전까지를 content로 승격, 그 지점부터는 children으로 재귀)은
   // 호출자 몫이라 원본 요소만 준다 — 여기서 재귀하면 li 경계가 pending에
-  // 섞여 사라진다. isListTag를 넘긴 정책에서만 나온다 — 넘기지 않으면
-  // (import-html.ts) ul/ol은 isTransparent의 순수 wrapper로 남는다(문서
-  // import의 리스트 매핑은 blocksFromListElement가 따로 담당). 지금 isListTag를
-  // 넘기는 생산 소비자는 없다(옛 클립보드 파서가 썼다).
+  // 섞여 사라진다. isListTag를 넘긴 정책에서만 나온다 — 넘기지 않으면 ul/ol은
+  // isTransparent의 순수 wrapper로 남는다. import 정책은 넘긴다. 변환기는
+  // 래퍼(div·span·b·a 등) 안 ul/ol을 이 세그먼트로 받아 blocksFromListElement로
+  // 읽는다(Issue #336, Issue #356 RD-005 DELTA-04).
   | { kind: "list"; node: HtmlElementNode }
   // pre를 CodeBlock으로 해석할지는 policy가 opt-in한다(isCodeBlockTag).
   // 원본 sanitized 요소를 그대로 넘겨 source·metadata 선택은 호출자가
@@ -139,12 +139,11 @@ export type BlockSegmentPolicy<
   // 판정한다 — 같은 태그가 두 집합에 있을 때 세그먼트 승격이 이긴다.
   isQuoteTag?: (tagName: string) => boolean;
   // ul/ol처럼 그 자체가 블록(목록)이면서 안쪽 해석(li 분할, 마커·순서·중첩)을
-  // 호출자가 맡는 태그 판정. 선택적이다 — 넘기지 않는 소비자(import-html.ts)
-  // 에서는 ul/ol이 isTransparent 쪽으로 떨어져 예전처럼 순수 wrapper고 li만
-  // 경계다(문서 import 계약 불변 — 리스트 매핑은 blocksFromListElement
-  // 소관). isNestedBoundary·isTransparent보다 먼저 판정한다 — 같은 태그가
-  // 두 집합에 있을 때 세그먼트 승격이 이긴다(isQuoteTag와 동일 원칙). 지금
-  // 이 판정을 넘기는 생산 소비자는 없다(옛 클립보드 파서가 썼다).
+  // 호출자가 맡는 태그 판정. 선택적이다 — 넘기지 않는 정책에서는 ul/ol이
+  // isTransparent 쪽으로 떨어져 순수 wrapper고 li만 경계다.
+  // isNestedBoundary·isTransparent보다 먼저 판정한다 — 같은 태그가 두 집합에
+  // 있을 때 세그먼트 승격이 이긴다(isQuoteTag와 동일 원칙). import 정책이
+  // 넘긴다(Issue #356 RD-005 DELTA-04).
   isListTag?: (tagName: string) => boolean;
   // pre처럼 마크·일반 인라인 해석을 바이패스하고 리프 블록으로
   // 유지할 태그(isCodeBlockTag, 아래 교차 타입). document import policy가
@@ -533,10 +532,10 @@ export function segmentBlocks<Level extends number = number>(
 // 경계다. import 정책과 경고 수집기(import-warnings.ts)가 이 집합을 쓴다.
 export const NESTED_BOUNDARY_TAG_NAMES = new Set(["div", "li", "blockquote"]);
 
-// ul/ol 태그 판정이다(DELTA-01, Issue #143 (b)). import 정책은 isTransparent에
-// 꽂아 ul/ol을 순수 wrapper로 재귀하고 li만 경계로 본다(리스트 매핑은
-// blocksFromListElement가 따로 담당). isListTag에 꽂으면 ul/ol 자신을
-// kind: "list" 리프로 접는다 — 지금은 이 모듈의 테스트만 그렇게 쓴다.
+// ul/ol 태그 판정이다(DELTA-01, Issue #143 (b)). isTransparent에 꽂으면 ul/ol을
+// 순수 wrapper로 재귀하고 li만 경계로 본다. isListTag에 꽂으면 ul/ol 자신을
+// kind: "list" 리프로 접는다. import 정책은 둘 다 꽂는다. isListTag가 먼저
+// 판정되므로 ul/ol은 목록 세그먼트가 된다(Issue #356 RD-005 DELTA-04).
 export const isTransparentListTag = (tagName: string): boolean =>
   tagName === "ul" || tagName === "ol";
 

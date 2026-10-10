@@ -1111,9 +1111,8 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
   // 목록을 품은 div도 래퍼다. 래퍼의 테마 색이 항목 안 문단에 붙으면 안 된다
   // (Issue #344 리뷰). 색이 없다는 단언만으로는 목록이 통째로 사라져도
   // 통과하므로 전체 모양을 비교한다. 아래 기대값은 목록 구조를 지킨 모양이다.
-  // 지금은 목록 항목이 색 없는 문단이 된다 — 색은 읽지 않지만 목록 구조를 잃는다.
-  // importHtml 변환기가 div·span·b·a 안의 ul/ol을 문단으로 읽어 클립보드 표 경로도 목록 구조를 잃는다(후속, #356 댓글 모음). 변환기가 고쳐지면 it.fails 실패로 알려진다.
-  it.fails.each<[string, string, Shape[]]>([
+  // 래퍼 안 ul/ol도 목록으로 읽는다(Issue #356 RD-005 DELTA-04).
+  it.each<[string, string, Shape[]]>([
     [
       "목록을 품은 div",
       `<div style="color:#d4d4d4;background-color:#1e1e1e"><ul><li>a</li><li>b</li></ul></div>`,
@@ -1158,8 +1157,7 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
     expect(clipboardShapes(`${html}${TABLE}`)).toEqual(expected);
   });
 
-  // importHtml 변환기가 div·span·b·a 안의 ul/ol을 문단으로 읽어 클립보드 표 경로도 목록 구조를 잃는다(후속, #356 댓글 모음). 변환기가 고쳐지면 it.fails 실패로 알려진다.
-  it.fails("목록을 품은 div 안 항목의 글자는 항목 content에 남는다", () => {
+  it("목록을 품은 div 안 항목의 글자는 항목 content에 남는다", () => {
     expect(
       clipboardShapes(
         `<div style="color:#d4d4d4"><ul><li>y z</li></ul></div>${TABLE}`,
@@ -1167,33 +1165,28 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
     ).toEqual([{ type: "bulletListItem", content: [{ text: "y z" }] }]);
   });
 
-  // importHtml 변환기가 div·span·b·a 안의 ul/ol을 문단으로 읽어 클립보드 표 경로도 목록 구조를 잃는다(후속, #356 댓글 모음). 변환기가 고쳐지면 it.fails 실패로 알려진다.
-  it.fails(
-    "목록을 품은 래퍼 div 안의 블록 자식 없는 div는 자기 색을 읽는다",
-    () => {
-      expect(
-        clipboardShapes(
-          `<div style="color:#d4d4d4"><ul><li><div style="color:#ff0000">x</div></li></ul></div>${TABLE}`,
-        ),
-      ).toEqual([
-        {
-          type: "bulletListItem",
-          content: [],
-          children: [
-            {
-              type: "paragraph",
-              content: [{ text: "x" }],
-              textColor: "#FF0000",
-            },
-          ],
-        },
-      ]);
-    },
-  );
+  it("목록을 품은 래퍼 div 안의 블록 자식 없는 div는 자기 색을 읽는다", () => {
+    expect(
+      clipboardShapes(
+        `<div style="color:#d4d4d4"><ul><li><div style="color:#ff0000">x</div></li></ul></div>${TABLE}`,
+      ),
+    ).toEqual([
+      {
+        type: "bulletListItem",
+        content: [],
+        children: [
+          {
+            type: "paragraph",
+            content: [{ text: "x" }],
+            textColor: "#FF0000",
+          },
+        ],
+      },
+    ]);
+  });
 
-  // 위 it.fails 행렬이 막던 색 누수 가드를 지금 출력에서도 지킨다(Issue #344
-  // 리뷰). 목록 구조는 지금 문단이 되지만(it.fails), 래퍼 div의 테마 색은
-  // 어느 블록에도 새지 않고 글자는 그대로다.
+  // 색 누수 가드를 블록 트리 전체에서 지킨다(Issue #344 리뷰). 래퍼 div의
+  // 테마 색은 어느 블록에도 새지 않고 글자는 그대로다.
   it.each([
     [
       "목록을 품은 div",
@@ -1205,7 +1198,7 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
       `<div style="color:#d4d4d4"><span><ul><li>a</li></ul></span></div>`,
       "a",
     ],
-  ])("%s의 색은 지금 출력 어느 블록에도 새지 않는다", (_name, html, text) => {
+  ])("%s의 색은 블록 트리 어느 블록에도 새지 않는다", (_name, html, text) => {
     const shapes = clipboardShapes(`${html}${TABLE}`);
     /** 블록 트리를 깊이 우선으로 펼친다. */
     const flatten = (blocks: readonly Shape[]): Shape[] =>

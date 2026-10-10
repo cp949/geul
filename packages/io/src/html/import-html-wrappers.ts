@@ -26,7 +26,7 @@ import { hasSubstantialText } from "./table-layout.js";
 // 인라인 요소를 블록으로 세면 인라인만 든 인용문이 빈 content가 된다.
 // 표 판정은 변환기가 주입받은 것을 넘긴다 — 모듈 상수 판정을 보면 주입 판정이
 // 고른 노드가 li·인용 본문에 섞인다.
-const isBlockLevelElement = (
+const isOwnBlockLevelElement = (
   node: HtmlElementNode,
   isTableNode: (node: HtmlElementNode) => boolean,
 ): boolean =>
@@ -41,6 +41,20 @@ const isBlockLevelElement = (
   importBlockSegmentPolicy.isTransparent(node.tagName) ||
   isTableNode(node) ||
   importBlockSegmentPolicy.isMediaNode?.(node) === true;
+
+// 블록 자리를 차지하는지 판정한다. 블록 요소를 자손으로 품은 인라인 요소
+// (span·b·a 등)도 블록이다(Issue #336, Issue #356 RD-005 DELTA-04). 인라인으로
+// 세면 content로 접혀 안쪽 표·목록이 글자가 된다. children 자리로 넘기면
+// segmentBlocks가 그 요소 안으로 재귀해 블록을 살린다(containsAnyBlockBoundary와
+// 같은 원칙). 블록 자손이 없는 인라인 요소는 이전처럼 content다.
+const isBlockLevelElement = (
+  node: HtmlElementNode,
+  isTableNode: (node: HtmlElementNode) => boolean,
+): boolean =>
+  isOwnBlockLevelElement(node, isTableNode) ||
+  node.children.some(
+    (child) => isElementNode(child) && isBlockLevelElement(child, isTableNode),
+  );
 
 // li가 목록 블록의 안정 ID와 content를 직접 소유한다(RD-003 HTML 정규형).
 // 첫 실질 자식이 p면 그 p는 content wrapper일 뿐 별도 paragraph/ID가 아니다.
