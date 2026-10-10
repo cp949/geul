@@ -16,6 +16,7 @@ import {
   hasComputedStyleDump,
   parseStyleDeclarations,
 } from "../clipboard/style-declarations.js";
+import type { TextFormat } from "./element-presentation.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import {
   type HtmlElementNode,
@@ -191,16 +192,16 @@ export const firstDirectCode = (
       child.type === "element" && child.tagName === "code",
   );
 
-// baseMarks는 블록 요소 style의 서식(blockStyleMarks)을 안쪽 텍스트에 싣는다
-// (Issue #334 단계 B). 호출부가 블록 요소를 알 때만 넘긴다.
+// baseFormat은 블록 요소 style의 서식(blockPresentation의 format)을 안쪽
+// 텍스트에 싣는다(Issue #334 단계 B). 호출부가 블록 요소를 알 때만 넘긴다.
 export const paragraphContentFromNodes = (
   nodes: HtmlNode[],
-  baseMarks?: readonly TextMark[],
+  baseFormat?: TextFormat,
 ): InlineContent =>
   sanitizeInlineContentText(
     inlineContentFromNodes(
       nodes,
-      baseMarks === undefined ? undefined : { baseMarks },
+      baseFormat === undefined ? undefined : { baseFormat },
     ),
   );
 

@@ -4,15 +4,15 @@ import {
   type TextMark,
 } from "@cp949/geul-model";
 
-import { readLegacyAttributeColor } from "../clipboard/css-color.js";
 import {
-  type ColorState,
-  type InlineFontWeight,
-  type InlineStyleMarks,
-  hasComputedStyleDump,
-  parseInlineStyleMarks,
-  parseStyleColorStates,
-} from "../clipboard/style-declarations.js";
+  type InlinePresentation,
+  type TextFormat,
+  blockPresentation,
+  EMPTY_INLINE_PRESENTATION,
+  inheritInlinePresentation,
+  inlineElementPresentation,
+  inlinePresentationMarks,
+} from "./element-presentation.js";
 
 export type HtmlTextNode = {
   type: "text";
@@ -86,178 +86,6 @@ const htmlWrapperMarks = (marks: readonly TextMark[]): TextMark[] =>
     )
     .map(({ mark }) => mark);
 
-// style의 italic·underline·strike를 마크로 바꾼다. bold는 태그마다 판정이
-// 달라(span은 bold일 때만, b·strong은 normal·light가 아닐 때) 호출부가 정한다.
-// 같은 종류 마크가 겹쳐도(`<b><span style="font-weight:700">`) 여기서 막지
-// 않는다 — appendOrMergeInlineItem이 canonicalizeTextMarks로 종류당 하나만
-// 남긴다.
-const decorationMarks = (parsed: InlineStyleMarks): TextMark[] => {
-  const marks: TextMark[] = [];
-  if (parsed.italic) marks.push({ type: "italic" });
-  if (parsed.underline) marks.push({ type: "underline" });
-  if (parsed.strike) marks.push({ type: "strike" });
-  return marks;
-};
-
-// `mark`의 기본 배경이다. 브라우저가 `mark`에 칠하는 노랑이다.
-const MARK_DEFAULT_BACKGROUND = "#FFFF00";
-
-// 선언이 정한 색 상태를 마크 색으로 바꾼다. unset(선언이 없거나 모두 문법
-// 오류)이면 요소 기본값(`font`의 color 속성, `mark`의 노랑)을 쓰고, clear(투명·
-// 반투명·상속)이면 기본값도 쓰지 않는다.
-const resolveColor = (
-  state: ColorState | undefined,
-  fallback: string | undefined,
-): string | undefined => {
-  if (state?.kind === "color") return state.color;
-  if (state?.kind === "clear") return undefined;
-  return fallback;
-};
-
-// style 속성 하나에서 색·서식 마크를 만든다. span·b·strong 밖의 인라인 요소도
-// 같은 규칙으로 읽는다(Issue #334). bold는 font-weight가 bold일 때만 낸다.
-// 굵기를 끄는 쪽(b·strong의 normal·light)은 호출부가 fontWeight로 판정한다.
-// 색은 안쪽 요소가 정하지 않았을 때만 바깥 색이 남는다(inheritMarks).
-//
-// ignoreStyleColors는 style의 color·background-color를 읽지 않고 defaults만 쓴다.
-// 서식 선언은 그대로 읽는다.
-const marksFromStyle = (
-  style: unknown,
-  defaults: {
-    textColor?: string | undefined;
-    backgroundColor?: string | undefined;
-  } = {},
-  ignoreStyleColors = false,
-): { marks: TextMark[]; fontWeight: InlineFontWeight | undefined } => {
-  const marks: TextMark[] = [];
-  const text = typeof style === "string" ? style : undefined;
-  const states =
-    text === undefined || ignoreStyleColors
-      ? undefined
-      : parseStyleColorStates(text);
-
-  const textColor = resolveColor(states?.color, defaults.textColor);
-  if (textColor !== undefined)
-    marks.push({ type: "textColor", color: textColor });
-  const backgroundColor = resolveColor(
-    states?.backgroundColor,
-    defaults.backgroundColor,
-  );
-  if (backgroundColor !== undefined) {
-    marks.push({ type: "backgroundColor", color: backgroundColor });
-  }
-
-  if (text === undefined) return { marks, fontWeight: undefined };
-  const inline = parseInlineStyleMarks(text);
-  if (inline.fontWeight === "bold") marks.push({ type: "bold" });
-  marks.push(...decorationMarks(inline));
-  return { marks, fontWeight: inline.fontWeight };
-};
-
-// 블록 요소 style의 굵게·기울임·밑줄·취소선을 안쪽 텍스트 마크로 바꾼다
-// (Issue #334 단계 B). 색은 읽지 않는다 — 블록 속성(textBlockPropsFromElement)이
-// 읽는다. 블록 요소의 기본 굵기(`h1`)는 읽지 않고 style이 정한 굵기만 읽는다.
-// 블록 속성이 없는 서식이라 마크가 유일한 표현이다.
-export const blockStyleMarks = (node: HtmlElementNode): TextMark[] => {
-  const style = node.properties.style;
-  if (typeof style !== "string") return [];
-  const parsed = parseInlineStyleMarks(style);
-  const marks: TextMark[] = [];
-  if (parsed.fontWeight === "bold") marks.push({ type: "bold" });
-  marks.push(...decorationMarks(parsed));
-  return marks;
-};
-
-// 태그 자신의 마크 뒤에 style에서 읽은 마크를 잇는다. 같은 종류 마크가
-// 겹쳐도(`<em style="font-style:italic">`) 여기서 막지 않는다 —
-// appendOrMergeInlineItem이 종류당 하나만 남긴다. 안에서 자기 태그 마크를 끄는
-// 값(`<em style="font-style:normal">`)은 읽지 않는다. 태그 마크는 그대로다.
-const tagMarkWithStyle = (node: HtmlElementNode, own: TextMark): TextMark[] => [
-  own,
-  ...marksFromStyle(node.properties.style, {}, hasStyleDump(node)).marks,
-];
-
-// 브라우저 복사의 계산 스타일 덤프가 붙은 인라인 요소다(Issue #334, #338).
-// 덤프의 테마 색이 마크로 박히지 않게 색만 읽지 않는다. Chromium은 요소 안쪽만
-// 선택해 복사해도 span·em·strong에 덤프를 싣는다. 색 span을 통째로 포함한
-// 복사도 span마다 덤프가 붙는다. 작성자 색과 테마 색을 위치로 구분하지 않아
-// 작성자 색도 읽지 않는다.
-const hasStyleDump = (node: HtmlElementNode): boolean => {
-  const style = node.properties.style;
-  return typeof style === "string" && hasComputedStyleDump(style);
-};
-
-// 다른 case는 대개 mark 0개 또는 1개지만 style을 읽는 요소는 선언 하나에 여러
-// 마크(color·background-color·font-weight 등)가 동시에 있을 수 있어(우리
-// export는 만들지 않는 모양이지만 외부 HTML은 흔히 이렇게 낸다) 반환형이
-// 배열이다 — 한쪽만 반환하면 나머지가 조용히 사라진다.
-const marksForElement = (node: HtmlElementNode): TextMark[] => {
-  switch (node.tagName) {
-    case "a": {
-      const href = node.properties.href;
-      return typeof href === "string" ? [{ type: "link", href }] : [];
-    }
-    case "strong":
-    case "b": {
-      // Google Docs 복사 래퍼 `<b style="font-weight:normal">`는 굵지 않다
-      // (Issue #316). 유효하지만 굵지 않은 값(normal·400·lighter·100–599·
-      // inherit·initial·unset)은 UA 굵기를 덮어 굵게가 아니다(Issue #334).
-      // 무효한 값은 선언이 무시돼 UA 굵기(bold)가 남고, revert도 UA 굵기다.
-      // font 줄임에 굵기가 없으면 normal이다. 색·배경·기울임·밑줄·취소선은
-      // 더해 읽는다(Issue #320, #334).
-      const { marks, fontWeight } = marksFromStyle(
-        node.properties.style,
-        {},
-        hasStyleDump(node),
-      );
-      return fontWeight === "normal" || fontWeight === "light"
-        ? marks
-        : [{ type: "bold" }, ...marks];
-    }
-    case "em":
-    case "i":
-      return tagMarkWithStyle(node, { type: "italic" });
-    case "u":
-      return tagMarkWithStyle(node, { type: "underline" });
-    // del·strike는 s와 같은 취소선이다. ins는 읽지 않는다.
-    case "s":
-    case "del":
-    case "strike":
-      return tagMarkWithStyle(node, { type: "strike" });
-    case "code":
-      return tagMarkWithStyle(node, { type: "code" });
-    case "span":
-      return marksFromStyle(node.properties.style, {}, hasStyleDump(node))
-        .marks;
-    case "font": {
-      // color 속성은 옛 HTML 글자색이다. style의 color가 이긴다. size·face는
-      // 읽지 않는다.
-      const attribute = node.properties.color;
-      return marksFromStyle(
-        node.properties.style,
-        {
-          textColor:
-            typeof attribute === "string"
-              ? readLegacyAttributeColor(attribute)
-              : undefined,
-        },
-        hasStyleDump(node),
-      ).marks;
-    }
-    case "mark":
-      // 기본 배경은 노랑이다. style 배경이 있으면 그 값이 이기고, 배경이
-      // clear(투명·반투명·none)면 기본 노랑도 없다. 기본 글자색(검정)은
-      // 읽지 않는다.
-      return marksFromStyle(
-        node.properties.style,
-        { backgroundColor: MARK_DEFAULT_BACKGROUND },
-        hasStyleDump(node),
-      ).marks;
-    default:
-      return [];
-  }
-};
-
 // 블록 줄바꿈 옵션의 상태다. pending은 블록 요소의 시작이나 끝을 지나
 // 다음 텍스트 앞에 줄바꿈을 넣어야 하는지다.
 // seenText는 공백이 아닌 텍스트를 한 번이라도 읽었는지다. 셀 맨 앞의 소스
@@ -301,24 +129,6 @@ const appendText = (
     breaks.seenText = true;
   }
   appendOrMergeInlineItem(content, text, marks);
-};
-
-// 안쪽 요소의 색이 바깥 색을 덮는다. 브라우저는 중첩 span 중 안쪽 색으로
-// 그리는데, 둘 다 쌓으면 canonicalizeTextMarks가 먼저 쌓인 바깥 색만 남긴다.
-// 안쪽이 낸 색 종류만 쌓인 마크에서 먼저 빼고, 안쪽이 색을 정하지 않았으면
-// (inherit·transparent·읽지 못하는 값) 바깥 색을 유지한다. link·bold 등은 건드리지 않는다.
-const inheritMarks = (
-  marks: readonly TextMark[],
-  own: readonly TextMark[],
-): TextMark[] => {
-  const overridden = new Set<TextMark["type"]>(
-    own
-      .filter(
-        (mark) => mark.type === "textColor" || mark.type === "backgroundColor",
-      )
-      .map((mark) => mark.type),
-  );
-  return [...marks.filter((mark) => !overridden.has(mark.type)), ...own];
 };
 
 // 표 셀 평탄화 중 style의 색·서식을 마크로 읽는 블록 요소다(Issue #334 단계 B).
@@ -443,19 +253,6 @@ const processColorTags = (
   return hasBlock;
 };
 
-// 셀 안 블록 요소 style의 마크다. 계산 스타일 덤프(브라우저 복사)가 붙은 style의
-// 색·배경은 테마 색이라 마크로 만들지 않는다. 굵게·기울임·밑줄·취소선은 실제
-// 시각 값이라 그대로 읽는다. 인라인 요소는 marksForElement가 같은 표식으로 색을
-// 건너뛴다.
-const cellBlockStyleMarks = (style: unknown): TextMark[] => {
-  const marks = marksFromStyle(style).marks;
-  return typeof style === "string" && hasComputedStyleDump(style)
-    ? marks.filter(
-        (mark) => mark.type !== "textColor" && mark.type !== "backgroundColor",
-      )
-    : marks;
-};
-
 // 블록 경계 태그(breaks.tagNames)를 자손으로 가졌는지 본다. 래퍼 div 판정에 쓴다.
 const hasBlockBreakDescendant = (
   nodes: readonly HtmlNode[],
@@ -481,38 +278,54 @@ const readsCellBlockStyle = (
 
 const readInlineNodes = (
   nodes: HtmlNode[],
-  marks: TextMark[],
+  inherited: InlinePresentation,
   content: InlineContent,
   breaks: BlockBreakState | undefined,
 ): void => {
   for (const node of nodes) {
     if (node.type === "text") {
-      appendText(content, node.value, marks, breaks);
+      appendText(
+        content,
+        node.value,
+        inlinePresentationMarks(inherited),
+        breaks,
+      );
       continue;
     }
     if (node.type !== "element") continue;
     if (node.tagName === "br") {
-      appendOrMergeInlineItem(content, "\n", marks);
+      appendOrMergeInlineItem(
+        content,
+        "\n",
+        inlinePresentationMarks(inherited),
+      );
       if (breaks !== undefined) breaks.pending = false;
       continue;
     }
 
     const isBlock = breaks?.tagNames.has(node.tagName) === true;
     if (isBlock && breaks !== undefined) breaks.pending = true;
-    const ownMarks =
+    const own =
       isBlock &&
       breaks !== undefined &&
       readsCellBlockStyle(node, breaks.tagNames)
-        ? cellBlockStyleMarks(node.properties.style)
-        : marksForElement(node);
+        ? cellBlockPresentation(node)
+        : inlineElementPresentation(node);
     readInlineNodes(
       node.children,
-      inheritMarks(marks, ownMarks),
+      inheritInlinePresentation(inherited, own),
       content,
       breaks,
     );
     if (isBlock && breaks !== undefined) breaks.pending = true;
   }
+};
+
+// 셀 안 블록 요소의 블록 투영을 마크로 읽는다. 셀 안에는 블록 속성이 없어 색도
+// 마크가 유일한 표현이다.
+const cellBlockPresentation = (node: HtmlElementNode): InlinePresentation => {
+  const { colors, format } = blockPresentation(node);
+  return { presentation: { ...format, ...colors }, marks: [] };
 };
 
 // blockBreakTagNames를 주면 그 태그(블록 요소)가 인라인으로 펼쳐질 때 앞뒤
@@ -522,20 +335,22 @@ const readInlineNodes = (
 // 켠다. 끄면 `<p>a</p><p>b</p>`가 `ab`로 붙는다. importHtml 경로에서는
 // 소스 공백 접기가 이 경계의 공백을 지우므로 `<p>a</p> <p>b</p>`도 붙는다.
 //
-// baseMarks는 모든 텍스트가 받는 바깥 마크다. 블록 요소 style의 서식
-// (blockStyleMarks)을 그 안쪽 텍스트에 싣는다(Issue #334 단계 B).
+// baseFormat은 모든 텍스트가 받는 바깥 서식이다. 블록 요소 style의 서식
+// (blockPresentation의 format)을 그 안쪽 텍스트에 싣는다(Issue #334 단계 B).
 export const inlineContentFromNodes = (
   nodes: HtmlNode[],
   options?: {
     blockBreakTagNames?: ReadonlySet<string>;
-    baseMarks?: readonly TextMark[];
+    baseFormat?: TextFormat;
   },
 ): InlineContent => {
   const content: InlineContent = [];
   const tagNames = options?.blockBreakTagNames;
   readInlineNodes(
     nodes,
-    [...(options?.baseMarks ?? [])],
+    options?.baseFormat === undefined
+      ? EMPTY_INLINE_PRESENTATION
+      : { presentation: options.baseFormat, marks: [] },
     content,
     tagNames === undefined
       ? undefined

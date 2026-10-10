@@ -40,8 +40,8 @@ import {
   splitListItemChildren,
   splitQuoteChildren,
 } from "./import-html-wrappers.js";
+import { blockPresentation } from "./element-presentation.js";
 import {
-  blockStyleMarks,
   type HtmlElementNode,
   type HtmlNode,
   type HtmlRoot,
@@ -91,7 +91,7 @@ const blocksFromSegments = (
             segment.nodes,
             segment.origin === undefined
               ? undefined
-              : blockStyleMarks(segment.origin),
+              : blockPresentation(segment.origin).format,
           ),
           ...originProps,
         });
@@ -112,7 +112,7 @@ const blocksFromSegments = (
         type: "paragraph",
         content: paragraphContentFromNodes(
           segment.nodes,
-          blockStyleMarks(segment.node),
+          blockPresentation(segment.node).format,
         ),
         ...paragraphProps,
       });
@@ -132,7 +132,7 @@ const blocksFromSegments = (
         level: segment.level,
         content: paragraphContentFromNodes(
           segment.nodes,
-          blockStyleMarks(segment.node),
+          blockPresentation(segment.node).format,
         ),
         ...headingProps,
       });
@@ -176,7 +176,7 @@ const blocksFromSegments = (
       const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
       const content = paragraphContentFromNodes(
         contentNodes,
-        blockStyleMarks(segment.node),
+        blockPresentation(segment.node).format,
       );
       // style 오탐 억제는 위 paragraph/heading과 동일하게
       // import-warnings.ts의 isOwnEchoStyle이 raw 노드 단위로 판정한다
@@ -222,7 +222,7 @@ const blocksFromSegments = (
       const { contentNodes, childrenNodes } = splitQuoteChildren(segment.node);
       const content = paragraphContentFromNodes(
         contentNodes,
-        blockStyleMarks(segment.node),
+        blockPresentation(segment.node).format,
       );
       const calloutProps = textBlockPropsFromElement(segment.node);
       const icon = propertyString(segment.node, "dataGeulIcon");
@@ -396,7 +396,7 @@ const blocksFromListItem = (
   const { contentNodes, childrenNodes } = splitListItemChildren(node);
   const content = paragraphContentFromNodes(
     contentNodes,
-    blockStyleMarks(node),
+    blockPresentation(node).format,
   );
   const listItemProps = textBlockPropsFromElement(node);
   const ownBlock: ListItemBlock =

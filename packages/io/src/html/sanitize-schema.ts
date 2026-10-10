@@ -125,7 +125,7 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   // import-html-blocks.ts가 consumePreservedAttributeWarning으로 억제한다.
   span: ["style"],
   // b·strong의 style은 굵기 판정(`font-weight:normal|400` 등)과 색·기울임·
-  // 밑줄·취소선 마크 판정에만 쓴다(Issue #316·#320·#334, marksForElement).
+  // 밑줄·취소선 마크 판정에만 쓴다(Issue #316·#320·#334, inlineElementPresentation).
   // Google Docs 복사가 문서 전체를 `<b style="font-weight:normal">`로 감싼다.
   // 이 목록에 없으면 sanitize가 style을 지워 래퍼가 bold가 된다. raw 경고는
   // 이전처럼 style 제거를 보고한다(import-warnings.ts가 b·strong의 style을
@@ -134,7 +134,7 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
   strong: ["style"],
   code: ["dataLanguage", "className"],
   // font·mark는 Issue #334부터 색·서식 마크로 읽는 태그다(inline-content.ts의
-  // marksForElement). font는 color 속성(옛 HTML 글자색)과 style, mark는 style을
+  // inlineElementPresentation). font는 color 속성(옛 HTML 글자색)과 style, mark는 style을
   // 정식으로 허용한다 — 읽는 속성이라 제거 경고가 없다. size·face는 읽지 않아
   // 이전처럼 속성 제거 경고를 낸다.
   font: ["color", "style"],
@@ -249,7 +249,7 @@ export const htmlAllowedTagNames = [
   "em",
   // b/i는 strong/em의 구식(semantic-light) 동의어다 — 워드·구형 웹페이지·
   // 브라우저 `execCommand('bold'/'italic')`가 여전히 흔히 낸다. 없으면
-  // 클립보드 붙여넣기에서 서식이 조용히 사라진다(marksForElement가 같은
+  // 클립보드 붙여넣기에서 서식이 조용히 사라진다(inlineElementPresentation이 같은
   // bold/italic mark로 매핑, inline-content.ts).
   "b",
   "i",
@@ -257,7 +257,7 @@ export const htmlAllowedTagNames = [
   "s",
   // del·strike는 s의 동의어다 — 구형 웹페이지·워드·Google Docs가 취소선을
   // 이 태그로 낸다. 없으면 sanitize가 태그를 벗겨 취소선이 사라진다
-  // (marksForElement가 같은 strike mark로 매핑, Issue #320). ins는 의미가
+  // (inlineElementPresentation이 같은 strike로 매핑, Issue #320). ins는 의미가
   // 밑줄과 달라 읽지 않는다.
   "del",
   "strike",
