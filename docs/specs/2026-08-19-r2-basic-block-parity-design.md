@@ -240,7 +240,7 @@ CodeBlock의 Enter는 source에 LF를 삽입하는 일반 code editing만 담당
 - 코드 블록 export → `<pre><code data-language="..." class="language-...">source</code></pre>`. language가 있으면 exact 값을 HTML escape한 `data-language`에 저장한다. `/^[A-Za-z0-9][A-Za-z0-9_-]*$/`을 만족할 때만 같은 값의 `language-*` class를 병기한다. language가 없으면 두 metadata를 모두 생략한다.
 - 코드 블록 import는 `<pre><code>`와 bare `<pre>`를 모두 받는다. language metadata가 없는 bare `<pre>`는 language 없는 CodeBlock이다. bare `<pre>` 자체의 `data-language`·`language-*` class는 다음 우선순위의 `<pre>` 후보로 처리한다. source는 sanitized descendant text를 문서 순서대로 연결하고 `<br>`만 LF로 바꾼다. `span` 등 wrapper는 visible text만 보존하고 element 경계 자체로 LF를 만들지 않는다.
 - language import 우선순위는 `<code data-language>` → `<pre data-language>` → `<code class="language-*">` → `<pre class="language-*">`다. 빈 `data-language`는 미지정으로 보고 다음 후보를 읽는다. 같은 위치에 `language-*` class가 여러 개면 첫 token을 쓴다. 선택되지 않은 non-empty metadata가 선택값과 다르면 결과는 유지하고 `CODE_BLOCK_LANGUAGE_METADATA_IGNORED` warning을 반환한다. 같은 값의 중복은 warning이 아니다.
-- `<pre>` descendant text의 code-point warning은 Code source 문자 계약을 따른다. literal Tab은 허용된 source이므로 `UNSAFE_CODE_POINT_REMOVED`를 반환하지 않는다. 선택된 language 또는 source가 4.3의 문자 계약을 위반하면 값을 보정하거나 후순위 metadata로 fallback하지 않고 `HTML_DOCUMENT_INVALID`로 거절하며 document·warning 목록을 반환하지 않는다.
+- `<pre>` descendant text의 code-point warning은 Code source 문자 계약을 따른다. literal Tab은 허용된 source이므로 `UNSAFE_CODE_POINT_REMOVED`를 반환하지 않는다. 선택된 language가 4.3의 문자 계약을 위반하면 값을 보정하거나 후순위 metadata로 fallback하지 않고 `HTML_DOCUMENT_INVALID`로 거절하며 document·warning 목록을 반환하지 않는다. source가 4.3의 문자 계약을 위반하면 거절하지 않고 무효 문자(CR 포함)를 지운 CodeBlock과 `UNSAFE_CODE_POINT_REMOVED` warning을 반환한다. warning `element`는 글자의 부모 태그다(정정 2026-10-10, Issue #352). 이전에는 source 위반도 거절했다. 정제 규칙은 model의 `sanitizeCodeBlockSource`가 소유한다.
 - 목록 4종 → `ul`/`ol`(`start` 속성 매핑)/체크박스는 `input[type=checkbox][disabled]` 또는 `data-checked` 속성(정확한 형태는 슬라이스 착수 시 확정) / 토글은 `details`.
 - 인라인 색상 → `style="color:...; background-color:..."`.
 - 블록 색상/정렬 → 블록 wrapper의 `style`/`data-*` 속성(표 셀과 같은 방식).
@@ -615,7 +615,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
 - HTML `CODE_BLOCK_LANGUAGE_METADATA_IGNORED` — 우선순위에서 탈락한 non-empty language metadata가 선택값과 충돌
 - GFM `CODE_BLOCK_META_DROPPED` — mdast code `meta`를 저장 모델이 표현하지 못해 제거
 
-HTML CodeBlock의 선택된 language/source 문자 위반은 warning으로 복구하지 않고 기존 `HTML_DOCUMENT_INVALID` import error로 반환한다(7.1).
+HTML CodeBlock의 선택된 language 문자 위반은 warning으로 복구하지 않고 기존 `HTML_DOCUMENT_INVALID` import error로 반환한다(7.1). source 문자 위반은 무효 문자를 지우고 `UNSAFE_CODE_POINT_REMOVED` warning을 반환한다(7.1, Issue #352).
 
 ## 9. 검증 전략
 
