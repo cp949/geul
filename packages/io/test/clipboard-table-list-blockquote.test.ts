@@ -155,6 +155,7 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
   });
 
   describe("래퍼 없는 입력의 모양 고정", () => {
+    /** 결과 블록 중 표 블록만 모은다. */
     const tableBlock = (blocks: ClipboardContentBlock[]) =>
       blocks.filter((block) => block.type === "table");
 
