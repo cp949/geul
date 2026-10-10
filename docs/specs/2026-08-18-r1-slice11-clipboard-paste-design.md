@@ -295,13 +295,23 @@ addProseMirrorPlugins() {
 - 정책: 목록 항목(`bulletListItem`·`numberedListItem`)을 문단처럼 셀 줄로 합친다. 셀 안 html 붙여넣기(#304·#308)의 줄 정책과 같다.
 - 줄 순서: 목록 항목 `children`은 부모 다음 줄이고 깊이 우선이다. `children`의 문단·heading도 줄이다.
 - 접두어(번호·글머리)와 들여쓰기는 남기지 않는다. 줄 사이는 기존 합치기대로 LF 하나다.
-- 위치: 표 앞 줄은 좌상단 셀 앞에, 표 뒤 줄은 마지막 행에서 시작하는 셀 중 가장 오른쪽 셀 뒤에 읽기 순서로 붙는다. 셀 위치 판정은 `withParagraphsMergedIntoCells`가 한다. 위 행에서 내려온 rowSpan 셀이 논리 우하단이면 그 셀이 아니라 마지막 행 셀에 붙는다. 마지막 행에 셀이 하나도 없으면 표 뒤 줄이 남지 않는다(둘 다 기존 동작).
+- 위치: 표 앞 줄은 좌상단 셀 앞에, 표 뒤 줄은 우하단 셀 뒤에 읽기 순서로 붙는다. 셀 위치 판정은 `withParagraphsMergedIntoCells`가 한다. 우하단 판정은 Issue #348이 논리 격자 좌표로 고쳤다(아래 문단).
 - 블록 색: 목록 항목의 `textColor`·`backgroundColor`는 줄 텍스트의 색 마크가 된다. 같은 종류의 안쪽 마크가 이긴다(#343).
 - 빈 목록 항목은 빈 줄을 내지 않는다. 그 `children`은 줄이 된다.
 - 표 개수 검사는 목록 항목 `children` 안 표까지 센다. 둘 이상이면 `CLIPBOARD_CONTENT_INVALID`("Cannot paste multiple tables inside an existing table cell")로 거절한다. 최상위 표 하나와 `children` 안 표 하나도 거절이다. 거절은 뮤테이션 전이라 문서가 바뀌지 않고, 확장 경로에서는 `onPasteRejected`가 불린다.
 - 최상위 표 없이 `children` 안 표만 있으면 이전과 같다. 확장이 먼저 물러나고(#315), `pasteClipboardContent`를 직접 호출하면 `PASTE_TARGET_NOT_FOUND`다.
 - 표 밖 캐럿과 문단만 섞인 표 안 붙여넣기 결과는 이전과 같다.
 - 한계: 셀은 inline만 담아 목록 모양(번호·글머리·들여쓰기)은 남지 않는다. 글자만 남는다.
+
+구현 반영(표 뒤 줄의 우하단 셀 판정, Issue #348): `withParagraphsMergedIntoCells`는 표 뒤 줄을 마지막 행에서 시작하는 셀 중 `columnIndex`가 가장 큰 셀 뒤에 붙였다. 위 행에서 내려온 rowSpan 셀이 마지막 행의 우하단을 덮으면 논리 우하단이 아닌 셀에 붙었다. 마지막 행에 셀이 하나도 없으면(예: 1열 표에서 행1 셀이 `rowSpan: 2`) 표 뒤 줄이 어느 셀에도 붙지 않고 사라졌다. `ok: true`라 `onPasteRejected`도 불리지 않았다. 문단 줄도 이전부터 같은 결함이었고 #345에서 목록 줄이 같은 경로를 타며 도달 범위만 넓어졌다.
+
+- 좌상단 셀: 격자 칸 `(0, 0)`을 덮는 셀이다.
+- 우하단 셀: 격자 칸 `(마지막 행, 마지막 열)`을 덮는 셀이다. 시작 행 `i`의 셀이 `i ≤ r < i + rowSpan`, `columnIndex ≤ c < columnIndex + columnSpan`이면 칸 `(r, c)`를 덮는다.
+- 모든 행의 모든 셀을 훑어 찾는다. 위 행에서 내려온 셀은 그 행의 `cells`에 없기 때문이다. `rowSpan`·`columnSpan`·둘 다 있는 셀을 모두 덮는다(G-TBL-001).
+- 덮는 셀을 못 찾으면(유효하지 않은 격자를 공개 API로 직접 넘긴 경우) 줄을 버리지 않는다. 읽기 순서의 첫 셀(셀이 있는 첫 행의 `columnIndex` 최소 셀) 또는 마지막 셀(셀이 있는 마지막 행의 `columnIndex` 최대 셀)에 붙인다(G-CNV-002).
+- 셀이 하나도 없으면 붙일 곳이 없어 입력과 같은 내용을 돌려준다. `validateTabularData`가 이미 거절하는 빈 표와 같다.
+- 시그니처·줄 합치기 규칙(LF, 빈 줄 건너뛰기, 마크 병합)은 바뀌지 않는다. 손대지 않은 셀은 원본과 참조를 공유한다.
+- 병합 없는 표와 1x1 표의 결과는 이전과 같다.
 
 ## 8. 오류 계약 확장
 
