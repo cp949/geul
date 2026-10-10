@@ -27,6 +27,7 @@ import {
 import { BlockIdExtension } from "../src/block-id-extension.js";
 import { CodeBlockExtension } from "../src/code-block-extension.js";
 import { StarterKitWithCodeMarks } from "../src/code-mark-extension.js";
+import { DividerExtension } from "../src/divider-extension.js";
 import {
   BulletListItemExtension,
   NumberedListItemExtension,
@@ -214,6 +215,9 @@ const TABLE_FIXTURE_EXTENSIONS: Extensions = [
   TextColorMark,
   BackgroundColorMark,
   CodeBlockExtension,
+  // 목록 항목 자식 divider(Issue #351, 클립보드 li 안 hr)를 노드로 만드는
+  // 테스트가 쓴다. priority 100이라 "block+" 채움 기본 노드 경쟁에 지지 않는다.
+  DividerExtension,
   FixtureBulletListItemExtension,
   FixtureNumberedListItemExtension,
   BlockContainerExtension,

@@ -4,9 +4,11 @@
  * 모듈이 그 꺼내는 방법을 단독으로 소유한다.
  */
 import { expect } from "vitest";
+import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
 import type { ClipboardContent } from "../src/clipboard/clipboard-content.js";
 import type { TabularData } from "../src/clipboard/tabular-data.js";
 import type { ClipboardParseError } from "../src/errors.js";
+import { importHtml } from "../src/index.js";
 import type { Result } from "../src/result.js";
 
 /**
@@ -24,4 +26,18 @@ export const expectSingleTable = (
   expect(block?.type).toBe("table");
   if (block?.type !== "table") throw new Error("unreachable");
   return block.data;
+};
+
+/** importHtml이 만든 문서의 최상위 블록이다. 실패하면 던진다. */
+export const importedBlocks = (html: string): readonly unknown[] => {
+  const result = importHtml(html);
+  if (!result.ok) throw new Error("importHtml이 실패했다");
+  return result.value.document.blocks;
+};
+
+/** parseClipboardTable이 만든 시퀀스의 블록이다. 실패하면 던진다. */
+export const clipboardBlocks = (html: string): readonly unknown[] => {
+  const result = parseClipboardTable({ html });
+  if (!result.ok) throw new Error("parseClipboardTable이 실패했다");
+  return result.value;
 };

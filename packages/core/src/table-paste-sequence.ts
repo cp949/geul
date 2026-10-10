@@ -2,6 +2,7 @@ import type { ClipboardContent, ClipboardContentBlock } from "@cp949/geul-io";
 import type { IdFactory, Result, TableBlock } from "@cp949/geul-model";
 import type { Node as ProseMirrorNode, Schema } from "@tiptap/pm/model";
 import {
+  blockToTiptapJson,
   inlineContentToTiptap,
   tableBlockToTiptapJson,
   type TiptapJsonNode,
@@ -69,8 +70,10 @@ const blockColorAttrs = (
 
 // 목록 항목의 children 하나를 blockGroup 안에 들어갈 tiptap JSON으로
 // 조립한다(DELTA-02, Issue #143 (b)). table은 model-to-tiptap.ts의
-// blockToTiptapJson과 같은 원칙으로 container 없이 직결한다
-// (ClipboardContentBlock union에 divider는 없어 그 분기는 없다).
+// blockToTiptapJson과 같은 원칙으로 container 없이 직결한다.
+// divider와 codeBlock은 li 안 hr·pre에서 온다(Issue #351). 모델 블록으로
+// 바꿔 blockToTiptapJson에 맡겨 PM 인코딩(divider는 container 없이
+// blockId만, codeBlock은 blockContainer 안 codeBlock 노드)을 공유한다.
 // paragraph/heading은 항상 blockContainer로 감싼다 — blockGroup의 스키마
 // content("block+")가 bare nestableBlockContent를 허용하지 않는다.
 // blockId는 listItemToTiptapJson과 같은 관례로 바로 배정한다. 최상위
@@ -88,6 +91,25 @@ const listChildToTiptapJson = (
 
   if (block.type === "bulletListItem" || block.type === "numberedListItem") {
     return listItemToTiptapJson(block, createId);
+  }
+
+  if (block.type === "divider") {
+    return {
+      ok: true,
+      value: blockToTiptapJson({ id: createId(), type: "divider" }),
+    };
+  }
+
+  if (block.type === "codeBlock") {
+    return {
+      ok: true,
+      value: blockToTiptapJson({
+        id: createId(),
+        type: "codeBlock",
+        content: block.text.length === 0 ? [] : [{ text: block.text }],
+        ...(block.language === undefined ? {} : { language: block.language }),
+      }),
+    };
   }
 
   return {
@@ -153,6 +175,10 @@ const listItemToTiptapJson = (
   };
 };
 
+// 최상위 codeBlock·divider 거절 메시지다. 검증과 조립이 같은 문장을 쓴다.
+export const topLevelBlockMessage = (type: "codeBlock" | "divider"): string =>
+  `Top-level ${type} is not a supported clipboard block`;
+
 // 클립보드 시퀀스의 블록 하나를 노드로 바꾼다.
 // - 문단/heading: 인라인 콘텐츠와 블록 색을 옮겨 blockContainer(blockContent)로
 //   감싼다.
@@ -161,6 +187,8 @@ const listItemToTiptapJson = (
 //   조립 순서다.
 // - 목록 항목(bulletListItem/numberedListItem): listItemToTiptapJson으로
 //   blockContainer/blockGroup 트리를 완전히 조립한다(DELTA-02, Issue #143 (b)).
+// codeBlock/divider는 목록 항목 children에서만 온다(Issue #351). 최상위에서는
+// 거절한다. validateOutOfTableContent가 먼저 같은 거절을 하므로 방어선이다.
 // table은 firstTable로 앞서 반환한다. 목록 항목 children 안에 중첩된 표는
 // 이 추적 대상이 아니다(최상위 시퀀스의 첫 표만 추적하는 기존 범위,
 // DELTA-02 범위 밖).
@@ -201,6 +229,16 @@ const buildSequenceNode = (
     return {
       ok: true,
       value: { node: schema.nodeFromJSON(built.value), table: null },
+    };
+  }
+
+  if (block.type === "codeBlock" || block.type === "divider") {
+    return {
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: topLevelBlockMessage(block.type),
+      },
     };
   }
 

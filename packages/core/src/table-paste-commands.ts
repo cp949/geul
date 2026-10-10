@@ -11,6 +11,8 @@ import {
   type InlineContent,
   isCanonicalCellColor,
   isTextRunItem,
+  isValidCodeBlockLanguage,
+  isValidCodeBlockSource,
   MAX_NESTING_DEPTH,
   parseDocument,
   type Result,
@@ -29,7 +31,10 @@ import {
   type TableCommandError,
 } from "./table-commands.js";
 import { pasteInto as pasteGridInto } from "./table-grid-paste.js";
-import { buildOutOfTableSequence } from "./table-paste-sequence.js";
+import {
+  buildOutOfTableSequence,
+  topLevelBlockMessage,
+} from "./table-paste-sequence.js";
 
 // $pos가 표 노드 안에 있는지 — 조상 depth를 거슬러 올라가며 검사한다.
 // isInTable은 $head만 보므로 선택의 양 끝을 각각 판정하는 데 쓴다.
@@ -267,7 +272,10 @@ const blockColorViolation = (
 // (bulletListItem/numberedListItem)은 자신의 content(inline)와 children을
 // 재귀로(같은 규칙) 검사한다(DELTA-02, Issue #143 (b)) — 위반이 있으면
 // CLIPBOARD_CONTENT_INVALID로 거절한다. 문단/heading/목록 항목의 블록 색도
-// 검사한다(Issue #343, blockColorViolation).
+// 검사한다(Issue #343, blockColorViolation). codeBlock·divider는 목록 항목
+// children에서만 받는다(Issue #351). 최상위(depth 1)는 거절하고, codeBlock은
+// 글자와 language를 model의 codeBlock 계약(isValidCodeBlockSource,
+// isValidCodeBlockLanguage)으로 검사한다. divider는 검사할 필드가 없다.
 //
 // depth는 model/schema.ts의 findNestingDepthViolation과 같은 정의(top-level
 // 1, blocks 배열 자체가 그 depth)다 — pasteOutOfTable의 삽입은 항상
@@ -346,6 +354,42 @@ const validateOutOfTableContent = (
       }
       continue;
     }
+    if (block.type === "codeBlock" || block.type === "divider") {
+      if (depth === 1) {
+        return {
+          ok: false,
+          error: {
+            code: "CLIPBOARD_CONTENT_INVALID",
+            message: topLevelBlockMessage(block.type),
+          },
+        };
+      }
+      if (block.type === "codeBlock") {
+        if (!isValidCodeBlockSource(block.text)) {
+          return {
+            ok: false,
+            error: {
+              code: "CLIPBOARD_CONTENT_INVALID",
+              message:
+                "CodeBlock text may contain LF and Tab but no other C0 controls, DEL, or invalid surrogate code units",
+            },
+          };
+        }
+        if (
+          block.language !== undefined &&
+          !isValidCodeBlockLanguage(block.language)
+        ) {
+          return {
+            ok: false,
+            error: {
+              code: "CLIPBOARD_CONTENT_INVALID",
+              message: "CodeBlock language is not valid",
+            },
+          };
+        }
+      }
+      continue;
+    }
     const validated = validateTabularDataForPaste(block.data);
     if (!validated.ok) return validated;
   }
@@ -386,12 +430,12 @@ const withBlockColorMarks = (
 };
 
 // 클립보드 시퀀스 안 표 개수다. 목록 항목 children 안 표까지 깊이 우선으로
-// 센다. 문단·제목은 children이 없다.
+// 센다. 문단·제목·codeBlock·divider는 children이 없다.
 const countTables = (blocks: readonly ClipboardContentBlock[]): number => {
   let count = 0;
   for (const block of blocks) {
     if (block.type === "table") count += 1;
-    else if (block.type !== "paragraph" && block.type !== "heading") {
+    else if ("children" in block) {
       count += countTables(block.children ?? []);
     }
   }
@@ -404,12 +448,22 @@ const countTables = (blocks: readonly ClipboardContentBlock[]): number => {
 // 접두어·들여쓰기는 없다. 셀 안 html 붙여넣기의 줄 정책과 같다.
 // 블록 색은 셀에 속성으로 남을 수 없어 텍스트 마크로 옮긴다(Issue #343).
 // 표는 줄이 아니다. 최상위 표는 호출부가 떼고, children 안 표는 거절한다.
+// codeBlock은 글자의 줄마다 셀 줄이다(Issue #351). 공백 들여쓰기는 지키고 빈 줄은
+// 만들지 않는다. 셀 텍스트는 Tab을 거부하므로 Tab은 지운다. divider는 글자가 없어
+// 줄이 없다.
 // 빈 줄은 withParagraphsMergedIntoCells가 건너뛴다.
 const cellLinesOf = (
   blocks: readonly ClipboardContentBlock[],
 ): InlineContent[] =>
   blocks.flatMap((block): InlineContent[] => {
-    if (block.type === "table") return [];
+    if (block.type === "table" || block.type === "divider") return [];
+    if (block.type === "codeBlock") {
+      return block.text
+        .split("\n")
+        .map((line) => line.replace(/\t/g, ""))
+        .filter((line) => line.length > 0)
+        .map((line) => [{ text: line }]);
+    }
     const line = withBlockColorMarks(block.content, block);
     if (block.type === "paragraph" || block.type === "heading") return [line];
     return [line, ...cellLinesOf(block.children ?? [])];

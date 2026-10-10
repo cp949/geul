@@ -73,7 +73,8 @@ const importOnlyNestedBoundaryTagNames = new Set([
 // 정책은 이제 없다 — import·clipboard 둘 다 h1~h6 전부 heading으로 쓴다
 // (DELTA-08, Issue #38 슬라이스 3). 공유는 문단 경계 태그 집합만이다(그릴링 결정).
 // hr은 콘텐츠 없는 세그먼트로 받아 divider 블록으로 옮긴다(spec §7.1) —
-// clipboard 정책은 isDividerTag를 넘기지 않아 hr 처리가 갈라진다.
+// clipboard 최상위 정책은 isDividerTag를 넘기지 않아 hr 처리가 갈라진다.
+// li 자식용 정책은 넘긴다(Issue #351).
 // blockquote도 같은 방식으로 세그먼트로 받아 quote 블록으로 옮긴다
 // (DELTA-06a, D6 분할 규칙은 splitQuoteChildren) — clipboard 정책은
 // isQuoteTag를 넘기지 않아 blockquote가 문단 경계로 남는다.

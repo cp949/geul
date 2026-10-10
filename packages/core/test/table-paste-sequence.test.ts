@@ -420,3 +420,99 @@ describe("buildOutOfTableSequence", () => {
     expect(result.value.firstTable).toBeNull();
   });
 });
+
+// Issue #351: 클립보드 파서는 li 안 pre·hr를 목록 항목의 자식 codeBlock·divider로
+// 만든다. 최상위에는 이 두 타입이 오지 않는다.
+describe("buildOutOfTableSequence의 codeBlock·divider 자식 블록 (Issue #351)", () => {
+  it("목록 항목 자식 codeBlock은 blockContainer 안 codeBlock 노드가 된다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [
+        bulletItemBlock("item", [
+          { type: "codeBlock", text: "a\n  b", language: "typescript" },
+        ]),
+      ],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const group = result.value.nodes[0]?.child(1);
+    expect(group?.type.name).toBe("blockGroup");
+    const container = group?.child(0);
+    expect(container?.type.name).toBe("blockContainer");
+    expect(container?.attrs.blockId).toBeTruthy();
+    const codeNode = container?.child(0);
+    expect(codeNode?.type.name).toBe("codeBlock");
+    expect(codeNode?.attrs.language).toBe("typescript");
+    expect(codeNode?.textContent).toBe("a\n  b");
+  });
+
+  it("language가 없는 codeBlock은 language attr이 null이다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [bulletItemBlock("item", [{ type: "codeBlock", text: "x" }])],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const codeNode = result.value.nodes[0]?.child(1).child(0).child(0);
+    expect(codeNode?.attrs.language).toBeNull();
+  });
+
+  it("목록 항목 자식 divider는 컨테이너 없이 blockId를 가진 divider 노드가 된다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [bulletItemBlock("item", [{ type: "divider" }])],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const divider = result.value.nodes[0]?.child(1).child(0);
+    expect(divider?.type.name).toBe("divider");
+    expect(divider?.attrs.blockId).toBeTruthy();
+  });
+
+  it("codeBlock과 divider와 문단이 섞인 자식은 순서를 지킨다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [
+        bulletItemBlock("item", [
+          { type: "codeBlock", text: "c" },
+          { type: "divider" },
+          paragraphBlock("p"),
+        ]),
+      ],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const group = result.value.nodes[0]?.child(1);
+    expect(group?.childCount).toBe(3);
+    expect(group?.child(0).child(0).type.name).toBe("codeBlock");
+    expect(group?.child(1).type.name).toBe("divider");
+    expect(group?.child(2).child(0).type.name).toBe("paragraph");
+  });
+
+  it.each([
+    ["codeBlock", { type: "codeBlock", text: "x" } as ClipboardContentBlock],
+    ["divider", { type: "divider" } as ClipboardContentBlock],
+  ])("최상위 %s는 CLIPBOARD_CONTENT_INVALID로 거절한다", (_name, block) => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [paragraphBlock("p"), block],
+      sequentialIds("id"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: expect.stringContaining(block.type),
+      },
+    });
+  });
+});

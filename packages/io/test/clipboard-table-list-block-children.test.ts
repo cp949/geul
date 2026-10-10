@@ -11,8 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
-import { importHtml } from "../src/index.js";
+import { clipboardBlocks, importedBlocks } from "./clipboard-table-support.js";
 
 const TABLE =
   "<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>";
@@ -49,18 +48,12 @@ const shapesOf = (blocks: readonly unknown[]): BlockShape[] =>
     .map(shapeOf);
 
 /** importHtml이 만든 문서 블록의 모양이다. */
-const importedShapes = (html: string): BlockShape[] => {
-  const result = importHtml(html);
-  if (!result.ok) throw new Error("importHtml이 실패했다");
-  return shapesOf(result.value.document.blocks);
-};
+const importedShapes = (html: string): BlockShape[] =>
+  shapesOf(importedBlocks(html));
 
 /** parseClipboardTable이 만든 블록의 모양이다. */
-const clipboardShapes = (html: string): BlockShape[] => {
-  const result = parseClipboardTable({ html });
-  if (!result.ok) throw new Error("parseClipboardTable이 실패했다");
-  return shapesOf(result.value);
-};
+const clipboardShapes = (html: string): BlockShape[] =>
+  shapesOf(clipboardBlocks(html));
 
 describe("parseClipboardTable li 안 p·제목 자식 블록 (Issue #346)", () => {
   it.each([

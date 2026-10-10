@@ -1,8 +1,10 @@
 import {
+  canonicalizeCodeBlockLanguage,
   type InlineContent,
   type InlineContentItem,
   isCanonicalCellAlign,
   isCanonicalCellColor,
+  isValidCodeBlockLanguage,
   tableSizeViolationMessage,
   validateTableSize,
 } from "@cp949/geul-model";
@@ -10,6 +12,7 @@ import { sanitize } from "hast-util-sanitize";
 
 import type { ClipboardParseError } from "../errors.js";
 import {
+  type BlockSegment,
   type BlockSegmentPolicy,
   isParagraphTag,
   isTransparentListTag,
@@ -40,7 +43,11 @@ import {
   promotedFormat,
   type TextFormat,
 } from "../html/element-presentation.js";
-import { textBlockPropsFromElement } from "../html/import-html-helpers.js";
+import {
+  selectCodeBlockLanguage,
+  textBlockPropsFromElement,
+  textValue,
+} from "../html/import-html-helpers.js";
 import {
   asRoot,
   flattenBlockBoundaryTagNames,
@@ -67,6 +74,7 @@ import {
   collapseHtmlWhitespace,
   normalizeCellContent,
   sanitizeCellText,
+  sanitizeCodeText,
 } from "./cell-text.js";
 import type {
   ClipboardContent,
@@ -203,6 +211,24 @@ const blockSequenceFromNodes = (
     isTableNode: (node) => tableSet.has(node),
   };
 
+  // li 자식용 정책이다(Issue #351). 기존 정책에 hr(divider)와 pre(codeBlock)
+  // 판정을 더한다. 최상위와 li가 아닌 자식 run은 기존 policy를 그대로 쓴다
+  // — 표 밖 최상위 pre·hr의 결과를 바꾸지 않는다. li 안은 div·blockquote 같은
+  // 래퍼를 지나서도 이 정책으로 분할한다.
+  const listChildPolicy: BlockSegmentPolicy<1 | 2 | 3 | 4 | 5 | 6, true> = {
+    ...policy,
+    isDividerTag: (tagName) => tagName === "hr",
+    isCodeBlockTag: (tagName) => tagName === "pre",
+  };
+
+  const segmentsOf = (
+    nodeList: readonly HtmlNode[],
+    inListItem: boolean,
+  ): BlockSegment<1 | 2 | 3 | 4 | 5 | 6, true>[] =>
+    inListItem
+      ? segmentBlocks(nodeList, listChildPolicy)
+      : segmentBlocks(nodeList, policy);
+
   // 셀 텍스트와 같은 정규화(collapseHtmlWhitespace로 공백 run 접기 →
   // normalizeCellContent로 C0 제어문자/DEL/짝 없는 surrogate 제거)를 거쳐
   // 인라인 콘텐츠로 만든다. 문단 생성과 heading 분기(h1~h6)가 이 정규화를
@@ -230,12 +256,16 @@ const blockSequenceFromNodes = (
   // p(isSimpleBoundary)와 h1~h6(headingLevelFromTagName)도 블록이다.
   // 빠지면 승격되지 않는 p·제목의 글자가 항목 content에 합쳐지고
   // 자기 style을 잃는다(Issue #346).
+  // pre(codeBlock)와 hr(divider)도 블록이다. 빠지면 pre 글자가 항목 content에
+  // 붙고 hr가 사라진다(Issue #351). li 자식 정책의 판정을 그대로 쓴다.
   const isBlockLevelNode = (node: HtmlElementNode): boolean =>
     policy.isTableNode(node) ||
     isTransparentListTag(node.tagName) ||
     NESTED_BOUNDARY_TAG_NAMES.has(node.tagName) ||
     policy.isSimpleBoundary(node.tagName) ||
-    policy.headingLevelFromTagName(node.tagName) !== undefined;
+    policy.headingLevelFromTagName(node.tagName) !== undefined ||
+    listChildPolicy.isCodeBlockTag(node.tagName) ||
+    listChildPolicy.isDividerTag?.(node.tagName) === true;
 
   // ul/ol 세그먼트 하나(kind: "list"의 node)를 li마다
   // bulletListItem/numberedListItem으로 바꾼다. explicit start는
@@ -258,7 +288,7 @@ const blockSequenceFromNodes = (
     // 비-li run이 먼저 와도 startNumber 기준은 li 순서(itemIndex)다.
     const flushNonItemRun = (): Result<null, ClipboardParseError> => {
       if (nonItemRun.length === 0) return { ok: true, value: null };
-      const runResult = blocksFromNodeList(nonItemRun);
+      const runResult = blocksFromNodeList(nonItemRun, false);
       nonItemRun = [];
       if (!runResult.ok) return runResult;
       blocks.push(...runResult.value);
@@ -281,7 +311,7 @@ const blockSequenceFromNodes = (
         promotedFormat(child, promoted),
       );
       const colors = blockColorsFromElement(child, promoted);
-      const childrenResult = blocksFromNodeList(childrenNodes);
+      const childrenResult = blocksFromNodeList(childrenNodes, true);
       if (!childrenResult.ok) return childrenResult;
       const children = childrenResult.value;
       const startNumber = itemIndex === 0 ? explicitStart : undefined;
@@ -312,11 +342,14 @@ const blockSequenceFromNodes = (
   // 목록 항목의 childrenNodes가 모두 이 함수를 통과한다(blocksFromNodes가
   // blocksFromListItem을 재귀 호출하는 import-html.ts와 같은 구조, 코드는
   // 공유하지 않는다).
+  // inListItem이 참이면 li 자식용 정책(listChildPolicy)으로 분할한다
+  // (Issue #351). 최상위와 li가 아닌 자식 run은 거짓이다.
   const blocksFromNodeList = (
     nodeList: readonly HtmlNode[],
+    inListItem: boolean,
   ): Result<ClipboardContentBlock[], ClipboardParseError> => {
     const blocks: ClipboardContentBlock[] = [];
-    for (const segment of segmentBlocks(nodeList, policy)) {
+    for (const segment of segmentsOf(nodeList, inListItem)) {
       // paragraph(자연히 쌓인 pending)와 simpleBoundary(p 자신의 본문)를
       // 똑같이 취급한다 — ClipboardContentBlock에는 id가 없어 p의
       // dataGeulBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
@@ -358,9 +391,32 @@ const blockSequenceFromNodes = (
         });
         continue;
       }
-      // 클립보드 정책은 isDividerTag를 넘기지 않아 도달하지 않는다 — 공유
-      // union의 exhaustiveness 반영, hr 처리는 슬라이스 10 소관.
-      if (segment.kind === "hr") continue;
+      // hr는 li 자식용 정책(listChildPolicy)에서만 나온다(Issue #351). 항상
+      // divider다. 최상위 정책은 isDividerTag를 넘기지 않아 이 분기에 도달하지
+      // 않는다 — 최상위 hr 처리는 슬라이스 10 소관이다.
+      if (segment.kind === "hr") {
+        blocks.push({ type: "divider" });
+        continue;
+      }
+      // pre는 li 자식용 정책에서만 나온다(Issue #351). 마크와 공백 접기를
+      // 거치지 않는다 — 줄바꿈·들여쓰기가 코드 내용이다. model의 codeBlock 소스
+      // 계약이 거부하는 문자만 지운다. 내용 없는 pre는 만들지 않는다.
+      // language는 importHtml과 같은 규칙(selectCodeBlockLanguage)으로 고르고
+      // model 정규형으로 바꾼다. model이 거부하는 값(제어문자 등)이면 버린다.
+      // wrap·caption·id는 읽지 않는다.
+      if (segment.kind === "codeBlock") {
+        const text = sanitizeCodeText(textValue(segment.node.children));
+        if (!hasSubstantialText(text)) continue;
+        const { language } = selectCodeBlockLanguage(segment.node);
+        blocks.push({
+          type: "codeBlock",
+          text,
+          ...(language !== undefined && isValidCodeBlockLanguage(language)
+            ? { language: canonicalizeCodeBlockLanguage(language) }
+            : {}),
+        });
+        continue;
+      }
       // 클립보드 정책은 isQuoteTag를 넘기지 않아 도달하지 않는다 — 공유
       // union의 exhaustiveness 반영, blockquote 매핑은 슬라이스 10 소관.
       if (segment.kind === "blockquote") continue;
@@ -400,7 +456,7 @@ const blockSequenceFromNodes = (
     return { ok: true, value: blocks };
   };
 
-  return blocksFromNodeList(nodes);
+  return blocksFromNodeList(nodes, false);
 };
 
 const canonicalColor = (value: string | undefined): string | undefined =>

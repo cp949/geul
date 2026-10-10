@@ -21,6 +21,16 @@ import type { TabularData } from "./tabular-data.js";
 //
 // textColor/backgroundColor는 블록 요소 자신의 style 색이다(Issue #343).
 // TabularCell과 같은 모양이다. 파서는 대문자 #RRGGBB만 담는다.
+//
+// codeBlock/divider는 목록 항목의 children에서만 나온다(Issue #351). li 안
+// pre·hr다. 최상위 pre·hr는 이 variant가 되지 않고, core는 최상위의 두 타입을
+// CLIPBOARD_CONTENT_INVALID로 거절한다.
+// - codeBlock.text는 마크 없는 평문이다. 줄바꿈과 Tab을 보존하고 model의
+//   codeBlock 소스 계약이 거부하는 문자만 파서가 지운다. 내용 없는 pre는
+//   만들지 않아 text는 비어 있지 않다.
+// - codeBlock.language는 importHtml과 같은 규칙으로 고른 뒤 model 정규형으로
+//   바꾼 값이다. wrap·caption·id는 담지 않는다.
+// - divider는 필드가 없다.
 export type ClipboardContentBlock =
   | {
       type: "paragraph";
@@ -36,6 +46,8 @@ export type ClipboardContentBlock =
       backgroundColor?: string;
     }
   | { type: "table"; data: TabularData }
+  | { type: "codeBlock"; text: string; language?: string }
+  | { type: "divider" }
   | {
       type: "bulletListItem";
       content: InlineContent;

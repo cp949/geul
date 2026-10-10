@@ -7,6 +7,7 @@
  */
 import type { ClipboardContentBlock, TabularData } from "@cp949/geul-io";
 import {
+  type Block,
   MAX_NESTING_DEPTH,
   type InlineContentItem,
   type TableBlock,
@@ -21,6 +22,7 @@ import {
   pasteClipboardContent,
   pasteTabularData,
 } from "../src/table-paste-commands.js";
+import { tiptapToModel } from "../src/tiptap-to-model.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import {
   cellJson,
@@ -398,23 +400,25 @@ describe("표에 표 형태 데이터를 붙여넣는다", () => {
   });
 });
 
+/** 1×1 표 블록이다. */
+const tableBlock = (text: string): ClipboardContentBlock => ({
+  type: "table",
+  data: {
+    columnCount: 1,
+    rows: [
+      {
+        cells: [
+          { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [{ text }] },
+        ],
+      },
+    ],
+  },
+});
+
 describe("클립보드 시퀀스를 붙여넣는다", () => {
   const paragraphBlock = (text: string): ClipboardContentBlock => ({
     type: "paragraph",
     content: [{ text }],
-  });
-  const tableBlock = (text: string): ClipboardContentBlock => ({
-    type: "table",
-    data: {
-      columnCount: 1,
-      rows: [
-        {
-          cells: [
-            { columnIndex: 0, rowSpan: 1, columnSpan: 1, content: [{ text }] },
-          ],
-        },
-      ],
-    },
   });
   const headingBlock = (
     text: string,
@@ -979,6 +983,209 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
       error: {
         code: "CLIPBOARD_CONTENT_INVALID",
         message: expect.stringContaining("startNumber"),
+      },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+});
+
+// Issue #351: 클립보드 파서는 li 안 pre·hr를 목록 항목의 자식 codeBlock·divider로
+// 만든다. 최상위에는 이 두 타입이 오지 않아 core가 거절한다.
+describe("목록 항목 자식 codeBlock·divider를 붙여넣는다 (Issue #351)", () => {
+  const itemWith = (
+    children: ClipboardContentBlock[],
+  ): ClipboardContentBlock => ({
+    type: "bulletListItem",
+    content: [{ text: "item" }],
+    children,
+  });
+
+  it("표 밖 캐럿에서 자식 codeBlock·divider가 blockGroup 안 노드로 들어가고 문서 읽기가 성공한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        itemWith([
+          { type: "codeBlock", text: "a\n\tb", language: "typescript" },
+          { type: "divider" },
+        ]),
+        tableBlock("A"),
+      ],
+      sequentialIds("paste"),
+    );
+
+    expect(result.ok).toBe(true);
+    const doc = editor.getJSON() as TiptapJsonNode;
+    const group = doc.content?.[1]?.content?.[1];
+    expect(group?.type).toBe("blockGroup");
+    expect(group?.content?.[0]?.type).toBe("blockContainer");
+    expect(group?.content?.[0]?.content?.[0]?.type).toBe("codeBlock");
+    expect(group?.content?.[0]?.content?.[0]?.attrs?.language).toBe(
+      "typescript",
+    );
+    expect(group?.content?.[1]?.type).toBe("divider");
+    const model = tiptapToModel(doc, 0, sequentialIds("model"));
+    if (!model.ok) throw new Error(model.error.code);
+    const item = model.value.blocks[1];
+    expect(item?.type).toBe("bulletListItem");
+    const children = (item as { children?: readonly Block[] }).children ?? [];
+    expect(children.map((child) => child.type)).toEqual([
+      "codeBlock",
+      "divider",
+    ]);
+    expect(children[0]).toMatchObject({
+      type: "codeBlock",
+      content: [{ text: "a\n\tb" }],
+      language: "typescript",
+    });
+  });
+
+  it("표 안 캐럿에서 자식 codeBlock·divider가 든 시퀀스도 예외 없이 붙는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        itemWith([{ type: "codeBlock", text: "x" }, { type: "divider" }]),
+        tableBlock("A"),
+      ],
+      sequentialIds("paste"),
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it.each([
+    ["codeBlock", { type: "codeBlock", text: "x" } as ClipboardContentBlock],
+    ["divider", { type: "divider" } as ClipboardContentBlock],
+  ])(
+    "표 밖에서 최상위 %s는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다",
+    (_name, block) => {
+      const editor = createTableFixtureEditor(docWithParagraph);
+      editor.commands.setTextSelection(1);
+      const before = editor.getJSON() as TiptapJsonNode;
+
+      const result = pasteClipboardContent(
+        editor,
+        [block, tableBlock("A")],
+        sequentialIds("paste"),
+      );
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: expect.stringContaining(block.type),
+        },
+      });
+      expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+    },
+  );
+
+  it.each([
+    ["codeBlock", { type: "codeBlock", text: "x" } as ClipboardContentBlock],
+    ["divider", { type: "divider" } as ClipboardContentBlock],
+  ])(
+    "표 안에서도 최상위 %s는 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다",
+    (_name, block) => {
+      const editor = createTableFixtureEditor(docWithTwoRowTable);
+      placeCaretInCell(editor, "cell-1");
+      const before = editor.getJSON() as TiptapJsonNode;
+
+      const result = pasteClipboardContent(
+        editor,
+        [block, tableBlock("A")],
+        sequentialIds("paste"),
+      );
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: expect.stringContaining(block.type),
+        },
+      });
+      expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+    },
+  );
+
+  it.each([
+    ["C0 제어문자", "a\u0001b"],
+    ["DEL", "a\u007fb"],
+    ["짝 없는 surrogate", "a\ud800b"],
+  ])(
+    "codeBlock 글자에 %s가 있으면 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다",
+    (_name, text) => {
+      const editor = createTableFixtureEditor(docWithParagraph);
+      editor.commands.setTextSelection(1);
+      const before = editor.getJSON() as TiptapJsonNode;
+
+      const result = pasteClipboardContent(
+        editor,
+        [itemWith([{ type: "codeBlock", text }]), tableBlock("A")],
+        sequentialIds("paste"),
+      );
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: expect.stringContaining("CodeBlock"),
+        },
+      });
+      expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+    },
+  );
+
+  it("codeBlock language에 제어문자가 있으면 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        itemWith([{ type: "codeBlock", text: "x", language: "a\u0001" }]),
+        tableBlock("A"),
+      ],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: expect.stringContaining("language"),
+      },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+
+  it("MAX_NESTING_DEPTH를 넘는 자리의 codeBlock·divider도 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    editor.commands.setTextSelection(1);
+    const before = editor.getJSON() as TiptapJsonNode;
+    let innermost: ClipboardContentBlock = itemWith([
+      { type: "codeBlock", text: "leaf" },
+    ]);
+    for (let level = 1; level < MAX_NESTING_DEPTH; level += 1) {
+      innermost = itemWith([innermost]);
+    }
+
+    const result = pasteClipboardContent(
+      editor,
+      [innermost, tableBlock("A")],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: expect.stringContaining(String(MAX_NESTING_DEPTH)),
       },
     });
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);

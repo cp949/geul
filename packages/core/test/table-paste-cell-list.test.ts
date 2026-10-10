@@ -314,3 +314,95 @@ describe("표 밖 캐럿의 목록 항목 붙여넣기는 이전과 같다", () 
     ]);
   });
 });
+
+// Issue #351: li 안 pre·hr는 목록 항목의 자식 codeBlock·divider다. 셀은 블록을
+// 가질 수 없어 codeBlock은 글자의 줄마다 셀 줄이 되고 divider는 줄이 없다.
+describe("표 안 캐럿에 목록 항목 자식 codeBlock·divider가 든 클립보드를 붙인다 (Issue #351)", () => {
+  it("codeBlock 글자는 줄마다 셀 줄이 되고 들여쓰기를 지킨다", () => {
+    const { editor, result } = pasteInCell([
+      bullet("L", {
+        children: [{ type: "codeBlock", text: "if (x) {\n  y();\n}" }],
+      }),
+      table2x2,
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(cellContents(editor)[0]).toEqual([
+      { text: "L\nif (x) {\n  y();\n}\na" },
+    ]);
+  });
+
+  it("codeBlock 글자의 Tab은 지워 셀 텍스트 검증에 걸리지 않는다", () => {
+    const { editor, result } = pasteInCell([
+      bullet("L", {
+        children: [{ type: "codeBlock", text: "x\n\ty\n\t\nz" }],
+      }),
+      table2x2,
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(cellContents(editor)[0]).toEqual([{ text: "L\nx\ny\nz\na" }]);
+  });
+
+  it("divider는 줄을 내지 않는다", () => {
+    const { editor, result } = pasteInCell([
+      bullet("L", {
+        children: [
+          { type: "divider" },
+          { type: "paragraph", content: [{ text: "after" }] },
+        ],
+      }),
+      table2x2,
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(cellContents(editor)[0]).toEqual([{ text: "L\nafter\na" }]);
+  });
+
+  it("codeBlock 안 빈 줄은 건너뛰고 뒤 표 아래 자식도 읽기 순서를 지킨다", () => {
+    const { editor, result } = pasteInCell([
+      table2x2,
+      bullet("T", {
+        children: [{ type: "codeBlock", text: "a\n\nb" }, { type: "divider" }],
+      }),
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(cellContents(editor)[3]).toEqual([{ text: "d\nT\na\nb" }]);
+  });
+
+  it("children 안에 codeBlock·divider만 있어도 표 개수를 셀 때 예외를 내지 않는다", () => {
+    const { result } = pasteInCell([
+      bullet("L", {
+        children: [{ type: "codeBlock", text: "x" }, { type: "divider" }],
+      }),
+      table2x2,
+    ]);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("children 안 codeBlock 옆 표는 둘 이상의 표와 같이 거절하고 문서를 바꾸지 않는다", () => {
+    const editor = createTableFixtureEditor(docWithTwoRowTable);
+    placeCaretInCell(editor, "cell-1");
+    const before = editor.getJSON() as TiptapJsonNode;
+
+    const result = pasteClipboardContent(
+      editor,
+      [
+        bullet("L", { children: [{ type: "codeBlock", text: "x" }, table2x2] }),
+        table2x2,
+      ],
+      sequentialIds("paste"),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "CLIPBOARD_CONTENT_INVALID",
+        message: "Cannot paste multiple tables inside an existing table cell",
+      },
+    });
+    expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
+  });
+});

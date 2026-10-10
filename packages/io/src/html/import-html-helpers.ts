@@ -192,6 +192,46 @@ export const firstDirectCode = (
       child.type === "element" && child.tagName === "code",
   );
 
+// pre의 language 후보를 우선순위대로 고른다. importHtml과 클립보드 파서가
+// 공유한다(Issue #351).
+// - 우선순위: 첫 직계 code의 data-language, pre의 data-language, 첫 직계
+//   code의 language-* class, pre의 language-* class.
+// - 후보가 하나라도 고른 값과 다르면 metadataConflict가 참이다. 한 요소의
+//   language-* 토큰 여럿도 후보다.
+// - 경고를 낼지는 호출자가 정한다. 값 정규화(canonicalize)도 호출자 몫이다.
+export const selectCodeBlockLanguage = (
+  preNode: HtmlElementNode,
+): { language: string | undefined; metadataConflict: boolean } => {
+  const directCode = firstDirectCode(preNode);
+  const directCodeDataLanguage =
+    directCode === undefined
+      ? undefined
+      : propertyString(directCode, "dataLanguage");
+  const preDataLanguage = propertyString(preNode, "dataLanguage");
+  const directCodeClassLanguages =
+    directCode === undefined ? [] : classLanguages(directCode);
+  const preClassLanguages = classLanguages(preNode);
+  const selectionCandidates = [
+    directCodeDataLanguage,
+    preDataLanguage,
+    directCodeClassLanguages[0],
+    preClassLanguages[0],
+  ].filter((value): value is string => value !== undefined);
+  const language = selectionCandidates[0];
+  const exactMetadataCandidates = [
+    directCodeDataLanguage,
+    preDataLanguage,
+    ...directCodeClassLanguages,
+    ...preClassLanguages,
+  ].filter((value): value is string => value !== undefined);
+  return {
+    language,
+    metadataConflict:
+      language !== undefined &&
+      exactMetadataCandidates.some((candidate) => candidate !== language),
+  };
+};
+
 // baseFormat은 블록 요소 style의 서식(blockPresentation의 format)을 안쪽
 // 텍스트에 싣는다(Issue #334 단계 B). 호출부가 블록 요소를 알 때만 넘긴다.
 export const paragraphContentFromNodes = (

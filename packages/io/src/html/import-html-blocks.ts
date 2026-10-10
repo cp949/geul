@@ -17,11 +17,10 @@ import {
 import { segmentBlocks } from "./block-segmenter.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import {
-  classLanguages,
-  firstDirectCode,
   isElementNode,
   isListElement,
   paragraphContentFromNodes,
+  selectCodeBlockLanguage,
   textBlockPropsFromElement,
   textValue,
 } from "./import-html-helpers.js";
@@ -318,32 +317,8 @@ const blocksFromSegments = (
 
       const source = textValue(preNode.children);
       const id = propertyString(preNode, "dataGeulBlockId") ?? createId();
-      const directCode = firstDirectCode(preNode);
-      const directCodeDataLanguage =
-        directCode === undefined
-          ? undefined
-          : propertyString(directCode, "dataLanguage");
-      const preDataLanguage = propertyString(preNode, "dataLanguage");
-      const directCodeClassLanguages =
-        directCode === undefined ? [] : classLanguages(directCode);
-      const preClassLanguages = classLanguages(preNode);
-      const selectionCandidates = [
-        directCodeDataLanguage,
-        preDataLanguage,
-        directCodeClassLanguages[0],
-        preClassLanguages[0],
-      ].filter((value): value is string => value !== undefined);
-      const language = selectionCandidates[0];
-      const exactMetadataCandidates = [
-        directCodeDataLanguage,
-        preDataLanguage,
-        ...directCodeClassLanguages,
-        ...preClassLanguages,
-      ].filter((value): value is string => value !== undefined);
-      if (
-        language !== undefined &&
-        exactMetadataCandidates.some((candidate) => candidate !== language)
-      ) {
+      const { language, metadataConflict } = selectCodeBlockLanguage(preNode);
+      if (metadataConflict) {
         warnings.push(codeBlockLanguageMetadataIgnoredWarning(id));
       }
       // marker 패턴 — 값 내용은 보지 않고 존재만 본다(export-html.ts의

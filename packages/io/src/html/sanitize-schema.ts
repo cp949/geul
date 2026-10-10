@@ -338,10 +338,10 @@ export const clipboardAllowedAttributes: Record<string, string[]> = {
 // 됐다. DELTA-06(Issue #38)이 h4~h6·hr을 공유 목록에 올려 두 목록의 내용이
 // 같아졌지만 이름은 따로 둔다 — 두 경로의 허용 목록이 같아야 한다는 계약은
 // 없고(clipboardStrippedTagNames가 이미 갈라져 있다) clipboardSanitizeSchema
-// 가 어느 목록을 쓰는지 드러나야 한다. hr은 clipboard 정책
+// 가 어느 목록을 쓰는지 드러나야 한다. hr은 clipboard 최상위 정책
 // (clipboard-table-parser.ts)이 divider 세그먼트로 인식하지 않아 pending
-// 인라인 노드로 지나가며 텍스트를 내지 않는다 — clipboard의 hr 처리는
-// 슬라이스 10 소관이다.
+// 인라인 노드로 지나가며 텍스트를 내지 않는다 — 최상위 hr 처리는 슬라이스 10
+// 소관이다. li 안 hr은 li 자식용 정책이 divider로 읽는다(Issue #351).
 export const clipboardAllowedTagNames = [...htmlAllowedTagNames];
 
 // <title>은 소스 문서 head의 메타데이터지 사용자가 선택한 본문이 아니다.

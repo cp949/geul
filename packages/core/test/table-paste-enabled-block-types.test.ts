@@ -41,6 +41,11 @@ const DENY_NUMBERED: EnabledBlockTypes = {
   mode: "deny",
   types: ["numberedListItem"],
 };
+const DENY_CODE_BLOCK: EnabledBlockTypes = {
+  mode: "deny",
+  types: ["codeBlock"],
+};
+const DENY_DIVIDER: EnabledBlockTypes = { mode: "deny", types: ["divider"] };
 const ALLOW_PARAGRAPH: EnabledBlockTypes = {
   mode: "allow",
   types: ["paragraph"],
@@ -266,6 +271,105 @@ describe("표를 허용해도 다른 막은 타입이 섞이면 표까지 평문
       "p:b",
       "p:ab",
       "p:cdrst",
+      "p:second",
+    ]);
+  });
+});
+
+describe("목록 항목 자식 codeBlock·divider가 막힌 타입이면 평문으로 폴백한다(Issue #351)", () => {
+  const codeHtml = `<ul><li>l<pre>x</pre></li></ul>${TABLE_HTML}`;
+  const dividerHtml = `<ul><li>l<hr></li></ul>${TABLE_HTML}`;
+
+  it("deny codeBlock이면 li 안 pre가 든 html이 평문으로 들어간다", () => {
+    const result = pasteOutline(DENY_CODE_BLOCK, atCaret, {
+      "text/html": codeHtml,
+      "text/plain": "l\nx\na\tb\nc\td",
+    });
+
+    expectPlainFallback(result, [
+      "p:fil",
+      "p:x",
+      "p:ab",
+      "p:cdrst",
+      "p:second",
+    ]);
+  });
+
+  it("deny divider이면 li 안 hr가 든 html이 평문으로 들어간다", () => {
+    const result = pasteOutline(DENY_DIVIDER, atCaret, {
+      "text/html": dividerHtml,
+      "text/plain": "l\na\tb\nc\td",
+    });
+
+    expectPlainFallback(result, ["p:fil", "p:ab", "p:cdrst", "p:second"]);
+  });
+
+  it("allow 모드에서 codeBlock이 허용 목록에 없으면 평문으로 폴백한다", () => {
+    const result = pasteOutline(
+      {
+        mode: "allow",
+        types: ["paragraph", "bulletListItem", "table", "divider"],
+      },
+      atCaret,
+      {
+        "text/html": codeHtml,
+        "text/plain": "l\nx\na\tb\nc\td",
+      },
+    );
+
+    expectPlainFallback(result, [
+      "p:fil",
+      "p:x",
+      "p:ab",
+      "p:cdrst",
+      "p:second",
+    ]);
+  });
+
+  it("allow 모드에서 divider가 허용 목록에 없으면 평문으로 폴백한다", () => {
+    const result = pasteOutline(
+      {
+        mode: "allow",
+        types: ["paragraph", "bulletListItem", "table", "codeBlock"],
+      },
+      atCaret,
+      {
+        "text/html": dividerHtml,
+        "text/plain": "l\na\tb\nc\td",
+      },
+    );
+
+    expectPlainFallback(result, ["p:fil", "p:ab", "p:cdrst", "p:second"]);
+  });
+
+  it("막은 타입이 없으면 자식 codeBlock·divider가 목록 항목 아래에 들어간다", () => {
+    const result = pasteOutline(undefined, atCaret, {
+      "text/html": `<ul><li>l<pre>x</pre><hr></li></ul>${TABLE_HTML}`,
+      "text/plain": "l\nx\na\tb\nc\td",
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.rejected).toEqual([]);
+    expect(result.outline).toEqual([
+      "p:first",
+      "ul:l[code:x,divider:]",
+      "table:",
+      "p:second",
+    ]);
+  });
+
+  it("codeBlock만 막고 divider를 허용하면 divider만 든 html은 목록 아래 divider로 들어간다", () => {
+    const result = pasteOutline(DENY_CODE_BLOCK, atCaret, {
+      "text/html": dividerHtml,
+      "text/plain": "l\na\tb\nc\td",
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.rejected).toEqual([]);
+    expect(result.outline).toEqual([
+      "p:first",
+      "ul:l[divider:]",
+      "table:",
       "p:second",
     ]);
   });

@@ -85,9 +85,10 @@ export type BlockSegment<
   // 남는다(문서 import의 리스트 매핑은 blocksFromListElement가 이미
   // 따로 담당).
   | { kind: "list"; node: HtmlElementNode }
-  // pre를 CodeBlock으로 해석할지는 document import policy만 opt-in한다.
-  // 원본 sanitized 요소를 그대로 넘겨 source·metadata 선택은 호출자가
-  // 담당한다. clipboard policy에서는 이 variant가 나오지 않는다.
+  // pre를 CodeBlock으로 해석할지는 document import policy와 clipboard의
+  // li 자식용 policy만 opt-in한다(Issue #351). 원본 sanitized 요소를 그대로
+  // 넘겨 source·metadata 선택은 호출자가 담당한다. clipboard 최상위 policy에서는
+  // 이 variant가 나오지 않는다.
   | (IncludeCodeBlock extends true
       ? { kind: "codeBlock"; node: HtmlElementNode }
       : never)
@@ -138,7 +139,8 @@ export type BlockSegmentPolicy<
   // hr처럼 콘텐츠 없이 그 자체가 블록(model divider)인 태그 판정. 선택적이다
   // — 넘기지 않는 소비자(clipboard-table-parser.ts)에서는 hr이 예전처럼
   // 경계가 아닌 일반 요소로 pending에 들어가 텍스트 없이 지나간다(클립보드
-  // 계약 불변 — clipboard의 hr 처리는 슬라이스 10 소관).
+  // 최상위 계약 불변 — 최상위 hr 처리는 슬라이스 10 소관). clipboard의 li
+  // 자식용 policy는 이 판정을 넘긴다(Issue #351).
   isDividerTag?: (tagName: string) => boolean;
   // blockquote처럼 그 자체가 블록(model quote)이면서 안쪽 해석을 호출자가
   // 맡는 태그 판정. 선택적이다 — 넘기지 않는 소비자(clipboard-table-parser.ts)
@@ -155,7 +157,8 @@ export type BlockSegmentPolicy<
   // 두 집합에 있을 때 세그먼트 승격이 이긴다(isQuoteTag와 동일 원칙).
   isListTag?: (tagName: string) => boolean;
   // pre처럼 마크·일반 인라인 해석을 바이패스하고 리프 블록으로
-  // 유지할 태그. document import만 넘기며 clipboard는 opt-in하지 않는다.
+  // 유지할 태그. document import와 clipboard의 li 자식용 policy만 넘긴다
+  // (Issue #351). clipboard 최상위 policy는 opt-in하지 않는다.
   // div/li/blockquote처럼 "경계를 만나면 flush하고, 안쪽을 재귀 탐색해
   // 더 깊은 경계를 개별 인식시킨 뒤 다시 flush한다"태그. 표 유무와
   // 무관하게 항상 재귀한다 — 임의 깊이의 중첩 경계를 전부 잡아야 하기
@@ -188,8 +191,10 @@ export type BlockSegmentPolicy<
   // <figcaption>…</figcaption></figure> 래핑 판별. isMediaNode와 같은 이유로
   // (figure가 여러 의미를 겸하는 태그라) 태그명만으로는 판정할 수 없어 노드
   // 전체 검사 시그니처를 쓴다. 선택적이다 — 넘기지 않는 소비자
-  // (clipboard-table-parser.ts)에서는 이 kind가 나오지 않고, figure는
-  // isMediaNode 판정만 받는다(media 마커가 없으면 그대로 문단 경계다).
+  // (clipboard-table-parser.ts)에서는 figure로 만든 codeBlock kind가 나오지
+  // 않고, figure는 isMediaNode 판정만 받는다(media 마커가 없으면 그대로 문단
+  // 경계다). pre 자신의 codeBlock kind는 클립보드 li 자식 정책에서 나온다
+  // (Issue #351).
   isCodeBlockFigureNode?: (node: HtmlElementNode) => boolean;
   // callout(Issue #209 RD-003 DELTA-01) 태그 자신 판정 — isMediaNode와 같은
   // 이유(div가 own-content 블록을 겸해 태그명만으로 판정 불가)로 노드 전체
