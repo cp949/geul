@@ -32,6 +32,11 @@ import {
   withUnhandledErrorTracking,
 } from "./clipboard-test-support.js";
 import {
+  contentOfB1,
+  expectDocValid,
+  mountedParagraph,
+} from "./code-mark-test-support.js";
+import {
   documentOf,
   mounted,
   paragraphBlock,
@@ -90,11 +95,6 @@ const codeWith = (format: FormatCase, text = "x"): InlineContent => [
   },
 ];
 
-/** 편집기 PM 문서가 스키마를 통과하는지 확인한다. 위반이면 던진다. */
-const expectDocValid = (tiptap: Editor) => {
-  expect(() => tiptap.state.doc.check()).not.toThrow();
-};
-
 /** 문서 안 텍스트 노드 중 text가 같은 첫 노드의 마크 이름을 정렬해 돌려준다. */
 const markNamesOf = (tiptap: Editor, text: string): string[] => {
   let names: string[] | undefined;
@@ -118,31 +118,6 @@ const signature = (content: InlineContent | undefined): string[][] =>
       ? item.marks.map((mark) => mark.type).sort()
       : [],
   );
-
-/** 한 문단 b1(content)을 마운트하고 문자 범위 [from, to)를 선택한다. */
-const mountedParagraph = (
-  content: InlineContent,
-  from: number,
-  to: number = from,
-) => {
-  const fixture = mounted(documentOf({ id: "b1", type: "paragraph", content }));
-  const start = contentTextStart(fixture.tiptap, "b1");
-  fixture.tiptap.commands.setTextSelection({
-    from: start + from,
-    to: start + to,
-  });
-  return fixture;
-};
-
-/** b1의 inline content를 저장 문서 형태로 읽는다. */
-const contentOfB1 = (fixture: ReturnType<typeof mountedParagraph>) => {
-  const block = fixture.editor.getBlock("b1");
-  return block !== undefined &&
-    "content" in block &&
-    Array.isArray(block.content)
-    ? block.content
-    : undefined;
-};
 
 /** 문단 "seed" 끝에 캐럿을 두고 붙여넣기를 실행한다. 미처리 오류를 함께 돌려준다. */
 const pasteOutsideTable = (entries: Record<string, string>) => {

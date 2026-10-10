@@ -27,6 +27,11 @@ import { getTableBlock } from "../src/table-commands.js";
 import { pasteClipboardContent } from "../src/table-paste-commands.js";
 import { tiptapToModel } from "../src/tiptap-to-model.js";
 import { contentTextStart } from "./block-test-support.js";
+import {
+  contentOfB1,
+  expectDocValid,
+  mountedParagraph,
+} from "./code-mark-test-support.js";
 import { sequentialIds } from "./editor-controller-support.js";
 import {
   documentOf,
@@ -54,11 +59,6 @@ const codeRed: InlineContent = [
     marks: [{ type: "code" }, { type: "textColor", color: RED }],
   },
 ];
-
-/** 편집기 PM 문서가 스키마를 통과하는지 확인한다. 위반이면 던진다. */
-const expectSchemaValid = (editor: Editor) => {
-  expect(() => editor.state.doc.check()).not.toThrow();
-};
 
 /** 표 안 캐럿 붙여넣기 뒤 table-1의 좌상단 셀 content를 읽는다. */
 const firstCellContent = (editor: Editor): InlineContent | undefined => {
@@ -107,7 +107,7 @@ describe("표 셀 안 clipboard 붙여넣기의 code와 색 마크 공존", () =
     );
 
     expect(result.ok).toBe(true);
-    expectSchemaValid(editor);
+    expectDocValid(editor);
     expect(firstCellContent(editor)?.[0]).toEqual({
       text: "x",
       marks: [{ type: "code" }, { type: "textColor", color: BLUE }],
@@ -125,7 +125,7 @@ describe("표 셀 안 clipboard 붙여넣기의 code와 색 마크 공존", () =
     );
 
     expect(result.ok).toBe(true);
-    expectSchemaValid(editor);
+    expectDocValid(editor);
     expect(markTypes(firstCellContent(editor)).sort()).toEqual([
       "code",
       "textColor",
@@ -158,7 +158,7 @@ describe("표 셀 안 html 붙여넣기의 code와 색 마크 공존", () => {
         { "text/html": html, "text/plain": text },
       );
 
-      expectSchemaValid(result.tiptap);
+      expectDocValid(result.tiptap);
       const types = new Set<string>();
       result.tiptap.state.doc.descendants((node) => {
         for (const mark of node.marks) types.add(mark.type.name);
@@ -195,7 +195,7 @@ describe("표 밖 붙여넣기와 초기 문서 로드의 code와 색 마크 공
     );
 
     expect(result.ok).toBe(true);
-    expectSchemaValid(editor);
+    expectDocValid(editor);
   });
 
   it("code와 textColor를 가진 문단으로 초기 문서를 열어도 스키마를 통과한다", () => {
@@ -203,7 +203,7 @@ describe("표 밖 붙여넣기와 초기 문서 로드의 code와 색 마크 공
       documentOf({ id: "b1", type: "paragraph", content: codeRed }),
     );
 
-    expectSchemaValid(tiptap);
+    expectDocValid(tiptap);
   });
 
   it("code와 두 색 마크를 가진 표 셀로 초기 문서를 열어도 스키마를 통과한다", () => {
@@ -225,7 +225,7 @@ describe("표 밖 붙여넣기와 초기 문서 로드의 code와 색 마크 공
     ];
     const { tiptap } = mounted(documentOf(table, paragraphBlock("tail", "t")));
 
-    expectSchemaValid(tiptap);
+    expectDocValid(tiptap);
   });
 });
 
@@ -306,27 +306,6 @@ describe("bold와 code는 스키마가 함께 받는다(Issue #349)", () => {
   });
 });
 
-/** 한 문단 b1(content)을 마운트하고 문자 범위 [from, to)를 선택한다. */
-const mountedParagraph = (
-  content: InlineContent,
-  from: number,
-  to: number = from,
-) => {
-  const fixture = mounted(documentOf({ id: "b1", type: "paragraph", content }));
-  const start = contentTextStart(fixture.tiptap, "b1");
-  fixture.tiptap.commands.setTextSelection({
-    from: start + from,
-    to: start + to,
-  });
-  return fixture;
-};
-
-/** b1의 inline content를 저장 문서 형태로 읽는다. */
-const contentOfB1 = (fixture: ReturnType<typeof mountedParagraph>) => {
-  const block = fixture.editor.getBlock("b1");
-  return block !== undefined && "content" in block ? block.content : undefined;
-};
-
 const ok = { ok: true, value: undefined };
 
 describe("code와 색 조합의 범위 명령", () => {
@@ -350,7 +329,7 @@ describe("code와 색 조합의 범위 명령", () => {
         marks: [{ type: "code" }, { type: "textColor", color: BLUE }],
       },
     ]);
-    expectSchemaValid(fixture.tiptap);
+    expectDocValid(fixture.tiptap);
   });
 
   it("code 글자에 textColor와 backgroundColor를 차례로 적용하면 세 마크가 남는다", () => {
@@ -375,7 +354,7 @@ describe("code와 색 조합의 범위 명령", () => {
         ],
       },
     ]);
-    expectSchemaValid(fixture.tiptap);
+    expectDocValid(fixture.tiptap);
   });
 
   it("색이 있는 평문에 toggleCode를 적용하면 색을 지우지 않고 code를 더한다", () => {
@@ -393,7 +372,7 @@ describe("code와 색 조합의 범위 명령", () => {
         marks: [{ type: "code" }, { type: "textColor", color: RED }],
       },
     ]);
-    expectSchemaValid(fixture.tiptap);
+    expectDocValid(fixture.tiptap);
   });
 
   it("code+textColor 글자에 toggleCode를 적용하면 code만 해제하고 색은 남긴다", () => {
@@ -413,7 +392,7 @@ describe("code와 색 조합의 범위 명령", () => {
     expect(contentOfB1(fixture)).toEqual([
       { text: "abc", marks: [{ type: "textColor", color: RED }] },
     ]);
-    expectSchemaValid(fixture.tiptap);
+    expectDocValid(fixture.tiptap);
   });
 
   it("code+textColor 글자에서 textColor를 null로 해제하면 code는 남는다", () => {
@@ -447,7 +426,7 @@ describe("code와 색 조합의 범위 명령", () => {
     expect(contentOfB1(fixture)).toEqual([
       { text: "abc", marks: [{ type: "bold" }, { type: "code" }] },
     ]);
-    expectSchemaValid(fixture.tiptap);
+    expectDocValid(fixture.tiptap);
   });
 });
 
@@ -471,7 +450,7 @@ describe("code와 색 조합의 접힌 캐럿 명령", () => {
       },
       { text: "bc" },
     ]);
-    expectSchemaValid(fixture.tiptap);
+    expectDocValid(fixture.tiptap);
   });
 
   it("textColor stored mark 위에 code를 더하면 허용한다", () => {
@@ -538,7 +517,7 @@ describe("code와 커스텀 스타일 마크 공존", () => {
     });
     const { tiptap } = mountTiptapEditor(editor);
 
-    expectSchemaValid(tiptap);
+    expectDocValid(tiptap);
     expect(editor.getBlock("b1")).toMatchObject({
       content: [
         {
@@ -566,7 +545,7 @@ describe("code와 커스텀 스타일 마크 공존", () => {
       ok,
     );
 
-    expectSchemaValid(tiptap);
+    expectDocValid(tiptap);
     expect(editor.getBlock("b1")).toMatchObject({
       content: [
         {
