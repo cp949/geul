@@ -134,17 +134,16 @@ toggleCaretBackgroundColor(color: string | null): Result<void, EditorError>;
 | codeBlock 안 캐럿 | `CODE_BLOCK_MARK_NOT_ALLOWED` |
 | 색상 값이 canonical이 아님 | `INVALID_COLOR` |
 | 색상 해제(`null`)인데 캐럿 위치에 그 색이 없음 | `COMMAND_NOT_APPLICABLE` |
-| `code`가 걸린 캐럿에서 `bold`·`italic`·`underline`·`strike`를 켬 | `COMMAND_NOT_APPLICABLE` |
 
-- 판정 순서는 `type`(`toggleCaretMark`만), 파괴된 세션, 범위 선택, codeBlock, 색상 값 순이다. 변경 없음과 `code` 배제는 적용 단계에서 판정한다.
+- 판정 순서는 `type`(`toggleCaretMark`만), 파괴된 세션, 범위 선택, codeBlock, 색상 값 순이다. 변경 없음은 적용 단계에서 판정한다.
 - 범위 선택이 codeBlock과 겹쳐도 `COMMAND_NOT_APPLICABLE`이 우선한다.
   - 툴바가 이 코드를 보고 기존 선택 영역 명령으로 넘어간다.
   - 기존 명령이 그 경우 `CODE_BLOCK_MARK_NOT_ALLOWED`를 반환한다.
 - 변경이 없는 호출은 거절이다. 기존 명령의 규약과 같다.
-- `code`는 `bold`·`italic`·`underline`·`strike`와 함께 걸 수 없다(편집기 mark 배제 규칙).
-  - `code`를 켜면 앞서 설정한 `bold`·`italic`·`underline`·`strike` stored mark를 대체한다.
-  - 색상 mark는 `code`와 함께 걸 수 있다. `code`를 켜도 색상 stored mark를 지우지 않고, `code` 위에 색상을 켜도 거절하지 않는다.
+- `code`는 다른 mark를 배제하지 않는다. `bold`·`italic`·`underline`·`strike`·색상 mark와 함께 걸 수 있다.
+  - `code`를 켜도 앞서 설정한 stored mark를 지우지 않는다. `code` 위에 다른 mark를 켜도 거절하지 않는다.
   - 정정(2026-10-10, Issue #347): 이전에는 색상 mark도 `code`와 배타였다. model과 `<code style="color">` 가져오기가 `code`와 색 mark의 공존을 만들어 스키마 배타를 완화했다.
+  - 정정(2026-10-10, Issue #349): 이전에는 `code`가 `bold`·`italic`·`underline`·`strike`·`link`와 배타였다. `code`를 켜면 앞의 네 stored mark를 대체했고, `code` 위에서 이 네 mark를 켜면 `COMMAND_NOT_APPLICABLE`이었다. model, io, 마크다운이 이미 공존을 허용해서 스키마 배타를 모두 없앴다. 명령 코드는 스키마를 따른다.
 - 거절 시 상태는 바뀌지 않는다.
 
 ### 기존 명령과의 관계
