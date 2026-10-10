@@ -420,24 +420,23 @@ describe("HTML 보안", () => {
     }
   });
 
-  // 이미 지원하지 않는 태그(span) 자신이 경고를 낸 뒤에는 그 안에 중첩된
+  // 이미 지원하지 않는 태그(sup) 자신이 경고를 낸 뒤에는 그 안에 중첩된
   // 내용까지 각각 다시 경고하지 않는다 — isBlockBoundaryTag는 div/li/
-  // blockquote/ul/ol만 통과시키고, span처럼 애초에 미지원인 태그를 지나면
+  // blockquote/ul/ol만 통과시키고, sup처럼 애초에 미지원인 태그를 지나면
   // topLevel을 false로 낮춰 중복 경고를 막는다(기존 aside 사례와 같은
   // "하나의 경고로 대표한다" 관례). 안쪽 태그는 h4가 지원 태그로 승격된
   // 뒤에도 여전히 미지원인 section을 쓴다 — 지원 태그면 애초에 경고가 없어
-  // 중복 억제를 검증하지 못한다.
+  // 중복 억제를 검증하지 못한다. 바깥 태그는 한때 span이었지만 span이
+  // 지원 인라인 태그가 되어(Issue #337) 미지원인 sup으로 바꿨다.
   it("미지원 태그 안에 중첩된 내용은 중복 경고하지 않는다", () => {
-    const result = importHtml(
-      "<div><span><section>text</section></span></div>",
-    );
+    const result = importHtml("<div><sup><section>text</section></sup></div>");
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
 
     expect(result.value.warnings).toEqual([
       expect.objectContaining({
         kind: "SAFE_BLOCK_DOWNGRADED",
-        element: "span",
+        element: "sup",
       }),
     ]);
   });

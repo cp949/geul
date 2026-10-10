@@ -15,6 +15,7 @@ import {
   type HtmlRoot,
 } from "./inline-content.js";
 import { readLegacyAttributeColor } from "../clipboard/css-color.js";
+import { INLINE_PRESENTATION_TAG_NAMES } from "./element-presentation.js";
 import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";
 import { MAX_HTML_TREE_DEPTH } from "./parse-html.js";
 import {
@@ -181,21 +182,12 @@ const isOwnMediaAnchorElement = (node: HtmlElementNode): boolean => {
 // warning fact 수집기가 sanitize 구현에 결합된다(ADR-0003). 이 요소들은
 // 지원 경계 컨테이너 안에서 mark·link·줄바꿈 의미로 보존되므로 블록
 // 강등 경고 대상이 아니다. 루트 인라인은 기존 강등 경고 계약을 유지한다.
-const supportedInlineNames = new Set([
-  "strong",
-  "em",
-  "b",
-  "i",
-  "u",
-  "s",
-  "del",
-  "strike",
-  "code",
-  // font·mark는 색·서식 마크로 읽는다(Issue #334). 지원 경계 안에서는 보존되는
-  // 인라인이라 블록 강등 경고 대상이 아니다. 루트 인라인은 기존대로 경고한다.
-  "font",
-  "mark",
-  "a",
+//
+// 변환기가 마크로 보존하는 인라인 태그 목록(INLINE_PRESENTATION_TAG_NAMES)에
+// 줄바꿈 br을 더해 만든다. 목록을 따로 두면 변환기에 span이 생겼을 때 경고만
+// 남았다(Issue #337). 루트 인라인은 기존대로 경고한다.
+const supportedInlineNames: ReadonlySet<string> = new Set([
+  ...INLINE_PRESENTATION_TAG_NAMES,
   "br",
 ]);
 

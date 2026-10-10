@@ -188,6 +188,27 @@ const withEmphasis = (node: HtmlElementNode): InlinePresentation => {
   return { presentation: { italic: "on", ...presentation }, marks: [] };
 };
 
+// 변환기가 마크로 보존하는 인라인 태그다(Issue #342, #337). inlineElementPresentation의
+// case와 같은 목록이다. 경고 수집기가 이 목록으로 "지원 경계 안에서 보존되는
+// 인라인"을 판정한다. 공유하는 것은 태그 이름뿐이다. 경고 수집기는 raw HAST를
+// 읽고 sanitize 허용 목록과 결합하지 않는다(ADR-0003). br은 줄바꿈이라 목록에
+// 없다.
+export const INLINE_PRESENTATION_TAG_NAMES: ReadonlySet<string> = new Set([
+  "a",
+  "strong",
+  "b",
+  "em",
+  "i",
+  "u",
+  "s",
+  "del",
+  "strike",
+  "code",
+  "span",
+  "font",
+  "mark",
+]);
+
 // 인라인 요소 하나가 정하는 값이다. style을 읽는 요소는 선언 하나에 여러 값
 // (color·background-color·font-weight 등)이 동시에 있을 수 있다.
 export const inlineElementPresentation = (
