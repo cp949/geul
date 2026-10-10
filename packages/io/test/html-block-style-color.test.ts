@@ -922,27 +922,254 @@ describe("경고 계약", () => {
   });
 });
 
-describe("클립보드 문단 경로는 div 출처를 읽지 않는다", () => {
-  it("표 앞 div 문단의 색·굵게가 클립보드 문단 content에 반영되지 않는다", () => {
+describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 importHtml과 같게 읽는다", () => {
+  const TABLE =
+    "<table><tbody><tr><td>1</td><td>2</td></tr><tr><td>3</td><td>4</td></tr></tbody></table>";
+
+  /** 비교에 쓰는 블록 모양이다. id 같은 비교 대상이 아닌 필드는 뺀다. */
+  type Shape = {
+    type: string;
+    content: unknown;
+    textColor?: unknown;
+    backgroundColor?: unknown;
+    children?: Shape[];
+  };
+
+  /** 표가 아닌 블록을 비교용 모양으로 줄인다. */
+  const shapeOf = (block: unknown): Shape => {
+    const record = block as Record<string, unknown>;
+    const children = record.children;
+    return {
+      type: record.type as string,
+      content: record.content,
+      ...(record.textColor === undefined
+        ? {}
+        : { textColor: record.textColor }),
+      ...(record.backgroundColor === undefined
+        ? {}
+        : { backgroundColor: record.backgroundColor }),
+      ...(Array.isArray(children) && children.length > 0
+        ? { children: children.map(shapeOf) }
+        : {}),
+    };
+  };
+
+  /** 클립보드 파서가 읽은 표 아닌 블록이다. */
+  const clipboardShapes = (html: string): Shape[] => {
+    const result = parseClipboardTable({ html });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.code);
+    return result.value
+      .filter((block) => block.type !== "table")
+      .map((block) => shapeOf(block));
+  };
+
+  /** importHtml이 읽은 표 아닌 블록이다. */
+  const importedShapes = (html: string): Shape[] =>
+    blocksOf(html)
+      .filter((block) => block.type !== "table")
+      .map((block) => shapeOf(block));
+
+  it("표 앞 div 문단의 색·굵게를 읽는다", () => {
     const result = parseClipboardTable({
-      html:
-        '<div style="color:#ff0000;font-weight:700">intro</div>' +
-        "<table><tbody><tr><td>c</td></tr></tbody></table>",
+      html: '<div style="color:#ff0000;font-weight:700">intro</div>' + TABLE,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
     expect(result.value[0]).toEqual({
       type: "paragraph",
-      content: [{ text: "intro" }],
+      textColor: "#FF0000",
+      content: [{ text: "intro", marks: [{ type: "bold" }] }],
     });
   });
 
-  // 대조군이다. p 자신의 style은 읽는다(Issue #343). div만 읽지 않는다.
-  it("표 앞 p 문단은 자기 style 색·굵게를 읽는다", () => {
+  it("표 뒤 div 문단의 배경·기울임을 읽는다", () => {
     const result = parseClipboardTable({
       html:
-        '<p style="color:#ff0000;font-weight:700">intro</p>' +
-        "<table><tbody><tr><td>c</td></tr></tbody></table>",
+        TABLE +
+        '<div style="background-color:#ffff00;font-style:italic">E</div>',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.code);
+    expect(result.value[1]).toEqual({
+      type: "paragraph",
+      backgroundColor: "#FFFF00",
+      content: [{ text: "E", marks: [{ type: "italic" }] }],
+    });
+  });
+
+  it("밑줄·취소선도 읽는다", () => {
+    const result = parseClipboardTable({
+      html:
+        '<div style="text-decoration:underline line-through">u</div>' + TABLE,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.code);
+    expect(result.value[0]).toEqual({
+      type: "paragraph",
+      content: [
+        { text: "u", marks: [{ type: "strike" }, { type: "underline" }] },
+      ],
+    });
+  });
+
+  // 이슈 재현 두 행과 프로브 일곱 행을 importHtml 결과와 대조한다.
+  it.each([
+    ["이슈 재현: color", `<div style="color:#0000ff">D</div>${TABLE}`],
+    [
+      "이슈 재현: color + font-weight:bold",
+      `<div style="color:#0000ff;font-weight:bold">D</div>${TABLE}`,
+    ],
+    [
+      "표 뒤 배경 + 기울임",
+      `${TABLE}<div style="background-color:#ffff00;font-style:italic">E</div>`,
+    ],
+    [
+      "목록 항목 안 div",
+      `<ul><li>x<div style="color:#00ff00">N</div></li></ul>${TABLE}`,
+    ],
+    [
+      "래퍼 div 안쪽 div",
+      `<div style="color:#0000ff"><div style="color:#ff0000">in</div></div>${TABLE}`,
+    ],
+    ["br 내용", `<div style="color:#0000ff">a<br>b</div>${TABLE}`],
+    [
+      "안쪽 span 색 공존",
+      `<div style="color:#0000ff"><span style="color:#ff0000">S</span>t</div>${TABLE}`,
+    ],
+    [
+      "형제 div마다 자기 색",
+      `<div style="color:#ff0000">a</div><div>b</div><div style="color:#0000ff">c</div>${TABLE}`,
+    ],
+  ])("importHtml과 같다: %s", (_name, html) => {
+    expect(clipboardShapes(html)).toEqual(importedShapes(html));
+  });
+
+  it("목록 항목 안 div는 자식 문단이 자기 색을 받는다", () => {
+    const shapes = clipboardShapes(
+      `<ul><li>x<div style="color:#00ff00">N</div></li></ul>${TABLE}`,
+    );
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]?.children).toEqual([
+      {
+        type: "paragraph",
+        textColor: "#00FF00",
+        content: [{ text: "N" }],
+      },
+    ]);
+  });
+
+  it("안쪽 span 색은 마크로 남고 div 색은 블록 속성이다", () => {
+    expect(
+      clipboardShapes(
+        `<div style="color:#0000ff"><span style="color:#ff0000">S</span>t</div>${TABLE}`,
+      ),
+    ).toEqual([
+      {
+        type: "paragraph",
+        textColor: "#0000FF",
+        content: [
+          { text: "S", marks: [{ type: "textColor", color: "#FF0000" }] },
+          { text: "t" },
+        ],
+      },
+    ]);
+  });
+
+  it("br 내용은 줄바꿈을 보존하고 색을 읽는다", () => {
+    expect(
+      clipboardShapes(`<div style="color:#0000ff">a<br>b</div>${TABLE}`),
+    ).toEqual([
+      {
+        type: "paragraph",
+        textColor: "#0000FF",
+        content: [{ text: "a\nb" }],
+      },
+    ]);
+  });
+
+  it("블록 자식이 있는 래퍼 div의 색은 읽지 않고 안쪽 div 색만 남는다", () => {
+    expect(
+      clipboardShapes(
+        `<div style="color:#0000ff;font-weight:700"><div style="color:#ff0000">in</div></div>${TABLE}`,
+      ),
+    ).toEqual([
+      {
+        type: "paragraph",
+        textColor: "#FF0000",
+        content: [{ text: "in" }],
+      },
+    ]);
+  });
+
+  it("블록 자식(p)이 있는 래퍼 div의 색은 읽지 않는다", () => {
+    expect(
+      clipboardShapes(`<div style="color:#0000ff"><p>b</p></div>${TABLE}`),
+    ).toEqual([{ type: "paragraph", content: [{ text: "b" }] }]);
+  });
+
+  /** 블록 트리 어디에든 블록 색이 있는지 본다. */
+  const hasBlockColor = (shapes: readonly Shape[]): boolean =>
+    shapes.some(
+      (shape) =>
+        shape.textColor !== undefined ||
+        shape.backgroundColor !== undefined ||
+        hasBlockColor(shape.children ?? []),
+    );
+
+  // 목록을 품은 div도 래퍼다. 클립보드 분할기는 목록을 접으며 조상 div를
+  // 텍스트 leaf마다 복제하는데, 그 복제가 블록 자식 없는 div로 보여 래퍼의
+  // 테마 색이 항목 안 문단에 붙던 결함을 막는다(Issue #344 리뷰).
+  it.each([
+    [
+      "목록을 품은 div",
+      `<div style="color:#d4d4d4;background-color:#1e1e1e"><ul><li>a</li><li>b</li></ul></div>`,
+    ],
+    [
+      "중첩 목록을 품은 div",
+      `<div style="color:#d4d4d4;background-color:#1e1e1e"><ol><li>a<ul><li>n</li></ul></li></ol></div>`,
+    ],
+    [
+      "span으로 감싼 목록을 품은 div",
+      `<div style="color:#d4d4d4"><span><ul><li>a</li></ul></span></div>`,
+    ],
+    [
+      "목록을 품은 div의 안쪽 div",
+      `<div style="color:#d4d4d4"><div style="color:#ff0000"><ul><li>a</li></ul></div></div>`,
+    ],
+    [
+      "li 안에서 목록을 품은 div",
+      `<ul><li><div style="color:#ff0000"><ul><li>a</li></ul></div></li></ul>`,
+    ],
+  ])("%s의 색은 읽지 않는다", (_name, html) => {
+    expect(hasBlockColor(clipboardShapes(`${html}${TABLE}`))).toBe(false);
+  });
+
+  it("목록을 품은 div 안 항목의 글자는 항목 content에 남는다", () => {
+    expect(
+      clipboardShapes(
+        `<div style="color:#d4d4d4"><ul><li>y z</li></ul></div>${TABLE}`,
+      ),
+    ).toEqual([{ type: "bulletListItem", content: [{ text: "y z" }] }]);
+  });
+
+  it("목록을 품은 래퍼 div 안의 블록 자식 없는 div는 자기 색을 읽는다", () => {
+    const html = `<div style="color:#d4d4d4"><ul><li><div style="color:#ff0000">x</div></li></ul></div>${TABLE}`;
+    const shapes = clipboardShapes(html);
+    expect(hasBlockColor(shapes)).toBe(true);
+    expect(JSON.stringify(shapes)).not.toContain("#D4D4D4");
+  });
+
+  it("style이 없는 div는 색을 만들지 않는다", () => {
+    expect(clipboardShapes(`<div>x</div>${TABLE}`)).toEqual([
+      { type: "paragraph", content: [{ text: "x" }] },
+    ]);
+  });
+
+  // 대조군이다. p 자신의 style은 원래 읽는다(Issue #343).
+  it("표 앞 p 문단은 자기 style 색·굵게를 읽는다", () => {
+    const result = parseClipboardTable({
+      html: '<p style="color:#ff0000;font-weight:700">intro</p>' + TABLE,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);

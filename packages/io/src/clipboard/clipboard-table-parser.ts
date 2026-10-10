@@ -315,11 +315,14 @@ const blockSequenceFromNodes = (
       // 똑같이 취급한다 — ClipboardContentBlock에는 id가 없어 p의
       // dataGeulBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
       // 실질 텍스트 판정도 두 kind가 동일하게 받는다.
-      // simpleBoundary는 p 자신의 style 색·서식을 읽는다(Issue #343).
-      // paragraph의 origin(블록 자식 없는 div)은 읽지 않는다. 범위 밖이다.
+      // 출처 요소 자신의 style 색·서식을 읽는다. simpleBoundary는 p 자신이고
+      // (Issue #343), paragraph는 블록 경계 자식 없는 div가 origin으로 실린
+      // 것이다(Issue #344). 자연히 쌓인 loose 텍스트에는 origin이 없다.
+      // 블록 자식이 있는 래퍼 div는 재귀로 풀려 segment가 되지 않으므로 그
+      // 색은 읽히지 않는다.
       if (segment.kind === "paragraph" || segment.kind === "simpleBoundary") {
         const source =
-          segment.kind === "simpleBoundary" ? segment.node : undefined;
+          segment.kind === "simpleBoundary" ? segment.node : segment.origin;
         const content = normalizedInlineContent(
           segment.nodes,
           source === undefined ? undefined : blockPresentation(source).format,

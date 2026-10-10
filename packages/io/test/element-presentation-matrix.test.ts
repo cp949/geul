@@ -1,16 +1,16 @@
 /**
  * 요소 표현 읽기를 표면 × 선언 묶음 행렬로 고정한다(Issue #342).
  *
- * - 표면 11개: `span`, `p`, `li`, `li` 안 `p`, `blockquote` 안 `p`, `summary`,
- *   `figcaption`, `td`, `tr`, `table`, 셀 안 `p`.
+ * - 표면 12개: `span`, `p`, 블록 자식 없는 `div`, `li`, `li` 안 `p`,
+ *   `blockquote` 안 `p`, `summary`, `figcaption`, `td`, `tr`, `table`, 셀 안 `p`.
  * - 선언 묶음 8개: 색, 배경, 굵게, 기울임, 밑줄, 취소선, 끄는 값, 계산 스타일
  *   덤프.
  * - 같은 선언은 어느 표면에 두어도 같은 글자 서식을 낸다. 기대값은 묶음마다 하나다.
- * - `importHtml`은 11개 표면 전부에 건다.
+ * - `importHtml`은 12개 표면 전부에 건다.
  * - `parseClipboardTable`은 표 표면 4개(`td`, `tr`, `table`, 셀 안 `p`)에 건다.
- * - `parseClipboardTable`은 표 옆 블록 표면 3개(`p`, `li`, `li` 안 `p`)에도 건다.
- *   입력 뒤에 한 셀 표를 붙인다. 표가 없으면 파서가 표 붙여넣기를 하지 않는다
- *   (Issue #343).
+ * - `parseClipboardTable`은 표 옆 블록 표면 4개(`p`, 블록 자식 없는 `div`, `li`,
+ *   `li` 안 `p`)에도 건다. 입력 뒤에 한 셀 표를 붙인다. 표가 없으면 파서가 표
+ *   붙여넣기를 하지 않는다(Issue #343, #344).
  * - 아직 고치지 않은 칸은 `KNOWN_DEFECTS`에 적고 `it.fails`로 건다. 지금은 비어
  *   있다. 칸이 예상보다 먼저 고쳐지면 `it.fails`가 실패해 알려 준다.
  *
@@ -20,7 +20,8 @@
  *   요소의 `fontWeight`(600 이상이면 굵게)·`fontStyle`·`color`를 읽는다. 밑줄·취소선은
  *   조상의 `textDecorationLine`을 모두 본다. 배경은 가장 가까운 조상의 불투명한
  *   `backgroundColor`다. 검정 글자는 색 없음이다. 요소를 떼기 전에 읽는다(live 값).
- * - 11개 표면 × 8개 묶음 모두 묶음별로 같은 값이었다.
+ * - 12개 표면 × 8개 묶음 모두 묶음별로 같은 값이었다. 블록 자식 없는 `div` 표면은
+ *   같은 날 같은 Chromium으로 뒤에 더해 쟀다(Issue #344).
  * - 도구: `_works/roadmap/probe/measure-matrix.mjs`. 저장소에 없다.
  *
  * 덤프 묶음은 Chromium 값에서 색·배경을 뺀 것이다. 계산 스타일 덤프가 붙은
@@ -49,6 +50,7 @@ const cellTable = (inner: string): string =>
 const SURFACES = {
   span: (S, X) => `<p><span style="${S}">${X}</span></p>`,
   p: (S, X) => `<p style="${S}">${X}</p>`,
+  div: (S, X) => `<div style="${S}">${X}</div>`,
   li: (S, X) => `<ul><li style="${S}">${X}</li></ul>`,
   "li>p": (S, X) => `<ul><li><p style="${S}">${X}</p></li></ul>`,
   "blockquote>p": (S, X) => `<blockquote><p style="${S}">${X}</p></blockquote>`,
@@ -69,7 +71,12 @@ type SurfaceName = keyof typeof SURFACES;
 const TABLE_SURFACES: readonly SurfaceName[] = ["td", "tr", "table", "cell>p"];
 
 /** 표 옆 블록 표면이다. 클립보드 표 파서가 표 밖 블록으로 읽는다. */
-const BESIDE_TABLE_SURFACES: readonly SurfaceName[] = ["p", "li", "li>p"];
+const BESIDE_TABLE_SURFACES: readonly SurfaceName[] = [
+  "p",
+  "div",
+  "li",
+  "li>p",
+];
 
 const NONE: Leaf = {
   bold: false,

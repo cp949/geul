@@ -39,7 +39,8 @@ export type BlockSegment<
   // 요소의 style 색·서식을 읽는 자리다. 래퍼 div(블록 자식 있음)와 ul·ol·table·
   // li·blockquote는 싣지 않는다 — 래퍼의 색은 소스 앱의 테마 색이라 문단에
   // 따라오면 안 된다.
-  // clipboard-table-parser.ts는 이 필드를 읽지 않는다.
+  // clipboard-table-parser.ts도 div의 origin을 읽는다(Issue #344). 클립보드 정책의
+  // 문단 경계는 div·li·blockquote뿐이라 origin은 div만 온다.
   | { kind: "paragraph"; nodes: HtmlElementContent[]; origin?: HtmlElementNode }
   // p 자신의 본문(wholesale 교체, 재귀하지 않음). node를 함께 주는 이유는
   // dataGeulBlockId 같은 그 요소 자신의 속성을 호출자가 읽어야 해서다 —
@@ -231,7 +232,17 @@ const wrapTextDescendantsInAncestors = (
   ancestors: readonly HtmlElementNode[],
   isTableNode: (node: HtmlElementNode) => boolean,
 ): HtmlElementContent => {
-  if (node.type === "text") return wrapInAncestors(node, ancestors);
+  if (node.type === "text") {
+    // 문단 origin이 될 수 있는 조상(div 등)은 복제하지 않는다. 마크가 없어 인라인
+    // 결과가 같고, 복제하면 목록 분할이 그 복제를 블록 자식 없는 div로 보아
+    // 래퍼의 style 색을 문단 origin으로 읽는다(Issue #344).
+    return wrapInAncestors(
+      node,
+      ancestors.filter(
+        (ancestor) => !paragraphOriginTagNames.has(ancestor.tagName),
+      ),
+    );
+  }
   if (node.type === "comment") return node;
   if (isTableNode(node)) return node;
   return htmlElement(
