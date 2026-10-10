@@ -227,10 +227,15 @@ const blockSequenceFromNodes = (
   // 넘기는 표·목록·문단 경계 집합을 그대로 조립한다(트랙-4 확인,
   // import-html.ts의 isBlockLevelElement와 같은 원칙 — 단 표 판정은
   // 이 파일의 tableSet 멤버십을 쓴다).
+  // p(isSimpleBoundary)와 h1~h6(headingLevelFromTagName)도 블록이다.
+  // 빠지면 li 첫 자식이 아닌 p·제목의 글자가 항목 content에 합쳐지고
+  // 자기 style을 잃는다(Issue #346).
   const isBlockLevelNode = (node: HtmlElementNode): boolean =>
     policy.isTableNode(node) ||
     isTransparentListTag(node.tagName) ||
-    NESTED_BOUNDARY_TAG_NAMES.has(node.tagName);
+    NESTED_BOUNDARY_TAG_NAMES.has(node.tagName) ||
+    policy.isSimpleBoundary(node.tagName) ||
+    policy.headingLevelFromTagName(node.tagName) !== undefined;
 
   // ul/ol 세그먼트 하나(kind: "list"의 node)를 li마다
   // bulletListItem/numberedListItem으로 바꾼다. explicit start는
