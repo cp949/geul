@@ -308,6 +308,103 @@ describe("buildOutOfTableSequence", () => {
     expect(result.value.nodes[0]?.child(0).attrs.startNumber).toBeNull();
   });
 
+  // Issue #343: 클립보드 블록의 자기 style 색은 blockContainer attrs로
+  // 옮긴다(model-to-tiptap.ts blockToTiptapJson과 같은 attrs 이름).
+  it("문단과 heading의 블록 색은 blockContainer attrs에 실린다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [
+        { type: "paragraph", content: [{ text: "p" }], textColor: "#0000FF" },
+        {
+          type: "heading",
+          level: 2,
+          content: [{ text: "h" }],
+          backgroundColor: "#FFFF00",
+        },
+      ],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const [p, h] = result.value.nodes;
+    expect(p?.attrs.textColor).toBe("#0000FF");
+    expect(p?.attrs.backgroundColor).toBeNull();
+    expect(h?.attrs.textColor).toBeNull();
+    expect(h?.attrs.backgroundColor).toBe("#FFFF00");
+    // blockId 사후 배정 관례는 그대로다.
+    expect(p?.attrs.blockId).toBeFalsy();
+    expect(h?.attrs.blockId).toBeFalsy();
+  });
+
+  it("목록 항목과 중첩 child 문단·heading·목록 항목의 블록 색이 blockContainer attrs에 실린다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [
+        {
+          type: "bulletListItem",
+          content: [{ text: "item" }],
+          textColor: "#FF0000",
+          children: [
+            {
+              type: "paragraph",
+              content: [{ text: "p" }],
+              backgroundColor: "#00FF00",
+            },
+            {
+              type: "heading",
+              level: 3,
+              content: [{ text: "h" }],
+              textColor: "#0000FF",
+            },
+            {
+              type: "numberedListItem",
+              content: [{ text: "n" }],
+              textColor: "#123456",
+              backgroundColor: "#ABCDEF",
+            },
+          ],
+        },
+      ],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const item = result.value.nodes[0];
+    expect(item?.attrs.textColor).toBe("#FF0000");
+    expect(item?.attrs.backgroundColor).toBeNull();
+    const group = item?.child(1);
+    expect(group?.type.name).toBe("blockGroup");
+    expect(group?.child(0).attrs.textColor).toBeNull();
+    expect(group?.child(0).attrs.backgroundColor).toBe("#00FF00");
+    expect(group?.child(1).attrs.textColor).toBe("#0000FF");
+    expect(group?.child(1).attrs.backgroundColor).toBeNull();
+    expect(group?.child(2).attrs.textColor).toBe("#123456");
+    expect(group?.child(2).attrs.backgroundColor).toBe("#ABCDEF");
+  });
+
+  it("색 없는 문단·heading·목록 항목의 blockContainer 색 attrs는 null이다", () => {
+    const result = buildOutOfTableSequence(
+      schema,
+      [
+        paragraphBlock("p"),
+        headingBlock("h", 1),
+        bulletItemBlock("b", [paragraphBlock("c")]),
+      ],
+      sequentialIds("id"),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("조립 실패");
+    const [p, h, b] = result.value.nodes;
+    const child = b?.child(1).child(0);
+    for (const container of [p, h, b, child]) {
+      expect(container?.attrs.textColor).toBeNull();
+      expect(container?.attrs.backgroundColor).toBeNull();
+    }
+  });
+
   // 범위 밖(DELTA-02): 목록 항목 children 안에 중첩된 표는 firstTable
   // 추적 대상이 아니다 — 최상위 시퀀스의 첫 표만 추적하는 기존 동작을
   // 유지한다.

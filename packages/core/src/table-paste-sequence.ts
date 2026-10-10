@@ -51,6 +51,22 @@ const buildFilledTableBlock = (
   return pasteGridInto(emptyTable, { row: 0, column: 0 }, block.data, createId);
 };
 
+// 클립보드 블록의 자기 style 색(Issue #343)을 blockContainer attrs로 옮긴다.
+// model-to-tiptap.ts blockToTiptapJson과 같은 이름·값 규칙이다(값 없으면
+// null = 필드 부재). canonical 판정은 호출자(validateOutOfTableContent)가
+// 뮤테이션 전에 끝낸다.
+const blockColorAttrs = (
+  block: Extract<
+    ClipboardContentBlock,
+    {
+      type: "paragraph" | "heading" | "bulletListItem" | "numberedListItem";
+    }
+  >,
+): { textColor: string | null; backgroundColor: string | null } => ({
+  textColor: block.textColor ?? null,
+  backgroundColor: block.backgroundColor ?? null,
+});
+
 // 목록 항목의 children 하나를 blockGroup 안에 들어갈 tiptap JSON으로
 // 조립한다(DELTA-02, Issue #143 (b)). table은 model-to-tiptap.ts의
 // blockToTiptapJson과 같은 원칙으로 container 없이 직결한다
@@ -78,7 +94,7 @@ const listChildToTiptapJson = (
     ok: true,
     value: {
       type: "blockContainer",
-      attrs: { blockId: createId() },
+      attrs: { blockId: createId(), ...blockColorAttrs(block) },
       content: [
         {
           type: block.type,
@@ -131,14 +147,15 @@ const listItemToTiptapJson = (
     ok: true,
     value: {
       type: "blockContainer",
-      attrs: { blockId: createId() },
+      attrs: { blockId: createId(), ...blockColorAttrs(block) },
       content,
     },
   };
 };
 
 // 클립보드 시퀀스의 블록 하나를 노드로 바꾼다.
-// - 문단/heading: 인라인 콘텐츠만 옮겨 blockContainer(blockContent)로 감싼다.
+// - 문단/heading: 인라인 콘텐츠와 블록 색을 옮겨 blockContainer(blockContent)로
+//   감싼다.
 // - 표: buildFilledTableBlock으로 채운 TableBlock을 인코딩한다. container로
 //   감싸지 않는다. pasteTabularData(table-commands.ts)의 표 밖 분기와 같은
 //   조립 순서다.
@@ -161,8 +178,10 @@ const buildSequenceNode = (
     // (Issue #315). blockId는 비워 둔다 — BlockIdExtension.appendTransaction이
     // 같은 dispatch 안에서 사후 배정한다(buildOutOfTableSequence 호출자의
     // 필러 문단 처리와 같은 확립된 패턴). createId는 소비하지 않는다.
+    // 블록 색은 attrs에 싣는다(Issue #343).
     const node = schema.nodeFromJSON({
       type: "blockContainer",
+      attrs: blockColorAttrs(block),
       content: [
         {
           type: block.type,

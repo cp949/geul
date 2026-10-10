@@ -6,11 +6,15 @@ import {
   withParagraphsMergedIntoCells,
 } from "@cp949/geul-io";
 import {
+  canonicalizeTextMarks,
   type IdFactory,
   type InlineContent,
+  isCanonicalCellColor,
+  isTextRunItem,
   MAX_NESTING_DEPTH,
   parseDocument,
   type Result,
+  type TextMark,
   validateTableSize,
 } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
@@ -234,11 +238,36 @@ const isStartNumberInRange = (startNumber: number): boolean =>
     ],
   }).ok;
 
+// 클립보드 블록의 자기 색(Issue #343)이 model 정규형(대문자 #RRGGBB)인지
+// 판정한다. 셀 색(validateTabularData)과 같은 계약이고 판정 권위는 model
+// isCanonicalCellColor다(G-CNV-001). 여기서 거절하지 않으면 블록 색이
+// blockContainer attrs로 커밋된 뒤 model 읽기가 거절해 모델과 에디터가
+// 어긋난다. 위반이 없으면 null이다.
+const blockColorViolation = (
+  block: { textColor?: string; backgroundColor?: string },
+  blockTypeLabel: string,
+): Result<never, TableCommandError> | null => {
+  for (const field of ["textColor", "backgroundColor"] as const) {
+    const value = block[field];
+    if (value !== undefined && !isCanonicalCellColor(value)) {
+      return {
+        ok: false,
+        error: {
+          code: "CLIPBOARD_CONTENT_INVALID",
+          message: `${blockTypeLabel} ${field} is not a canonical color`,
+        },
+      };
+    }
+  }
+  return null;
+};
+
 // 표 밖 붙여넣기 검증: 문단/heading은 편집 가능 콘텐츠 계약(inline), 표는
 // pasteTabularData와 같은 구조·서식·셀 한도 검증, 목록 항목
 // (bulletListItem/numberedListItem)은 자신의 content(inline)와 children을
 // 재귀로(같은 규칙) 검사한다(DELTA-02, Issue #143 (b)) — 위반이 있으면
-// CLIPBOARD_CONTENT_INVALID로 거절한다.
+// CLIPBOARD_CONTENT_INVALID로 거절한다. 문단/heading/목록 항목의 블록 색도
+// 검사한다(Issue #343, blockColorViolation).
 //
 // depth는 model/schema.ts의 findNestingDepthViolation과 같은 정의(top-level
 // 1, blocks 배열 자체가 그 depth)다 — pasteOutOfTable의 삽입은 항상
@@ -263,10 +292,9 @@ const validateOutOfTableContent = (
   }
   for (const block of blocks) {
     if (block.type === "paragraph" || block.type === "heading") {
+      const blockTypeLabel = block.type === "heading" ? "Heading" : "Paragraph";
       const violation = inlineContentViolation(block.content);
       if (violation !== null) {
-        const blockTypeLabel =
-          block.type === "heading" ? "Heading" : "Paragraph";
         return {
           ok: false,
           error: {
@@ -275,15 +303,17 @@ const validateOutOfTableContent = (
           },
         };
       }
+      const colorViolation = blockColorViolation(block, blockTypeLabel);
+      if (colorViolation !== null) return colorViolation;
       continue;
     }
     if (block.type === "bulletListItem" || block.type === "numberedListItem") {
+      const blockTypeLabel =
+        block.type === "numberedListItem"
+          ? "Numbered list item"
+          : "Bullet list item";
       const violation = inlineContentViolation(block.content);
       if (violation !== null) {
-        const blockTypeLabel =
-          block.type === "numberedListItem"
-            ? "Numbered list item"
-            : "Bullet list item";
         return {
           ok: false,
           error: {
@@ -292,6 +322,8 @@ const validateOutOfTableContent = (
           },
         };
       }
+      const colorViolation = blockColorViolation(block, blockTypeLabel);
+      if (colorViolation !== null) return colorViolation;
       if (
         block.type === "numberedListItem" &&
         block.startNumber !== undefined &&
@@ -318,6 +350,39 @@ const validateOutOfTableContent = (
     if (!validated.ok) return validated;
   }
   return { ok: true, value: undefined };
+};
+
+// 표 안 캐럿 분기에서 셀에 합칠 문단·heading의 블록 색(Issue #343)을 그
+// 블록 텍스트 run의 textColor·backgroundColor 마크로 얹는다. importHtml이
+// 셀 안 p 색을 마크로 읽는 규칙과 같다. 블록 색 마크를 기존 마크 뒤에
+// 덧붙이고 model canonicalizeTextMarks로 정규화한다. 같은 종류는 앞(기존,
+// 안쪽) 마크가 남는다(#332 안쪽 우선). 커스텀 inline 원소는 그대로 둔다.
+// run 마크를 TextMark[]로 보는 것은 validateOutOfTableContent가 미등록
+// CustomTextMark를 이미 거절했다는 전제다(io appendInlineRuns와 같은 전제).
+const withBlockColorMarks = (
+  content: InlineContent,
+  block: { textColor?: string; backgroundColor?: string },
+): InlineContent => {
+  const colorMarks: TextMark[] = [
+    ...(block.textColor !== undefined
+      ? [{ type: "textColor" as const, color: block.textColor }]
+      : []),
+    ...(block.backgroundColor !== undefined
+      ? [{ type: "backgroundColor" as const, color: block.backgroundColor }]
+      : []),
+  ];
+  if (colorMarks.length === 0) return [...content];
+  return content.map((item) =>
+    isTextRunItem(item)
+      ? {
+          ...item,
+          marks: canonicalizeTextMarks([
+            ...((item.marks ?? []) as TextMark[]),
+            ...colorMarks,
+          ]),
+        }
+      : item,
+  );
 };
 
 // 클립보드가 준 시퀀스(문단+표+문단 등)를 붙인다. parseClipboardTable이
@@ -370,6 +435,8 @@ export const pasteClipboardContent = (
     // 문단과 heading 둘 다 셀에 병합될 자격이 있다(표는 블록 자식을 가질
     // 수 없어 heading의 level도 문단과 동일하게 텍스트만 남긴다, DELTA-04
     // Issue #72) — 이름을 paragraphContent에서 넓혀 그 사실을 반영한다.
+    // 블록 색은 셀에 블록 속성으로 남을 수 없어 텍스트 마크로 옮긴다
+    // (Issue #343, withBlockColorMarks).
     const mergeableInlineContent = (
       blocks: readonly ClipboardContentBlock[],
     ): InlineContent[] =>
@@ -382,7 +449,7 @@ export const pasteClipboardContent = (
             { type: "paragraph" | "heading" }
           > => entry.type === "paragraph" || entry.type === "heading",
         )
-        .map((entry) => [...entry.content]);
+        .map((entry) => withBlockColorMarks(entry.content, entry));
 
     return pasteTabularData(
       editor,

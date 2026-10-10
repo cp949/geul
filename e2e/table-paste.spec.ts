@@ -262,6 +262,40 @@ test("표 앞뒤에 문단이 섞인 HTML은 문단과 표 구조를 모두 보�
   await expect(editable.locator("p")).toHaveText("");
 });
 
+test("표 앞 문단의 자기 style 색은 붙여넣은 뒤 그 문단 블록의 textColor로 남는다", async ({
+  page,
+}) => {
+  // 수정 전에는 클립보드 파서가 표 옆 p의 style을 읽지 않아 색이
+  // 사라졌다(Issue #343). 블록 색은 편집 화면에 시각 렌더가 없어
+  // "Save JSON"으로 읽은 문서 값으로 확인한다(block-handle.spec.ts와 같은 패턴).
+  const { editable } = await openDemo(page);
+  await editable.click();
+
+  const mixedHtml =
+    '<p style="color:#0000FF">P</p>' +
+    "<table><tbody><tr><td>cellA</td><td>cellB</td></tr>" +
+    "<tr><td>cellC</td><td>cellD</td></tr></tbody></table>";
+
+  await editable.evaluate(dispatchPaste, {
+    html: mixedHtml,
+    text: "P\ncellA\tcellB\ncellC\tcellD",
+  });
+  await expect(editable.locator("table")).toHaveCount(1);
+  await expect(editable.locator("p").nth(1)).toHaveText("P");
+
+  await page.getByRole("button", { name: "Save JSON" }).click();
+  const saved = JSON.parse(
+    await page.getByLabel("Document source").inputValue(),
+  ) as { blocks: Array<{ type: string; textColor?: string }> };
+  // 데모 기본 빈 문단 뒤에 P 문단과 표가 이어진다. 표 뒤 블록은 보지 않는다.
+  expect(saved.blocks.slice(0, 3).map((block) => block.type)).toEqual([
+    "paragraph",
+    "paragraph",
+    "table",
+  ]);
+  expect(saved.blocks[1]?.textColor).toBe("#0000FF");
+});
+
 test("여러 셀을 고르고 서식 있는 html을 붙이면 첫 셀에 굵은 글자가 들어가고 나머지 선택 셀은 비며 셀 id가 유지된다", async ({
   page,
 }) => {
