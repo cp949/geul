@@ -122,6 +122,16 @@ export const parseClipboardTable = (input: {
 - 셀 안 캐럿 붙여넣기는 core 변경 없이 #343 규칙으로 `div` 문단의 블록 색을 셀 텍스트 마크로 옮긴다.
 - 읽지 않는 것: 블록 `data-geul-*`(색·정렬), `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`의 `style`. 위 #343 서술과 같다.
 
+구현 반영(목록 항목 안 p·제목의 자식 블록, Issue #346): 위 Issue #343·#344 문단은 `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`를 `li` content에 합치고 자기 `style`을 읽지 않는 것으로 적었다. `isBlockLevelNode`가 표·목록·`div`·`li`·`blockquote`만 블록으로 보았기 때문이다.
+
+- `isBlockLevelNode`가 정책의 `isSimpleBoundary`(`p`)와 `headingLevelFromTagName`(`h1`–`h6`)도 블록으로 본다. `importHtml`의 `isBlockLevelElement`가 블록으로 보는 `p`·제목과 맞춘다. `isBlockLevelElement`는 구분선·인용·코드 블록·미디어도 블록으로 보지만 클립보드에는 그 블록 타입이 없다.
+- 첫 실질 자식이 아닌 `p`·제목은 목록 항목의 자식 블록이 된다. 자기 `style` 색·서식은 위 #343 규칙으로 읽는다.
+- 첫 실질 자식이 `p`이면 승격 경로가 먼저 처리한다. 이 변경은 그 경로를 바꾸지 않는다.
+- 글자 사이 제목(`t<h3>H</h3>u`)은 `importHtml`과 같이 항목 content `t`, 자식 제목 `H`, 자식 문단 `u`가 된다.
+- `span`이 감싼 `p`는 이전과 같다. `importHtml`도 인라인으로 읽는다.
+- 차이: 빈 `p`와 공백뿐인 `p`는 클립보드가 자식 블록을 만들지 않는다. `importHtml`은 빈 자식 문단을 만든다.
+- 읽지 않는 것: 블록 `data-geul-*`(색·정렬). `li` 안 `pre`·`hr`는 `codeBlock`·`divider` 클립보드 블록 타입이 없어 글자가 붙거나 사라진다.
+
 ### 4.2 HTML 경로 — 테이블 변환기 재사용
 
 `io/html/import-html.ts`의 `parseTable`이 쓰는 hast 트리 순회 로직 중 id 배정과 무관한 부분(`layoutRows`, `inferredColumnCount`, `columnElements`, `tableRows`, `layoutColumnSpan`, `childElements`, `tableNonSectionChildren`, `hasSubstantialText`)을 `packages/io/src/html/table-layout.ts`(신규)로 뽑아 두 소비자가 공유한다:

@@ -57,8 +57,9 @@ const textValue = (nodes: HtmlNode[]): string =>
 // block-level 자식 전까지가 content이고, 그 지점부터 끝까지가 children이다.
 //
 // isBlockLevelNode는 import-html.ts처럼 하드코딩하지 않고 매개변수로
-// 주입받는다 — clipboard-table-parser.ts는 자신이 인식하는 표·중첩 경계
-// 집합(isTableNode, isTransparentListTag, NESTED_BOUNDARY_TAG_NAMES)을
+// 주입받는다 — clipboard-table-parser.ts는 자신이 인식하는 표·중첩 경계·
+// 문단·제목 집합(isTableNode, isTransparentListTag,
+// NESTED_BOUNDARY_TAG_NAMES, isSimpleBoundary, headingLevelFromTagName)을
 // 그대로 조립해 넘긴다.
 //
 // promoted는 content로 승격한 그 p다. 승격하지 않았으면 없다. 호출자가 p의
