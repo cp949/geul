@@ -7,7 +7,7 @@
  * - 입력마다 뒤에 2×2 데이터 표를 붙인다. 표가 없으면 파서가 표 붙여넣기를 하지 않는다.
  * - 기대값은 같은 HTML의 `importHtml` 결과다. 표를 뺀 블록 트리를 children까지 비교한다.
  * - 비교만으로는 둘이 함께 틀려도 통과하므로, 재현 3행은 명시 값으로도 고정한다.
- * - 클립보드는 빈 `p`·공백뿐인 `p`의 자식 블록을 만들지 않는다. 이 차이는 의도다.
+ * - 클립보드는 내용 없는 `p`·제목(빈 요소, 공백뿐, `<br>`만 든 `p`)의 자식 블록을 만들지 않는다. 이 차이는 의도다.
  */
 import { describe, expect, it } from "vitest";
 
@@ -163,10 +163,13 @@ describe("parseClipboardTable li 안 p·제목 자식 블록 (Issue #346)", () =
     });
   });
 
-  describe("빈 p는 자식 블록을 만들지 않는다", () => {
+  describe("내용 없는 p·제목은 자식 블록을 만들지 않는다", () => {
     it.each([
       ["빈 p", "<ul><li>t<p></p></li></ul>"],
       ["공백뿐인 p", "<ul><li>t<p>  </p></li></ul>"],
+      ["br만 든 p", "<ul><li>t<p><br></p></li></ul>"],
+      ["빈 제목", "<ul><li>t<h2></h2></li></ul>"],
+      ["공백뿐인 제목", "<ul><li>t<h2>  </h2></li></ul>"],
     ])("%s: 항목 content만 남는다", (_name, before) => {
       expect(clipboardShapes(`${before}${TABLE}`)).toEqual([
         {
