@@ -173,3 +173,39 @@ describe("HTML CodeBlock 입력 정제", () => {
     );
   });
 });
+
+// code·pre 메타는 codeBlock 분기가 읽은 것만 보존으로 표시한다. 표시되지 않은
+// 메타는 변환 뒤 감사가 경고한다(Issue #356 RD-006). codeBlock 안에서 버려지는
+// 안쪽 pre·두 번째 code의 메타도 경고한다(2026-10-11 사용자 결정).
+describe("codeBlock이 읽지 않은 code·pre 메타는 감사가 경고한다", () => {
+  /** 경고를 `kind:element:attribute`로 줄인다. */
+  const warningsOf = (html: string): string[] => {
+    const result = importHtml(html);
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value.warnings.map((warning) => {
+      const fields = warning as { element?: string; attribute?: string };
+      return `${warning.kind}:${fields.element ?? ""}:${fields.attribute ?? ""}`;
+    });
+  };
+
+  it.each([
+    '<pre data-geul-block-id="k" data-language="js" class="language-js" data-geul-code-wrap=""><code data-language="js" class="language-js">x</code></pre>',
+    '<figure><pre data-geul-block-id="k" data-language="js" class="language-js" data-geul-code-wrap=""><code data-language="js" class="language-js">x</code></pre><figcaption>c</figcaption></figure>',
+  ])("codeBlock pre와 첫 직속 code의 메타는 경고하지 않는다: %s", (html) => {
+    expect(warningsOf(html)).toEqual([]);
+  });
+
+  it("codeBlock pre 안 pre의 메타는 버려지므로 경고한다", () => {
+    expect(
+      warningsOf('<pre><span><pre data-language="js">x</pre></span></pre>'),
+    ).toEqual(["UNSAFE_ATTRIBUTE_REMOVED:pre:dataLanguage"]);
+  });
+
+  it("codeBlock pre의 두 번째 code 메타는 읽지 않으므로 경고한다", () => {
+    expect(
+      warningsOf(
+        '<pre><code class="language-js">a</code><code class="language-py">b</code></pre>',
+      ),
+    ).toEqual(["UNSAFE_ATTRIBUTE_REMOVED:code:className"]);
+  });
+});
