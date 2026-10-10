@@ -103,6 +103,16 @@ export const parseClipboardTable = (input: {
 - 표는 `blockContainer`로 감싸지 않는다. 목록 항목은 `listItemToTiptapJson`이 이미 컨테이너를 만든다.
 - 결과: 표 앞뒤 문단·제목이 최상위 형제 블록이다. 캐럿은 첫 표 좌상단 셀이고 undo 1회로 원복된다.
 
+구현 반영(표 밖 블록의 자기 style, Issue #343): 위 Issue #71 문단의 문단 variant `{type:"paragraph"; content}`에 블록 색 자리가 없었다. 표 옆 `p`·`h1`–`h6`·`li`의 자기 `style`이 사라졌다.
+
+- `ClipboardContentBlock`의 문단·heading·목록 항목에 선택 필드 `textColor`·`backgroundColor`가 있다. 값은 대문자 `#RRGGBB`다.
+- `blockSequenceFromNodes`는 `importHtml`과 같은 함수로 읽는다. 색은 `textBlockPropsFromElement(el, { styleOnly: true, promoted })`, 서식은 `blockPresentation(el).format`과 `promotedFormat`이다. 서식은 안쪽 텍스트 마크가 된다.
+- `li`가 첫 자식 `p`를 승격하면 그 `p`의 색·서식이 `li`보다 이긴다.
+- 표 밖 붙여넣기는 블록 색을 `blockContainer` attrs에 싣는다. 목록 children도 같다.
+- 표 안 붙여넣기는 셀에 합치는 문단·heading의 블록 색을 텍스트 `textColor`·`backgroundColor` 마크로 옮긴다. 같은 종류의 안쪽 마크가 이긴다.
+- `pasteClipboardContent`는 비정규 블록 색을 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 문서는 바뀌지 않는다.
+- 읽지 않는 것: 블록 `data-geul-*`(색·정렬), 블록 자식 없는 `div`의 `style`, `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`의 `style`. 마지막 경우 그 글자는 `li` content에 합쳐져 `li` 색을 받는다.
+
 ### 4.2 HTML 경로 — 테이블 변환기 재사용
 
 `io/html/import-html.ts`의 `parseTable`이 쓰는 hast 트리 순회 로직 중 id 배정과 무관한 부분(`layoutRows`, `inferredColumnCount`, `columnElements`, `tableRows`, `layoutColumnSpan`, `childElements`, `tableNonSectionChildren`, `hasSubstantialText`)을 `packages/io/src/html/table-layout.ts`(신규)로 뽑아 두 소비자가 공유한다:
