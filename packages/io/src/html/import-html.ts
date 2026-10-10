@@ -34,6 +34,7 @@ import {
   collectHtmlImportWarnings,
   deepTreeFlattenedWarning,
   type HtmlImportWarning,
+  unwrappedColorTagWarnings,
 } from "./import-warnings.js";
 import { asRoot, parseHtmlFragment } from "./parse-html.js";
 
@@ -83,7 +84,11 @@ export const importHtml = (
     }
 
     sanitizeLinks(safeRoot.children);
-    unwrapBlockBearingColorTags(safeRoot.children);
+    // 블록을 품은 font·mark를 벗기면 sanitize가 남긴 color·style이 사라진다.
+    // 벗기는 순간 알린다(Issue #356 RD-006). 수집기 경고 바로 뒤에 쌓인다.
+    unwrapBlockBearingColorTags(safeRoot.children, (node) => {
+      warnings.push(...unwrappedColorTagWarnings(node));
+    });
     // 외부 HTML의 소스 공백은 브라우저 규칙대로 접는다(Issue #320). 우리
     // export가 낸 조각(data-geul-block-id·data-geul-cell-id)이 하나라도 있으면
     // 문서 전체를 접지 않는다 — export는 공백을 그대로 내므로 접으면 왕복이

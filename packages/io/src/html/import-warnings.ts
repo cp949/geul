@@ -98,6 +98,42 @@ export const codeBlockLanguageMetadataIgnoredWarning = (
   message: `Conflicting CodeBlock language metadata was ignored for block ${blockId}`,
 });
 
+const unsafeAttributeRemovedWarning = (
+  element: string,
+  attribute: string,
+): HtmlImportWarning => ({
+  kind: "UNSAFE_ATTRIBUTE_REMOVED",
+  element,
+  attribute,
+  message: `Unsupported ${attribute} attribute was removed from ${element}`,
+});
+
+// font의 color는 허용 속성이지만 값을 읽지 못하면 색이 사라진다. 수집기가
+// #334 이전처럼 제거를 보고한다(부분 읽기 정책, RD-001).
+const isUnreadableFontColor = (
+  tagName: string,
+  attribute: string,
+  value: unknown,
+): boolean =>
+  tagName === "font" &&
+  attribute === "color" &&
+  (typeof value !== "string" || readLegacyAttributeColor(value) === undefined);
+
+// 블록을 품어 벗겨지는 font·mark에서 sanitize가 남긴 속성(color·style)은
+// 벗기는 순간 사라진다. 벗기는 쪽(import-html.ts)이 이 경고를 낸다(Issue #356
+// RD-006). 읽지 못하는 font color는 수집기가 이미 알렸으므로 뺀다.
+export const unwrappedColorTagWarnings = (
+  node: HtmlElementNode,
+): HtmlImportWarning[] =>
+  Object.entries(node.properties)
+    .filter(
+      ([attribute, value]) =>
+        !isUnreadableFontColor(node.tagName, attribute, value),
+    )
+    .map(([attribute]) =>
+      unsafeAttributeRemovedWarning(node.tagName, attribute),
+    );
+
 const unsafeElementNames = new Set([
   ...htmlStrippedTagNames,
   // img/audio/video는 RD-001-DELTA-02부터 document import 전용 allowlist
@@ -349,14 +385,10 @@ const collectFromNodes = (
       });
     }
 
-    // 블록을 품어 벗겨지는 font·mark는 color·style이 사라진다. 읽는 속성이
-    // 아니므로 #334 이전처럼 제거를 보고한다.
+    // 블록을 품어 벗겨지는 font·mark의 color·style은 sanitize가 남긴다. 벗기는
+    // 쪽이 벗기는 순간 제거를 알린다(unwrappedColorTagWarnings).
     const allowedAttributes = new Set(
-      unwrappedColorTags.has(node)
-        ? []
-        : (htmlAllowedAttributes[node.tagName] ??
-            htmlAllowedAttributes["*"] ??
-            []),
+      htmlAllowedAttributes[node.tagName] ?? htmlAllowedAttributes["*"] ?? [],
     );
     // code의 language/class metadata는 CodeBlock의 pre 안에서만 의미가 있다.
     // sanitizer schema는 semantic importer의 입력 보존을 위해 이를 남기지만,
@@ -405,22 +437,14 @@ const collectFromNodes = (
       ) {
         continue;
       }
-      // font의 color는 허용 속성이지만 값을 읽지 못하면 색이 사라진다.
-      // 읽지 못한 값은 #334 이전처럼 제거를 보고한다.
-      const unreadableFontColor =
-        node.tagName === "font" &&
-        attribute === "color" &&
-        (typeof value !== "string" ||
-          readLegacyAttributeColor(value) === undefined);
+      const unreadableFontColor = isUnreadableFontColor(
+        node.tagName,
+        attribute,
+        value,
+      );
       // 감사 대상 속성은 변환 뒤 감사가 판정한다(HtmlImportContext.preserved.
-      // audit, RD-001). 블록을 품어 벗겨지는 font·mark는 감사 트리에 없으므로
-      // 이 수집기가 이전처럼 판정한다.
-      if (
-        !unwrappedColorTags.has(node) &&
-        isAuditedAttribute(node.tagName, attribute)
-      ) {
-        continue;
-      }
+      // audit, RD-001).
+      if (isAuditedAttribute(node.tagName, attribute)) continue;
       if (!allowedAttributes.has(attribute) || unreadableFontColor) {
         warnings.push({
           kind: "UNSAFE_ATTRIBUTE_REMOVED",

@@ -8,8 +8,9 @@
  * - 블록 경계 자손이 있으면 sanitize 이후 단계에서 그 태그만 벗긴다. 블록 자손이
  *   없는 `font`·`mark`는 색·배경 마크로 읽는다.
  * - 이 처리는 `importHtml`과 `parseClipboardTable`이 공유한다.
- * - 경고는 raw HAST 기준이다. 벗겨지는 font·mark는 #334 이전처럼 지원 밖
+ * - 강등 경고는 raw HAST 기준이다. 벗겨지는 font·mark는 #334 이전처럼 지원 밖
  *   태그로 경고한다(G-CNV-002).
+ * - 벗겨서 잃는 color·style은 벗기는 쪽이 벗기는 순간 알린다(Issue #356 RD-006).
  * - 기대값은 #334 이전(b5a2b8e5) 번들 실측이다. 아래 "블록 자손이 없는" 묶음은
  *   가드라 수정 전에도 통과한다.
  */
@@ -314,6 +315,25 @@ describe("벗겨져 색이 사라지는 font·mark는 #334 이전 경고를 그�
       "SAFE_BLOCK_DOWNGRADED:font:",
       "UNSAFE_ATTRIBUTE_REMOVED:font:color",
     ]);
+  });
+
+  // object는 sanitize가 자식째 지운다. 그 뒤 font에는 블록이 없어 벗기지 않고
+  // 색을 읽는다. raw 기준으로 판정하던 옛 수집기는 읽은 색도 제거로 보고했다.
+  it.each([
+    [
+      '<p><font color="red"><object><p>x</p></object></font></p>',
+      ["UNSAFE_ELEMENT_REMOVED:object:"],
+    ],
+    [
+      '<p><font color="#12"><object><p>x</p></object></font></p>',
+      ["UNSAFE_ATTRIBUTE_REMOVED:font:color", "UNSAFE_ELEMENT_REMOVED:object:"],
+    ],
+  ])("sanitize 뒤 블록이 없는 font는 벗기지 않는다: %s", (html, expected) => {
+    const warnings = imported(html).warnings.map((warning) => {
+      const fields = warning as { element?: string; attribute?: string };
+      return `${warning.kind}:${fields.element ?? ""}:${fields.attribute ?? ""}`;
+    });
+    expect(warnings).toEqual(expected);
   });
 });
 

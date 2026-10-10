@@ -454,7 +454,8 @@ describe("HTML 보안", () => {
       {
         kind: "SAFE_BLOCK_DOWNGRADED",
         element: "section",
-        message: "Unsupported section block was downgraded to paragraph content",
+        message:
+          "Unsupported section block was downgraded to paragraph content",
       },
     ]);
   });
