@@ -582,8 +582,8 @@ describe("importHtml 평탄화 pre 경고의 어긋남 보정(Issue #354 리뷰)
     ).toEqual([]);
   });
 
-  // 수집기가 따라가지 않는 자리는 이전처럼 Tab 삭제를 경고하지 않는다(QA-149 한계).
-  // 이 자리를 따라가도록 고치면 이 테스트가 먼저 깨져 한계 서술을 갱신하게 한다.
+  // 변환기가 글자를 지우는 자리에서 경고하므로 수집기가 따라가지 못하던 자리도 경고한다.
+  // RD-001 전에는 수집기 한계(QA-149)로 이 두 자리만 경고가 없었다.
   it.each([
     [
       "제목 안 인용 안 span 안 pre",
@@ -593,12 +593,19 @@ describe("importHtml 평탄화 pre 경고의 어긋남 보정(Issue #354 리뷰)
       "토글 summary 안 span 안 pre",
       `<details data-geul-toggleable="true"><summary><span>${TAB_PRE}</span></summary></details>`,
     ],
-  ])("한계: %s의 Tab 삭제는 경고하지 않는다", (_name, html) => {
+  ])("%s의 Tab 삭제를 경고한다", (_name, html) => {
     const value = imported(html);
 
     expect(codeTexts(value.document.blocks)).toEqual([]);
     expect(
       value.warnings.filter((warning) => warning.kind === REMOVED),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        kind: REMOVED,
+        element: "pre",
+        message:
+          "Unsafe code point (C0 control, DEL, or unpaired surrogate) was removed from text",
+      },
+    ]);
   });
 });

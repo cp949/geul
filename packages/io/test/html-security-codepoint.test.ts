@@ -2,6 +2,11 @@
  * HTML import에서 금지 코드포인트(C0 제어문자, DEL, 짝 없는 surrogate)를
  * throw 없이 제거하고 경고로 보고하는 동작을 다룬다. html-security.test.ts
  * 에서 관심사 단위로 분리했다(AGENTS.md: describe 직속 it 20개 이상 시 분리).
+ *
+ * `UNSAFE_CODE_POINT_REMOVED`는 변환기가 글자를 실제로 정제하는 지점에서 낸다(RD-001).
+ * - 판정 값은 공백 접기 뒤 값이다. `<p>` 안 Tab은 공백이 되므로 경고하지 않는다.
+ * - `element`는 텍스트 노드의 sanitize 뒤 부모 태그다. 최상위 loose 텍스트는 `"text"`다.
+ * - sanitize가 지운 요소의 텍스트는 변환기가 읽지 않으므로 이 경고를 내지 않는다.
  */
 import { describe, expect, it } from "vitest";
 
@@ -82,7 +87,7 @@ describe("HTML 보안", () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: "UNSAFE_CODE_POINT_REMOVED",
-          element: "caption",
+          element: "table",
         }),
       ]),
     );
@@ -93,5 +98,57 @@ describe("HTML 보안", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.message);
     expect(result.value.warnings).toEqual([]);
+  });
+});
+
+describe("HTML 보안: 코드포인트 경고는 변환기가 낸다", () => {
+  /** 성공한 import 결과의 경고 목록을 돌려준다. */
+  const warningsOf = (html: string) => {
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value.warnings;
+  };
+
+  it("문단 안 Tab은 공백 접기로 공백이 되므로 경고하지 않는다", () => {
+    const result = importHtml("<p>one\ttwo</p>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.document.blocks).toEqual([
+      { id: "html-1", type: "paragraph", content: [{ text: "one two" }] },
+    ]);
+    expect(result.value.warnings).toEqual([]);
+  });
+
+  it("script 안 제어문자는 요소 제거 경고 하나만 낸다", () => {
+    const warnings = warningsOf("<script>a\u0001b</script>");
+
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        kind: "UNSAFE_ELEMENT_REMOVED",
+        element: "script",
+      }),
+    ]);
+  });
+
+  it.each([
+    ["ul 들여쓰기", "<ul>\n\t<li>a</li></ul>"],
+    ["문단 사이 들여쓰기", "<p>a</p>\n\t<p>b</p>"],
+  ])("탭 들여쓰기된 외부 html(%s)은 경고하지 않는다", (_name, html) => {
+    expect(warningsOf(html)).toEqual([]);
+  });
+
+  it("caption 안 제어문자는 sanitize 뒤 부모인 table을 element로 경고한다", () => {
+    const warnings = warningsOf(
+      "<table><caption>a\u0001b</caption><tbody><tr><td>c</td></tr></tbody></table>",
+    );
+
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        kind: "UNSAFE_CODE_POINT_REMOVED",
+        element: "table",
+      }),
+    ]);
   });
 });

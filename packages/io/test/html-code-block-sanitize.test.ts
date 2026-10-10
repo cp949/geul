@@ -82,8 +82,8 @@ describe("HTML CodeBlock 입력 정제", () => {
     ).not.toContain("UNSAFE_CODE_POINT_REMOVED");
   });
 
-  it("pre 밖 literal Tab은 기존 코드포인트 경고를 유지한다", () => {
-    expect(importWarningKinds("<p>one\ttwo</p>")).toContain(
+  it("pre 밖 literal Tab은 공백 접기로 글자가 남아 코드포인트 경고를 만들지 않는다", () => {
+    expect(importWarningKinds("<p>one\ttwo</p>")).not.toContain(
       "UNSAFE_CODE_POINT_REMOVED",
     );
   });
