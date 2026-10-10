@@ -191,6 +191,46 @@ const placeCaretAfterAb = async (page: Page, editable: Locator) => {
   });
 };
 
+// 표 옆 quote·최상위 codeBlock·divider(Issue #356 RD-005). 표가 든 html은
+// TablePasteExtension이 처리하고, 표 옆 블록은 importHtml 변환기가 읽는다.
+// 이전에는 quote가 문단, pre가 문단 글자가 되고 hr는 사라졌다. 블록 조립·셀
+// 줄·id 재발급 계약은 core 단위 테스트(`table-paste-model-blocks.test.ts`)가
+// 소유한다. 이 행은 실제 브라우저 붙여넣기에서 거절 없이 모두 들어가는지만 본다.
+test("표와 quote·codeBlock·divider가 섞인 html을 붙이면 거절 없이 모두 블록으로 들어간다", async ({
+  page,
+}) => {
+  const editable = await importBlocks(page, abcdBlocks);
+  const pageErrors = trackPageErrors(page);
+  await placeCaretAfterAb(page, editable);
+
+  await editable.evaluate(dispatchPaste, {
+    html:
+      "<blockquote>q</blockquote><pre>x\n  y</pre><hr>" +
+      "<table><tr><td>1</td><td>2</td></tr></table>",
+  });
+
+  const blocks = (await exportedBlocks(page)) as Array<{
+    type: string;
+    content?: unknown;
+  }>;
+  const pasted = blocks.filter((block) =>
+    ["quote", "codeBlock", "divider", "table"].includes(block.type),
+  );
+  expect(pasted.map((block) => block.type)).toEqual([
+    "quote",
+    "codeBlock",
+    "divider",
+    "table",
+  ]);
+  expect(pasted[0]?.content).toEqual([{ text: "q" }]);
+  expect(pasted[1]?.content).toEqual([{ text: "x\n  y" }]);
+  await expect(editable.locator("table td").nth(1)).toHaveText("2");
+  expect(pageErrors).toEqual([]);
+
+  await page.keyboard.press("Control+z");
+  expect(await exportedBlocks(page)).toEqual(abcdBlocks);
+});
+
 // 붙여넣기 뒤 기대 문서: 원본은 id를 지키고 자식을 얻지 않으며 둘째 줄이
 // 다음 형제가 된다.
 const expectedAfterPaste = [

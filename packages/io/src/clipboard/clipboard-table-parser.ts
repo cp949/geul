@@ -1,30 +1,39 @@
 import {
+  type Block,
   canonicalizeCodeBlockLanguage,
+  type IdFactory,
   type InlineContent,
   type InlineContentItem,
   isCanonicalCellAlign,
   isCanonicalCellColor,
-  sanitizeCodeBlockSource,
+  parseDocument,
   tableSizeViolationMessage,
   validateTableSize,
 } from "@cp949/geul-model";
 import { sanitize } from "hast-util-sanitize";
 
 import type { ClipboardParseError } from "../errors.js";
+import { clipboardSanitizeSchema } from "../html/clipboard-sanitize-schema.js";
 import {
-  type BlockSegment,
-  type BlockSegmentPolicy,
-  isParagraphTag,
-  isTransparentListTag,
-  NESTED_BOUNDARY_TAG_NAMES,
-  segmentBlocks,
-} from "../html/block-segmenter.js";
+  collapseSourceWhitespace,
+  hasGeulIdentityAttribute,
+} from "../html/collapse-source-whitespace.js";
+import {
+  cellPresentation,
+  type CellPresentation,
+} from "../html/element-presentation.js";
 import {
   childElements,
   propertyString,
   sanitizeLinks,
 } from "../html/hast-properties.js";
+import { createImportContext } from "../html/import-context.js";
 import {
+  documentFromRoot,
+  type HtmlTableSeam,
+} from "../html/import-html-blocks.js";
+import {
+  type HtmlElementContent,
   type HtmlElementNode,
   type HtmlNode,
   type HtmlRoot,
@@ -32,31 +41,10 @@ import {
   unwrapBlockBearingColorTags,
 } from "../html/inline-content.js";
 import {
-  markerTypeFromTag,
-  parseExplicitStartNumber,
-  splitListItemChildren,
-} from "../html/list-block-builder.js";
-import {
-  blockPresentation,
-  type CellPresentation,
-  cellPresentation,
-  promotedFormat,
-  type TextFormat,
-} from "../html/element-presentation.js";
-import {
-  selectCodeBlockLanguage,
-  textBlockPropsFromElement,
-  textValue,
-} from "../html/import-html-helpers.js";
-import {
   asRoot,
   flattenBlockBoundaryTagNames,
   parseHtmlFragment,
 } from "../html/parse-html.js";
-import {
-  clipboardAllowedAttributes,
-  clipboardSanitizeSchema,
-} from "../html/sanitize-schema.js";
 import {
   type CellLayout,
   columnElements,
@@ -97,8 +85,8 @@ const isLayoutTable = (table: HtmlElementNode): boolean => {
 
 // 셀이 하나도 없는 표는 데이터 표가 아니다. Outlook/Gmail HTML 메일은 여백용
 // 빈 <table>을 중첩해 심는데, findDataTables가 가장 안쪽 표를 고르므로 이걸
-// 데이터 표로 집으면 같은 행에 있는 진짜 셀들이 blockSequenceFromNodes에서
-// 표 없는 순수 인라인 콘텐츠로 문단 블록이 된다 — 표 구조 자체가 사라진다.
+// 데이터 표로 집으면 같은 행에 있는 진짜 셀들이 표 밖 문단이 된다 — 표 구조
+// 자체가 사라진다.
 const hasDataCells = (table: HtmlElementNode): boolean =>
   tableRows(table).some((row) =>
     childElements(row.element).some(
@@ -135,344 +123,6 @@ const findDataTables = (root: HtmlRoot): HtmlElementNode[] => {
 // "표 밖 실질 텍스트" 판정(hasSubstantialText/INSUBSTANTIAL_TEXT)은
 // table-layout.ts가 소유한다 — import 경로(caption 등 표 직속 비섹션 자식)와
 // 이 판정을 공유해야 하기 때문이다.
-
-// 재귀 경계 판정(문단/헤딩/표/목록 시퀀스로 쪼개기) 자체는 block-segmenter.ts가
-// import-html.ts와 공유한다(아키텍처 리뷰 2차 후보 G) — 이 파일의 네 태그
-// (div/li/blockquote는 항상 재귀, ul/ol은 리프로 접기, p/heading은 표를
-// 품었을 때만 재귀)만 정책으로 넘긴다. h1~h6는 여기서 인식한다 —
-// import-html.ts도 이제 h1~h6를 heading으로 인식하므로(별개 DELTA에서 정정)
-// 이 파일과 다르지 않다.
-const headingLevelFromTagName = (
-  tagName: string,
-): 1 | 2 | 3 | 4 | 5 | 6 | undefined =>
-  /^h[1-6]$/.test(tagName)
-    ? (Number(tagName.slice(1)) as 1 | 2 | 3 | 4 | 5 | 6)
-    : undefined;
-
-// 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고 문단 블록으로 옮겨 담는다
-// — 표 앞뒤 문단은 문단으로, 표는 표 노드로, 문서 순서를 지켜 한 시퀀스로
-// 만든다(spec §4.1, Issue #71). h1~h6는 모두 heading으로 유지한다 — model
-// HeadingBlock.level이 1~6으로 확장돼(DELTA-04, Issue #38) 이제 h4~h6를
-// 문단으로 다운그레이드할 이유가 없다(Issue #38 슬라이스 3). 찾아낸 표가
-// 여럿이면(findDataTables, Issue #73) 문서 순서대로 각각 독립된 표 블록이
-// 된다. ul/ol은 kind: "list" 세그먼트로 나와 li마다 마커 타입·중첩 계층·
-// 명시적 startNumber를 보존한다(DELTA-01, Issue #143 (b)).
-//
-// 문단/heading/목록 항목 블록의 텍스트는 셀 텍스트와 같은 정규화를 거쳐야
-// 한다 — collapseHtmlWhitespace(정규 공백 run 접기)와
-// normalizeCellContent(C0 제어문자/DEL/짝 없는 surrogate 정제) 없으면
-// model의 isValidInlineText 검사가 거절해 readEditorDocument에서
-// throw된다(editor 영구 desync).
-// normalizedInlineContent(아래)가 만드는 콘텐츠는 항상 텍스트 런뿐이다 —
-// HTML 파서에는 커스텀 inline 원소를 만드는 문법이 없다(cell-text.ts와 같은
-// 근거, RD-002-DELTA-15). hasSubstantialText 판정에 쓸 순수 텍스트만 뽑는다.
-const visibleText = (content: InlineContent): string =>
-  (content as Array<Extract<InlineContentItem, { text: string }>>)
-    .map((item) => item.text)
-    .join("");
-
-// 표 밖 블록 요소(p·h1~h6·li, 블록 자식 없는 div) 자신의 style 색이다
-// (Issue #343, #344). importHtml과
-// 같은 읽기를 쓴다. style만 읽고 data-geul-*와 정렬은 읽지 않는다. li가 승격한
-// p의 색은 li 색을 이긴다.
-const blockColorsFromElement = (
-  element: HtmlElementNode,
-  promoted?: HtmlElementNode,
-): { textColor?: string; backgroundColor?: string } => {
-  const { textColor, backgroundColor } = textBlockPropsFromElement(element, {
-    styleOnly: true,
-    promoted,
-  });
-  return {
-    ...(textColor === undefined ? {} : { textColor }),
-    ...(backgroundColor === undefined ? {} : { backgroundColor }),
-  };
-};
-
-const blockSequenceFromNodes = (
-  nodes: readonly HtmlNode[],
-  tables: readonly HtmlElementNode[],
-): Result<ClipboardContentBlock[], ClipboardParseError> => {
-  const tableSet = new Set(tables);
-  // 표가 아닌 블록에 붙이는 임시 id의 카운터다. 호출마다 0에서 시작한다 —
-  // 모듈 전역으로 두면 같은 입력이 호출 순서에 따라 다른 id를 낸다. 블록을
-  // 실제로 만들 때만 발급해 건너뛴 빈 문단이 번호를 먹지 않는다. 목록 항목은
-  // children을 읽기 전에 발급해 부모 id가 자식보다 앞선다(문서 순서).
-  let idCounter = 0;
-  const nextId = (): string => {
-    idCounter += 1;
-    return `clipboard-${idCounter}`;
-  };
-  // headingLevelFromTagName의 반환 타입(1~6)을 그대로 실어 segment.level이
-  // number가 아닌 좁혀진 리터럴 유니언으로 나오게 한다(import-html.ts의
-  // importBlockSegmentPolicy와 같은 패턴) — heading 분기에서 캐스트 없이
-  // ClipboardContentBlock의 heading level에 대입하기 위해서다.
-  const policy: BlockSegmentPolicy<1 | 2 | 3 | 4 | 5 | 6> = {
-    isSimpleBoundary: isParagraphTag,
-    headingLevelFromTagName,
-    isNestedBoundary: (tagName) => NESTED_BOUNDARY_TAG_NAMES.has(tagName),
-    isTransparent: isTransparentListTag,
-    // ul/ol 자신을 kind: "list" 리프로 접는다 — isTransparentListTag를
-    // 그대로 재사용한다(block-segmenter.ts의 isTransparentListTag 주석
-    // 참고, 두 정책 필드에 같은 태그 판정을 서로 다른 소비자가 꽂아 쓴다).
-    isListTag: isTransparentListTag,
-    isTableNode: (node) => tableSet.has(node),
-  };
-
-  // li 자식용 정책이다(Issue #351). 기존 정책에 hr(divider)와 pre(codeBlock)
-  // 판정을 더한다. 최상위와 li가 아닌 자식 run은 기존 policy를 그대로 쓴다
-  // — 표 밖 최상위 pre·hr의 결과를 바꾸지 않는다. li 안은 div·blockquote 같은
-  // 래퍼를 지나서도 이 정책으로 분할한다.
-  const listChildPolicy: BlockSegmentPolicy<1 | 2 | 3 | 4 | 5 | 6, true> = {
-    ...policy,
-    isDividerTag: (tagName) => tagName === "hr",
-    isCodeBlockTag: (tagName) => tagName === "pre",
-  };
-
-  const segmentsOf = (
-    nodeList: readonly HtmlNode[],
-    inListItem: boolean,
-  ): BlockSegment<1 | 2 | 3 | 4 | 5 | 6, true>[] =>
-    inListItem
-      ? segmentBlocks(nodeList, listChildPolicy)
-      : segmentBlocks(nodeList, policy);
-
-  // 셀 텍스트와 같은 정규화(collapseHtmlWhitespace로 공백 run 접기 →
-  // normalizeCellContent로 C0 제어문자/DEL/짝 없는 surrogate 제거)를 거쳐
-  // 인라인 콘텐츠로 만든다. 문단 생성과 heading 분기(h1~h6)가 이 정규화를
-  // 공유한다 — 누락되면 model의 isValidInlineText가 거절하는 코드포인트가
-  // 남아 readEditorDocument에서 throw된다(editor 영구 desync).
-  // baseFormat은 블록 요소 자신의 style 서식이다. 글자 마크가 된다(Issue #343).
-  const normalizedInlineContent = (
-    segmentNodes: HtmlNode[],
-    baseFormat?: TextFormat,
-  ): InlineContent => {
-    collapseHtmlWhitespace(segmentNodes);
-    return normalizeCellContent(
-      inlineContentFromNodes(
-        segmentNodes,
-        baseFormat === undefined ? undefined : { baseFormat },
-      ),
-    );
-  };
-
-  // li 안 "block-level" 판정 — splitListItemChildren이 content/children을
-  // 나눌 때 쓴다. 새 태그 분류를 만들지 않고 이 파일이 이미 정책으로
-  // 넘기는 표·목록·문단 경계 집합을 그대로 조립한다(트랙-4 확인,
-  // import-html.ts의 isBlockLevelElement와 같은 원칙 — 단 표 판정은
-  // 이 파일의 tableSet 멤버십을 쓴다).
-  // p(isSimpleBoundary)와 h1~h6(headingLevelFromTagName)도 블록이다.
-  // 빠지면 승격되지 않는 p·제목의 글자가 항목 content에 합쳐지고
-  // 자기 style을 잃는다(Issue #346).
-  // pre(codeBlock)와 hr(divider)도 블록이다. 빠지면 pre 글자가 항목 content에
-  // 붙고 hr가 사라진다(Issue #351). li 자식 정책의 판정을 그대로 쓴다.
-  const isBlockLevelNode = (node: HtmlElementNode): boolean =>
-    policy.isTableNode(node) ||
-    isTransparentListTag(node.tagName) ||
-    NESTED_BOUNDARY_TAG_NAMES.has(node.tagName) ||
-    policy.isSimpleBoundary(node.tagName) ||
-    policy.headingLevelFromTagName(node.tagName) !== undefined ||
-    listChildPolicy.isCodeBlockTag(node.tagName) ||
-    listChildPolicy.isDividerTag?.(node.tagName) === true;
-
-  // ul/ol 세그먼트 하나(kind: "list"의 node)를 li마다
-  // bulletListItem/numberedListItem으로 바꾼다. explicit start는
-  // import-html.ts의 blocksFromListElement와 같은 원칙으로 그 ol의 첫
-  // li에만 붙인다(형제 scope 재시작 로직은 범위 밖) — li의 children은
-  // blocksFromNodeList를 재귀 호출해 표·중첩 목록·문단을 그대로 처리한다.
-  //
-  // li가 아닌 직속 자식(ul 안의 ul, 텍스트 등)은 연속 run으로 모아
-  // blocksFromNodeList에 보낸다. 그 블록을 문서 순서대로 항목 사이에
-  // 형제로 놓아 텍스트를 잃지 않는다(Issue #326). 이전 li의 children으로
-  // 해석하지 않는다. 공백뿐인 run은 블록을 만들지 않는다.
-  const blocksFromListNode = (
-    listNode: HtmlElementNode,
-  ): Result<ClipboardContentBlock[], ClipboardParseError> => {
-    const markerType = markerTypeFromTag(listNode.tagName);
-    const explicitStart = parseExplicitStartNumber(listNode);
-    const blocks: ClipboardContentBlock[] = [];
-    let itemIndex = 0;
-    let nonItemRun: HtmlNode[] = [];
-    // 비-li run이 먼저 와도 startNumber 기준은 li 순서(itemIndex)다.
-    const flushNonItemRun = (): Result<null, ClipboardParseError> => {
-      if (nonItemRun.length === 0) return { ok: true, value: null };
-      const runResult = blocksFromNodeList(nonItemRun, false);
-      nonItemRun = [];
-      if (!runResult.ok) return runResult;
-      blocks.push(...runResult.value);
-      return { ok: true, value: null };
-    };
-    for (const child of listNode.children) {
-      if (child.type !== "element" || child.tagName !== "li") {
-        nonItemRun.push(child);
-        continue;
-      }
-      const flushed = flushNonItemRun();
-      if (!flushed.ok) return flushed;
-      const { contentNodes, childrenNodes, promoted } = splitListItemChildren(
-        child,
-        isBlockLevelNode,
-      );
-      // li와 승격한 p의 style을 읽는다. p가 안쪽이라 이긴다(importHtml과 같다).
-      const content = normalizedInlineContent(
-        contentNodes,
-        promotedFormat(child, promoted),
-      );
-      const colors = blockColorsFromElement(child, promoted);
-      const id = nextId();
-      const childrenResult = blocksFromNodeList(childrenNodes, true);
-      if (!childrenResult.ok) return childrenResult;
-      const children = childrenResult.value;
-      const startNumber = itemIndex === 0 ? explicitStart : undefined;
-      blocks.push(
-        markerType === "numberedListItem"
-          ? {
-              id,
-              type: "numberedListItem",
-              content,
-              ...(startNumber === undefined ? {} : { startNumber }),
-              ...colors,
-              ...(children.length > 0 ? { children } : {}),
-            }
-          : {
-              id,
-              type: "bulletListItem",
-              content,
-              ...colors,
-              ...(children.length > 0 ? { children } : {}),
-            },
-      );
-      itemIndex += 1;
-    }
-    const flushed = flushNonItemRun();
-    if (!flushed.ok) return flushed;
-    return { ok: true, value: blocks };
-  };
-
-  // 세그먼트 하나를 ClipboardContentBlock[]로 바꾸는 루프 — 최상위 nodes와
-  // 목록 항목의 childrenNodes가 모두 이 함수를 통과한다(blocksFromNodes가
-  // blocksFromListItem을 재귀 호출하는 import-html.ts와 같은 구조, 코드는
-  // 공유하지 않는다).
-  // inListItem이 참이면 li 자식용 정책(listChildPolicy)으로 분할한다
-  // (Issue #351). 최상위와 li가 아닌 자식 run은 거짓이다.
-  const blocksFromNodeList = (
-    nodeList: readonly HtmlNode[],
-    inListItem: boolean,
-  ): Result<ClipboardContentBlock[], ClipboardParseError> => {
-    const blocks: ClipboardContentBlock[] = [];
-    for (const segment of segmentsOf(nodeList, inListItem)) {
-      // paragraph(자연히 쌓인 pending)와 simpleBoundary(p 자신의 본문)를
-      // 똑같이 취급한다 — id는 파서가 임시로 발급하므로 p의
-      // dataGeulBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
-      // 실질 텍스트 판정도 두 kind가 동일하게 받는다.
-      // 출처 요소 자신의 style 색·서식을 읽는다. simpleBoundary는 p 자신이고
-      // (Issue #343), paragraph는 블록 경계 자식 없는 div가 origin으로 실린
-      // 것이다(Issue #344). 자연히 쌓인 loose 텍스트에는 origin이 없다.
-      // 블록 자식이 있는 래퍼 div는 재귀로 풀려 segment가 되지 않으므로 그
-      // 색은 읽히지 않는다.
-      if (segment.kind === "paragraph" || segment.kind === "simpleBoundary") {
-        const source =
-          segment.kind === "simpleBoundary" ? segment.node : segment.origin;
-        const content = normalizedInlineContent(
-          segment.nodes,
-          source === undefined ? undefined : blockPresentation(source).format,
-        );
-        const text = visibleText(content);
-        if (hasSubstantialText(text)) {
-          blocks.push({
-            id: nextId(),
-            type: "paragraph",
-            content,
-            ...(source === undefined ? {} : blockColorsFromElement(source)),
-          });
-        }
-        continue;
-      }
-      if (segment.kind === "heading") {
-        const content = normalizedInlineContent(
-          segment.nodes,
-          blockPresentation(segment.node).format,
-        );
-        const text = visibleText(content);
-        if (!hasSubstantialText(text)) continue;
-        blocks.push({
-          id: nextId(),
-          type: "heading",
-          level: segment.level,
-          content,
-          ...blockColorsFromElement(segment.node),
-        });
-        continue;
-      }
-      // hr는 li 자식용 정책(listChildPolicy)에서만 나온다(Issue #351). 항상
-      // divider다. 최상위 정책은 isDividerTag를 넘기지 않아 이 분기에 도달하지
-      // 않는다 — 최상위 hr 처리는 슬라이스 10 소관이다.
-      if (segment.kind === "hr") {
-        blocks.push({ id: nextId(), type: "divider" });
-        continue;
-      }
-      // pre는 li 자식용 정책에서만 나온다(Issue #351). 마크와 공백 접기를
-      // 거치지 않는다 — 줄바꿈·들여쓰기가 코드 내용이다. model의 codeBlock 소스
-      // 계약이 거부하는 문자만 지운다. 내용 없는 pre는 만들지 않는다.
-      // language는 importHtml과 같은 규칙(selectCodeBlockLanguage)으로 고르고
-      // model 정규형으로 바꾼다. 무효 후보는 선택 함수가 이미 뺀다. 빠진 후보
-      // 목록(rejected)은 버린다. 클립보드 경로는 경고를 내지 않는다.
-      // wrap·caption·id는 읽지 않는다.
-      if (segment.kind === "codeBlock") {
-        const text = sanitizeCodeBlockSource(textValue(segment.node.children));
-        if (!hasSubstantialText(text)) continue;
-        const { language } = selectCodeBlockLanguage(segment.node);
-        blocks.push({
-          id: nextId(),
-          type: "codeBlock",
-          content: [{ text }],
-          ...(language === undefined
-            ? {}
-            : { language: canonicalizeCodeBlockLanguage(language) }),
-        });
-        continue;
-      }
-      // 클립보드 정책은 isQuoteTag를 넘기지 않아 도달하지 않는다 — 공유
-      // union의 exhaustiveness 반영, blockquote 매핑은 슬라이스 10 소관.
-      if (segment.kind === "blockquote") continue;
-      // 클립보드 정책은 isMediaNode를 넘기지 않아 도달하지 않는다 — 공유
-      // union의 exhaustiveness 반영(RD-001-DELTA-02, block-segmenter.ts의
-      // BlockSegment media variant 주석 참고). 미디어 붙여넣기는 별도
-      // File[] 추출 경로(spec §5.2)가 담당하고 이 HTML fragment 경로와
-      // 무관하다.
-      if (segment.kind === "media") continue;
-      // 클립보드 정책은 isCalloutNode를 넘기지 않아 도달하지 않는다 — 공유
-      // union의 exhaustiveness 반영(Issue #209 RD-003 DELTA-01). callout div도
-      // blockquote(위)와 동일하게 클립보드에서는 그냥 문단 경계로 남는다.
-      if (segment.kind === "callout") continue;
-      if (segment.kind === "list") {
-        const listResult = blocksFromListNode(segment.node);
-        if (!listResult.ok) return listResult;
-        blocks.push(...listResult.value);
-        continue;
-      }
-
-      // 표. caption(표 직속 비섹션 자식)은 기존 pending 뒤·표 앞이라는
-      // 문서 순서를 segmentBlocks가 이미 지킨다 — 여기서는 같은
-      // collapseHtmlWhitespace/normalizeCellContent/hasSubstantialText
-      // 정규화만 재사용한다.
-      if (segment.nonSectionChildren.length > 0) {
-        const content = normalizedInlineContent(segment.nonSectionChildren);
-        const text = visibleText(content);
-        if (hasSubstantialText(text)) {
-          blocks.push({ id: nextId(), type: "paragraph", content });
-        }
-      }
-      const parsed = tabularDataFromTable(segment.node);
-      if (!parsed.ok) return { ok: false, error: parsed.error };
-      blocks.push({ type: "table", data: parsed.value });
-    }
-
-    return { ok: true, value: blocks };
-  };
-
-  return blocksFromNodeList(nodes, false);
-};
 
 const canonicalColor = (value: string | undefined): string | undefined =>
   value !== undefined && isCanonicalCellColor(value) ? value : undefined;
@@ -665,28 +315,202 @@ type HtmlTableOutcome =
   | { ok: true; value: ClipboardContentBlock[] }
   | { ok: false; error: ClipboardParseError; sawTable: boolean };
 
-// 목록 파싱이 소비하는 ol[start]를 clipboard sanitize 단계에 추가한다.
-// clipboardAllowedAttributes에는 ol 항목이 없어(sanitize-schema.ts) start가
-// 그대로 두면 제거되고 parseExplicitStartNumber가 항상 undefined를 받는다.
-// import-html.ts:71-78의 htmlImportSanitizeSchema와 완전히 같은 패턴으로
-// (공유 schema 객체는 바꾸지 않고) 이 파일에서만 얕은 복사한다 — raw HAST가
-// 아니라 sanitized HAST에서만 start를 읽기 위한 경계다(G-CNV-002).
-const clipboardListSanitizeSchema = {
-  ...clipboardSanitizeSchema,
-  attributes: { ...clipboardAllowedAttributes, ol: ["start"] },
+type TableRead = Result<TabularData, ClipboardParseError>;
+
+// 표 직속 비섹션 자식(sanitize가 벗긴 caption 글자가 대표다)을 표 앞 문단
+// 콘텐츠로 읽는다. 표 셀과 같은 정규화(공백 run 접기, 무효 코드포인트 제거)를
+// 거친다. 실질 텍스트가 없으면 문단을 만들지 않는다. importHtml의 caption 문단과
+// 다르다 — 표를 어떻게 읽는가의 일부라 클립보드 표 처리기 몫이다(RD-003 seam).
+// inlineContentFromNodes는 텍스트 런만 만든다. 커스텀 inline 원소를 만드는
+// HTML 문법이 없다(cell-text.ts와 같은 근거).
+const captionContent = (
+  nodes: HtmlElementContent[],
+): InlineContent | undefined => {
+  if (nodes.length === 0) return undefined;
+  collapseHtmlWhitespace(nodes);
+  const content = normalizeCellContent(inlineContentFromNodes(nodes));
+  const text = (content as Array<Extract<InlineContentItem, { text: string }>>)
+    .map((item) => item.text)
+    .join("");
+  return hasSubstantialText(text) ? content : undefined;
 };
 
+// 표 옆 블록은 importHtml 변환기가 읽고 표는 이 파일의 표 처리기가 읽는다
+// (Issue #356 RD-003 seam, RD-005). 변환기는 model Block만 내므로 표 자리에
+// 자리표시 블록을 두고 그 객체를 키로 표 읽기 결과를 reads에 담는다.
+// - 키는 객체 identity다. id 문자열을 키로 쓰면 html의 data-geul-block-id와
+//   겹칠 수 있다. 변환기는 처리기가 낸 블록을 복제하지 않고 그대로 담는다.
+// - 표 판정은 findDataTables가 고른 노드 집합의 멤버십이다. 레이아웃 표와 빈
+//   표는 표 노드가 아니다. 변환기는 표 노드를 복제하지 않고 넘긴다(블록 분할의
+//   leaf 복제도 표 노드는 원본을 돌려준다, block-segmenter.ts).
+// - 거절은 던지지 않고 reads에 담는다. 변환기는 끝까지 읽고 호출자가 첫 거절을
+//   돌려준다.
+// - 자리표시는 divider다. 변환기의 children wrapper 판정이 divider를 자기
+//   콘텐츠로 받지 않아 표를 품은 자기 콘텐츠 태그의 처리가 importHtml과 같다.
+const clipboardTableSeam = (
+  tables: readonly HtmlElementNode[],
+  reads: Map<Block, TableRead>,
+): HtmlTableSeam => {
+  const tableSet = new Set(tables);
+  return {
+    isTableNode: (node) => tableSet.has(node),
+    blocksFromTable: (segment, { createId }) => {
+      const blocks: Block[] = [];
+      const caption = captionContent(segment.nonSectionChildren);
+      if (caption !== undefined) {
+        blocks.push({ id: createId(), type: "paragraph", content: caption });
+      }
+      const slot: Block = { id: "clipboard-table-slot", type: "divider" };
+      reads.set(slot, tabularDataFromTable(segment.node));
+      blocks.push(slot);
+      return blocks;
+    },
+  };
+};
+
+// 표가 아닌 블록의 임시 id를 만든다. 호출마다 1부터 센다 — 모듈 전역으로 두면
+// 같은 입력이 호출 순서에 따라 다른 id를 낸다. 변환기는 html의
+// data-geul-block-id를 그대로 쓰므로 그 값은 건너뛴다. core가 붙여넣을 때
+// 재발급하므로 id는 호출 안에서 유일하기만 하면 된다(RD-004).
+const createClipboardIdFactory = (root: HtmlRoot): IdFactory => {
+  const usedIds = new Set<string>();
+  const collect = (nodes: readonly HtmlNode[]): void => {
+    for (const node of nodes) {
+      if (node.type !== "element") continue;
+      const id = propertyString(node, "dataGeulBlockId");
+      if (id !== undefined) usedIds.add(id);
+      collect(node.children);
+    }
+  };
+  collect(root.children);
+  let sequence = 0;
+  return () => {
+    let id: string;
+    do {
+      sequence += 1;
+      id = `clipboard-${sequence}`;
+    } while (usedIds.has(id));
+    usedIds.add(id);
+    return id;
+  };
+};
+
+// model 검증에 실패하면 빼고 다시 판정할 선택 필드다. 표시·메타 속성이라
+// 빠져도 블록의 글자와 구조는 남는다. 미디어 url과 필수 필드(content, checked,
+// level 등)는 여기 없다 — 그 필드가 무효면 블록을 버린다.
+const DROPPABLE_FIELDS: ReadonlySet<string> = new Set([
+  "textColor",
+  "backgroundColor",
+  "textAlignment",
+  "icon",
+  "collapsed",
+  "startNumber",
+  "language",
+  "wrap",
+  "caption",
+  "name",
+  "showPreview",
+  "previewWidth",
+  "aspectRatio",
+]);
+
+// 프로브 블록의 id다. html의 id 값과 무관하게 판정하려고 고정값을 쓴다.
+const PROBE_ID = "clipboard-model-probe";
+
+// 비표 블록 하나를 model 검증을 통과하는 모양으로 줄인다(Issue #356 RD-005
+// 결정 Q1). importHtml은 끝의 parseDocument가 무효 값을 문서 전체 거절로
+// 막지만 클립보드는 그 거절을 따르지 않는다. 무효 값을 그대로 내면 core가
+// 시퀀스 전체를 CLIPBOARD_CONTENT_INVALID로 거절해 표까지 붙지 않는다
+// (Word의 file:/// img, Outlook의 cid: img가 대표다).
+// - children을 뗀 블록을 parseDocument로 프로브한다(core 검증과 같은 방식).
+//   판정 규칙을 io에 복제하지 않는다(G-CNV-001).
+// - 실패한 필드가 선택 필드면 그 필드만 빼고 다시 판정한다. 유효한 다른
+//   필드는 남는다.
+// - 그 밖의 필드가 실패하면 undefined다. 호출자가 블록을 버린다.
+const modelSafeBlock = (block: Block): Block | undefined => {
+  const own: Record<string, unknown> = { ...block };
+  for (let attempt = 0; attempt <= DROPPABLE_FIELDS.size; attempt += 1) {
+    const probe: Record<string, unknown> = { ...own, id: PROBE_ID };
+    delete probe.children;
+    const parsed = parseDocument({
+      formatVersion: 1,
+      revision: 0,
+      blocks: [probe],
+    });
+    if (parsed.ok) return own as Block;
+    // path는 ["blocks", 0, 필드, ...]다.
+    const field = parsed.error.path[2];
+    if (typeof field !== "string" || !DROPPABLE_FIELDS.has(field)) {
+      return undefined;
+    }
+    if (!(field in own)) return undefined;
+    delete own[field];
+  }
+  return undefined;
+};
+
+// 변환기 출력을 클립보드 블록으로 바꾼다. 자리표시는 표 variant로 되돌린다.
+// 나머지 블록은 model 모양 그대로다(RD-004).
+// - codeBlock language는 model 정규형으로 바꾼다. importHtml은 끝의
+//   parseDocument가 바꾸는데 클립보드 경로는 parseDocument를 거치지 않는다.
+// - 블록마다 model 검증을 통과하는 모양으로 줄인다(modelSafeBlock). 버린
+//   블록의 children은 같은 자리 형제로 올려 글자와 표를 잃지 않는다. 미디어·
+//   codeBlock 같은 리프는 children이 없다.
+// - id가 비었거나 이미 나왔으면 새로 발급한다. html이 같은 data-geul-block-id를
+//   두 번 써도 호출 안 유일성(RD-004)을 지킨다. 남는 블록에만 발급한다. 문서
+//   순서(부모 먼저)로 돈다.
+// - reads에 있는 자리표시는 모두 성공 읽기다. 거절은 호출자가 먼저 걸렀다.
+const clipboardBlocksFrom = (
+  blocks: readonly Block[],
+  reads: ReadonlyMap<Block, TableRead>,
+  createId: IdFactory,
+  seenIds: Set<string>,
+  usedSlots: Set<Block>,
+): ClipboardContentBlock[] =>
+  blocks.flatMap((block): ClipboardContentBlock[] => {
+    const read = reads.get(block);
+    if (read !== undefined) {
+      if (!read.ok) throw new Error("rejected table slot reached conversion");
+      usedSlots.add(block);
+      return [{ type: "table", data: read.value }];
+    }
+    if (block.type === "table") {
+      // seam이 표 블록을 내지 않으므로 도달하지 않는다.
+      throw new Error("unexpected model table block in clipboard conversion");
+    }
+    const children =
+      "children" in block && block.children !== undefined ? block.children : [];
+    const own = modelSafeBlock(
+      block.type === "codeBlock" && block.language !== undefined
+        ? { ...block, language: canonicalizeCodeBlockLanguage(block.language) }
+        : block,
+    );
+    const childBlocks = (): ClipboardContentBlock[] =>
+      clipboardBlocksFrom(children, reads, createId, seenIds, usedSlots);
+    if (own === undefined) return childBlocks();
+    const id = own.id.length === 0 || seenIds.has(own.id) ? createId() : own.id;
+    seenIds.add(id);
+    const shallow: Record<string, unknown> = { ...own, id };
+    delete shallow.children;
+    const converted = childBlocks();
+    return [
+      (converted.length > 0
+        ? { ...shallow, children: converted }
+        : shallow) as ClipboardContentBlock,
+    ];
+  });
+
 const parseHtmlTable = (html: string): HtmlTableOutcome => {
-  // 깊이-캡 절단 사실(truncated)은 버린다 — clipboard 경로에는 경고 채널이
-  // 없다(ClipboardParseError는 NOT_TABULAR | CLIPBOARD_TABLE_INVALID 뿐).
-  // 캡 너머로 절단된 표는 표로 인식되지 않아 NOT_TABULAR(기본 붙여넣기
-  // 폴백)로 떨어진다.
+  // 깊이-캡 절단 사실(truncated)은 경고로 내지 않는다 — clipboard 경로에는 경고
+  // 채널이 없다(ClipboardParseError는 NOT_TABULAR | CLIPBOARD_TABLE_INVALID
+  // 뿐). importHtml처럼 소스 공백 접기 여부에만 쓴다. 캡 너머로 절단된 표는 표로
+  // 인식되지 않아 NOT_TABULAR(기본 붙여넣기 폴백)로 떨어진다.
   const parsed = parseHtmlFragment(html);
   if (parsed === undefined)
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
-  const unsafeRoot = parsed.root;
+  const { root: unsafeRoot, truncated } = parsed;
 
-  const safeRoot = asRoot(sanitize(unsafeRoot, clipboardListSanitizeSchema));
+  const safeRoot = asRoot(sanitize(unsafeRoot, clipboardSanitizeSchema));
   if (safeRoot === undefined)
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
 
@@ -694,16 +518,57 @@ const parseHtmlTable = (html: string): HtmlTableOutcome => {
   // LinkPolicyExtension.filterTransaction이 붙여넣기 트랜잭션을 통째로 버린다.
   sanitizeLinks(safeRoot.children);
   unwrapBlockBearingColorTags(safeRoot.children);
+  // 소스 공백 접기는 importHtml과 같은 조건이다(Issue #320, #356 Q9). 표 셀은
+  // tabularDataFromTable이 자기 접기를 한 번 더 한다. 접힌 공백은 다시 접어도
+  // 같다. 표 판정 전에 접는다 — 접기는 노드를 바꾸지 않지만 표 노드 집합을
+  // 확정한 뒤에는 트리를 고치지 않는다.
+  if (!truncated && !hasGeulIdentityAttribute(safeRoot)) {
+    collapseSourceWhitespace(safeRoot);
+  }
 
   const tables = findDataTables(safeRoot);
   if (tables.length === 0)
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
 
-  const sequence = blockSequenceFromNodes(safeRoot.children, tables);
-  if (!sequence.ok) {
-    return { ok: false, error: sequence.error, sawTable: true };
+  // 경고는 버린다(Issue #356 Q14). 경고 수집기와 보존 속성 감사는 부르지
+  // 않는다. iframe 설정은 빈 값이다 — importHtml의 options 생략과 같은 가장
+  // 보수적인 판정이다. 공개 API를 늘리지 않는다.
+  const reads = new Map<Block, TableRead>();
+  const createId = createClipboardIdFactory(safeRoot);
+  const document = documentFromRoot(
+    safeRoot,
+    createId,
+    createImportContext(safeRoot, []),
+    {},
+    clipboardTableSeam(tables, reads),
+  );
+
+  // 데이터 표를 찾았어도 변환기가 표 자리로 읽지 않을 수 있다. pre·미디어
+  // figure·summary 안 표는 importHtml처럼 글자로 읽힌다. 표 자리가 하나도 없으면
+  // 표 붙여넣기가 아니다.
+  if (reads.size === 0)
+    return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
+  // 문서 순서상 첫 거절만 낸다.
+  for (const read of reads.values()) {
+    if (!read.ok) return { ok: false, error: read.error, sawTable: true };
   }
-  return { ok: true, value: sequence.value };
+
+  const usedSlots = new Set<Block>();
+  const value = clipboardBlocksFrom(
+    // 변환기는 CustomBlock을 만들지 않는다. Document 타입이 최상위 CustomBlock을
+    // 허용해 넓을 뿐이다.
+    document.blocks as Block[],
+    reads,
+    createId,
+    new Set<string>(),
+    usedSlots,
+  );
+  // 자리표시를 잃으면 표가 divider로 붙는다. 그럴 바에는 최후 방어선
+  // (NOT_TABULAR)으로 보낸다.
+  if (usedSlots.size !== reads.size) {
+    throw new Error("clipboard table slot was lost during conversion");
+  }
+  return { ok: true, value };
 };
 
 const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {

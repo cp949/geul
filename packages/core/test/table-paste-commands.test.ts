@@ -953,8 +953,9 @@ describe("클립보드 시퀀스를 붙여넣는다", () => {
     expect(editor.getJSON() as TiptapJsonNode).toEqual(before);
   });
 
-  // 트랙-6 결함 탐지(BLOCKER): list-block-builder.ts의 parseExplicitStartNumber는
-  // ol[start]가 정수이기만 하면 그대로 통과시킨다 — model schema의
+  // 트랙-6 결함 탐지(BLOCKER): 옛 클립보드 파서의 ol[start] 읽기는
+  // ol[start]가 정수이기만 하면 그대로 통과시켰다(지금 파서는 importHtml
+  // 변환기가 범위를 접는다, Issue #356 RD-005). core는 직접 받은 블록도 검증한다 — model schema의
   // startNumber 범위(min(0).max(999_999_999))를 벗어난 값이 검증 없이
   // dispatch되면 위와 같은 이유로 readEditorDocument가 TypeError를 던진다.
   it("numberedListItem의 startNumber가 model 범위를 벗어나면 CLIPBOARD_CONTENT_INVALID로 거절하고 문서를 바꾸지 않는다", () => {

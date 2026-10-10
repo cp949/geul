@@ -7,7 +7,7 @@
  * - 입력마다 뒤에 2×2 데이터 표를 붙인다. 표가 없으면 파서가 표 붙여넣기를 하지 않는다.
  * - 기대값은 같은 HTML의 `importHtml` 결과다. 표를 뺀 블록 트리를 children까지 비교한다.
  * - 비교만으로는 둘이 함께 틀려도 통과하므로, 재현 3행은 명시 값으로도 고정한다.
- * - 클립보드는 내용 없는 `p`·제목(빈 요소, 공백뿐, `<br>`만 든 `p`)의 자식 블록을 만들지 않는다. 이 차이는 의도다.
+ * - 내용 없는 `p`·제목(빈 요소, 공백뿐, `<br>`만 든 `p`)도 `importHtml`처럼 빈 자식 블록으로 남는다(Issue #356 Q8).
  */
 import { describe, expect, it } from "vitest";
 
@@ -156,24 +156,64 @@ describe("parseClipboardTable li 안 p·제목 자식 블록 (Issue #346)", () =
     });
   });
 
-  describe("내용 없는 p·제목은 자식 블록을 만들지 않는다", () => {
-    it.each([
-      ["빈 p", "<ul><li>t<p></p></li></ul>"],
-      ["공백뿐인 p", "<ul><li>t<p>  </p></li></ul>"],
-      ["br만 든 p", "<ul><li>t<p><br></p></li></ul>"],
-      ["빈 제목", "<ul><li>t<h2></h2></li></ul>"],
-      ["공백뿐인 제목", "<ul><li>t<h2>  </h2></li></ul>"],
-    ])("%s: 항목 content만 남는다", (_name, before) => {
-      expect(clipboardShapes(`${before}${TABLE}`)).toEqual([
-        {
-          type: "bulletListItem",
-          level: undefined,
-          textColor: undefined,
-          backgroundColor: undefined,
-          content: [{ text: "t" }],
-          children: undefined,
-        },
-      ]);
+  // 내용 없는 p·제목도 importHtml처럼 빈 자식 블록으로 남긴다(Issue #356 Q8).
+  // 이전에는 블록을 만들지 않았다. 표 유무로 결과가 갈리지 않게 한다.
+  describe("내용 없는 p·제목은 빈 자식 블록으로 남는다", () => {
+    /** 항목 t 아래 자식 블록 하나를 둔 기대 모양이다. */
+    const itemWith = (child: BlockShape): BlockShape[] => [
+      {
+        type: "bulletListItem",
+        level: undefined,
+        textColor: undefined,
+        backgroundColor: undefined,
+        content: [{ text: "t" }],
+        children: [child],
+      },
+    ];
+    /** 빈 자식 블록의 모양이다. */
+    const emptyChild = (
+      type: string,
+      level: number | undefined,
+      content: unknown,
+    ): BlockShape => ({
+      type,
+      level,
+      textColor: undefined,
+      backgroundColor: undefined,
+      content,
+      children: undefined,
     });
+
+    it.each<[string, string, BlockShape]>([
+      [
+        "빈 p",
+        "<ul><li>t<p></p></li></ul>",
+        emptyChild("paragraph", undefined, []),
+      ],
+      [
+        "공백뿐인 p",
+        "<ul><li>t<p>  </p></li></ul>",
+        emptyChild("paragraph", undefined, []),
+      ],
+      [
+        "br만 든 p",
+        "<ul><li>t<p><br></p></li></ul>",
+        emptyChild("paragraph", undefined, [{ text: "\n" }]),
+      ],
+      ["빈 제목", "<ul><li>t<h2></h2></li></ul>", emptyChild("heading", 2, [])],
+      [
+        "공백뿐인 제목",
+        "<ul><li>t<h2>  </h2></li></ul>",
+        emptyChild("heading", 2, []),
+      ],
+    ])(
+      "%s: importHtml과 같은 빈 자식 블록이 남는다",
+      (_name, before, child) => {
+        const html = `${before}${TABLE}`;
+
+        expect(clipboardShapes(html)).toEqual(itemWith(child));
+        expect(clipboardShapes(html)).toEqual(importedShapes(html));
+      },
+    );
   });
 });

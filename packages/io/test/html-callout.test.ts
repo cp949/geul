@@ -109,7 +109,9 @@ describe("data-geul-callout 판별이 일반 div를 오염시키지 않는다", 
     ]);
   });
 
-  it("클립보드 파서는 callout div를 여전히 문단 경계로 다룬다(isCalloutNode 미전달)", () => {
+  // 클립보드 파서도 Issue #356 RD-005부터 importHtml 변환기로 표 옆 블록을
+  // 읽어 callout div가 callout이다(이전에는 문단 경계였다).
+  it("클립보드 파서도 callout div를 callout으로 읽는다", () => {
     const result = parseClipboardTable({
       html: '<div data-geul-callout="true"><p>A</p></div><table><tr><td>c</td><td>d</td></tr></table>',
     });
@@ -117,7 +119,7 @@ describe("data-geul-callout 판별이 일반 div를 오염시키지 않는다", 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(withoutIds(result.value[0])).toEqual({
-      type: "paragraph",
+      type: "callout",
       content: [{ text: "A" }],
     });
     expect(result.value[1]?.type).toBe("table");

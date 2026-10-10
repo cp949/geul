@@ -6,13 +6,12 @@
  * - 입력마다 뒤에 2×2 데이터 표를 붙인다. 표가 없으면 파서가 표 붙여넣기를 하지 않는다.
  * - 기대값은 같은 HTML의 `importHtml` 결과다. 표를 뺀 블록 트리를 children까지 비교한다.
  * - 비교만으로는 둘이 함께 틀려도 통과하므로, 재현 입력은 명시 값으로도 고정한다.
- * - 클립보드는 내용 없는 `pre`의 `codeBlock`을 만들지 않는다. 이 차이는 의도다.
- * - 클립보드는 `pre`의 `wrap`·`caption`·`id`를 읽지 않고 경고도 내지 않는다. `importHtml`과 다른 점이다.
- *   `figure` 안 `pre`의 `figcaption` 글자는 `codeBlock.caption`이 아니라 별도 자식 문단으로 남는다.
- * - 클립보드는 `blockquote`를 `quote`로 만들지 않는다(#350). `blockquote` 안 `pre`·`hr`는 명시 값으로만 고정한다.
+ * - 내용 없는 `pre`도 `importHtml`처럼 `codeBlock`으로 남는다(Issue #356 Q8). 이전에는 만들지 않았다.
+ * - `pre`의 `wrap`·`caption`·`id`는 Issue #356 RD-005부터 `importHtml`처럼 읽는다. 경고는 내지 않는다.
+ * - `blockquote`는 Issue #356 RD-005부터 `quote`다. 이전에는 `quote`를 만들지 않았다(#350).
  * - `language`는 model 정규형으로 바꾼다(`ts`는 `typescript`). model이 거부하는 값은 버린다.
  * - 코드 글자의 Tab은 남기고 나머지 무효 코드포인트만 지운다.
- * - 표 밖 최상위 `pre`·`hr`의 결과는 바뀌지 않는다.
+ * - 목록 밖 `pre`·`hr`도 Issue #356 RD-005부터 `codeBlock`·`divider`다. 이전에는 문단 글자였고 `hr`는 사라졌다.
  */
 import { describe, expect, it } from "vitest";
 
@@ -172,18 +171,24 @@ describe("parseClipboardTable li 안 pre·hr 자식 블록 (Issue #351)", () => 
       ]);
     });
 
-    // 클립보드는 blockquote를 quote 블록으로 만들지 않는다(#350). importHtml은
-    // quote로 감싸므로 이 두 입력은 비교 대신 명시 값으로 고정한다.
-    it("blockquote가 감싼 pre는 quote 없이 항목의 자식 codeBlock이다", () => {
+    // blockquote는 Issue #356 RD-005부터 importHtml처럼 quote가 된다(이전에는
+    // quote 없이 항목의 자식이었다, #350).
+    it("blockquote가 감싼 pre는 항목 자식 quote 안의 codeBlock이다", () => {
       const html = `<ul><li>t<blockquote><pre>c</pre></blockquote></li></ul>${TABLE}`;
 
-      expect(clipboardShapes(html)).toEqual([item("t", [code("c")])]);
+      expect(clipboardShapes(html)).toEqual([
+        item("t", [item("", [code("c")], "quote")]),
+      ]);
+      expect(clipboardShapes(html)).toEqual(importedShapes(html));
     });
 
-    it("blockquote가 감싼 hr는 quote 없이 항목의 자식 divider다", () => {
+    it("blockquote가 감싼 hr는 항목 자식 quote 안의 divider다", () => {
       const html = `<ul><li>t<blockquote><hr></blockquote></li></ul>${TABLE}`;
 
-      expect(clipboardShapes(html)).toEqual([item("t", [divider()])]);
+      expect(clipboardShapes(html)).toEqual([
+        item("t", [item("", [divider()], "quote")]),
+      ]);
+      expect(clipboardShapes(html)).toEqual(importedShapes(html));
     });
 
     it("pre 글자가 항목 content에 붙지 않는다", () => {
@@ -233,20 +238,31 @@ describe("parseClipboardTable li 안 pre·hr 자식 블록 (Issue #351)", () => 
     });
   });
 
+  // 내용 없는 pre도 importHtml처럼 codeBlock으로 남긴다(Issue #356 Q8을 pre까지
+  // 넓혔다). 이전에는 블록을 만들지 않았다. 표 유무로 결과가 갈리지 않게 한다.
+  // 공백·줄바꿈은 코드 내용이라 그대로 둔다. pre 바로 뒤 첫 줄바꿈 하나는 HTML
+  // 파서가 지운다.
   describe("내용 없는 pre와 hr", () => {
     it.each([
-      ["빈 pre", "<ul><li>t<pre></pre></li></ul>"],
-      ["공백뿐인 pre", "<ul><li>t<pre>   </pre></li></ul>"],
-      ["줄바꿈뿐인 pre", "<ul><li>t<pre>\n\n</pre></li></ul>"],
-      ["빈 code만 든 pre", "<ul><li>t<pre><code></code></pre></li></ul>"],
-    ])("%s: 블록을 만들지 않는다", (_name, before) => {
-      expect(clipboardShapes(`${before}${TABLE}`)).toEqual([item("t")]);
-    });
+      ["빈 pre", "<ul><li>t<pre></pre></li></ul>", ""],
+      ["공백뿐인 pre", "<ul><li>t<pre>   </pre></li></ul>", "   "],
+      ["줄바꿈뿐인 pre", "<ul><li>t<pre>\n\n</pre></li></ul>", "\n"],
+      ["빈 code만 든 pre", "<ul><li>t<pre><code></code></pre></li></ul>", ""],
+    ])(
+      "%s: importHtml과 같은 자식 codeBlock이 남는다",
+      (_name, before, text) => {
+        const html = `${before}${TABLE}`;
 
-    it("pre만 든 항목이 비면 content도 비고 자식이 없다", () => {
-      expect(clipboardShapes(`<ul><li><pre></pre></li></ul>${TABLE}`)).toEqual([
-        item(""),
-      ]);
+        expect(clipboardShapes(html)).toEqual([item("t", [code(text)])]);
+        expect(clipboardShapes(html)).toEqual(importedShapes(html));
+      },
+    );
+
+    it("pre만 든 항목은 content가 비고 빈 codeBlock 자식을 가진다", () => {
+      const html = `<ul><li><pre></pre></li></ul>${TABLE}`;
+
+      expect(clipboardShapes(html)).toEqual([item("", [code("")])]);
+      expect(clipboardShapes(html)).toEqual(importedShapes(html));
     });
 
     it("hr는 항상 divider다", () => {
@@ -303,8 +319,10 @@ describe("parseClipboardTable li 안 pre·hr 자식 블록 (Issue #351)", () => 
     });
   });
 
-  describe("클립보드가 읽지 않는 pre 속성", () => {
-    it("wrap·caption·id를 읽지 않고 블록 모양은 같다", () => {
+  // Issue #356 RD-005부터 importHtml 변환기가 읽어 wrap을 싣는다. id는
+  // data-geul-block-id를 쓰고 core가 붙여넣을 때 재발급한다.
+  describe("importHtml처럼 읽는 pre 속성", () => {
+    it("wrap을 싣고 id는 data-geul-block-id를 쓴다", () => {
       const html = `<ul><li>t<pre data-geul-block-id="id1" data-geul-code-wrap="">c</pre></li></ul>${TABLE}`;
       const result = parseClipboardTable({ html });
       if (!result.ok) throw new Error("parseClipboardTable이 실패했다");
@@ -315,11 +333,15 @@ describe("parseClipboardTable li 안 pre·hr 자식 블록 (Issue #351)", () => 
       expect(withoutIds(codeBlock)).toEqual({
         type: "codeBlock",
         content: [{ text: "c" }],
+        wrap: true,
       });
+      expect(codeBlock?.id).toBe("id1");
     });
   });
 
-  describe("최상위 pre·hr는 바뀌지 않는다", () => {
+  // 목록 밖 pre·hr도 Issue #356 RD-005부터 importHtml처럼 codeBlock·divider다.
+  // 이전에는 pre가 문단 글자였고 hr는 사라졌다.
+  describe("목록 밖 pre·hr는 codeBlock·divider다", () => {
     /** 최상위 블록의 종류와 문단 글자만 남긴다. */
     const topLevel = (html: string): unknown[] => {
       const result = parseClipboardTable({ html });
@@ -331,34 +353,46 @@ describe("parseClipboardTable li 안 pre·hr 자식 블록 (Issue #351)", () => 
       );
     };
 
-    it("표 앞뒤의 pre는 codeBlock이 아니라 문단이다", () => {
-      expect(topLevel(`<pre>before</pre>${TABLE}<pre>after</pre>`)).toEqual([
-        { type: "paragraph", content: [{ text: "before" }] },
+    it("표 앞뒤의 pre는 문단이 아니라 codeBlock이다", () => {
+      const html = `<pre>before</pre>${TABLE}<pre>after</pre>`;
+
+      expect(topLevel(html)).toEqual([
+        { type: "codeBlock" },
         { type: "table" },
-        { type: "paragraph", content: [{ text: "after" }] },
+        { type: "codeBlock" },
+      ]);
+      expect(clipboardShapes(html)).toEqual([code("before"), code("after")]);
+    });
+
+    it("표 앞뒤의 hr는 divider다", () => {
+      expect(topLevel(`<hr>${TABLE}<hr>`)).toEqual([
+        { type: "divider" },
+        { type: "table" },
+        { type: "divider" },
       ]);
     });
 
-    it("표 앞뒤의 hr는 블록을 만들지 않는다", () => {
-      expect(topLevel(`<hr>${TABLE}<hr>`)).toEqual([{ type: "table" }]);
-    });
+    it("목록 밖 div 안의 pre는 codeBlock, hr는 divider다", () => {
+      const html = `<div><pre>c</pre><hr></div>${TABLE}`;
 
-    it("목록 밖 div 안의 pre는 문단이 되고 hr는 블록을 만들지 않는다", () => {
-      expect(topLevel(`<div><pre>c</pre><hr></div>${TABLE}`)).toEqual([
-        { type: "paragraph", content: [{ text: "c" }] },
+      expect(topLevel(html)).toEqual([
+        { type: "codeBlock" },
+        { type: "divider" },
         { type: "table" },
       ]);
+      expect(clipboardShapes(html)).toEqual(importedShapes(html));
     });
 
-    it("목록 안 비-li 자식 run의 pre·hr도 기존 정책이다", () => {
-      // ul 직속 비-li run은 li 자식 정책이 아니라 기존 정책을 쓴다. pre는 문단 글자, hr는 없음.
-      expect(
-        topLevel(`<ul><li>a</li><div><pre>c</pre><hr></div></ul>${TABLE}`),
-      ).toEqual([
+    it("목록 안 비-li 자식 run의 pre·hr도 codeBlock·divider다", () => {
+      const html = `<ul><li>a</li><div><pre>c</pre><hr></div></ul>${TABLE}`;
+
+      expect(topLevel(html)).toEqual([
         { type: "bulletListItem" },
-        { type: "paragraph", content: [{ text: "c" }] },
+        { type: "codeBlock" },
+        { type: "divider" },
         { type: "table" },
       ]);
+      expect(clipboardShapes(html)).toEqual(importedShapes(html));
     });
   });
 });

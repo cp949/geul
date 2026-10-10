@@ -54,9 +54,7 @@ export const htmlAllowedAttributes: Record<string, string[]> = {
     // callout(Issue #209 RD-003 DELTA-01) — div가 own-content 블록(quote의
     // blockquote와 동형)을 겸하는 첫 사례다. dataGeulCallout이 존재 마커,
     // dataGeulIcon은 "정의된 경우만"(collapsed와 동일 패턴). TextBlockProps
-    // 3종은 blockquote 항목과 같은 이름 규칙 — clipboard는 isCalloutNode를
-    // 넘기지 않아 sanitize가 속성을 보존해도 clipboard-table-parser.ts가
-    // 여전히 문단 경계로 처리한다(quote의 TextBlockProps 3종과 동일 근거).
+    // 3종은 blockquote 항목과 같은 이름 규칙이다.
     "dataGeulCallout",
     "dataGeulIcon",
     "dataGeulTextColor",
@@ -212,8 +210,8 @@ const mergeAttributes = (
 };
 
 // sanitize 스키마가 쓰는 속성 허용 목록이다: 경고 기준 + 읽기 전용 속성. 세
-// 스키마(htmlSanitizeSchema·clipboardSanitizeSchema·htmlImportSanitizeSchema)가
-// 모두 이 목록에서 파생한다.
+// 스키마(htmlSanitizeSchema·htmlImportSanitizeSchema·clipboardSanitizeSchema)가
+// 모두 이 목록에서 파생한다. 클립보드 스키마는 import 스키마를 거쳐 파생한다.
 export const sanitizeAllowedAttributes: Record<string, string[]> =
   mergeAttributes(htmlAllowedAttributes, styleReadAttributes);
 
@@ -275,11 +273,9 @@ export const htmlAllowedTagNames = [
   // 처럼 별도 타입을 만들 수는 없으므로 p처럼 문단으로만 분리한다 —
   // sanitize가 이 태그를 unwrap하면 documentFromRoot의 block-segmenter.ts
   // 재귀가 애초에 경계를 볼 수 없으므로 여기서 살려야 한다.
-  // blockquote는 문서 import에서 model quote 블록의 HTML 매핑이고(DELTA-06a,
-  // spec §7.1 — content + children 중첩), 클립보드 경로에서는 여전히 문단
-  // 경계다(clipboard-table-parser.ts가 isQuoteTag를 넘기지 않는다).
-  // clipboardAllowedTagNames가 이 다섯을 별도로 다시 얹지 않고 이 목록을
-  // 그대로 상속하는 이유이기도 하다.
+  // blockquote는 model quote 블록의 HTML 매핑이다(DELTA-06a, spec §7.1 —
+  // content + children 중첩). 클립보드도 importHtml 변환기로 읽어 같다
+  // (Issue #356 RD-005).
   "div",
   "li",
   "blockquote",
@@ -319,41 +315,11 @@ export const htmlSanitizeSchema: Schema = {
   tagNames: htmlAllowedTagNames,
 };
 
-// 클립보드 경로 전용 허용 목록. importHtml의 목록을 공유하면 role이 문제다 —
-// 문서 모델에 없는 속성인데 import 계약에 새 속성이 생긴 것처럼 보인다. 그래서
-// 클립보드에만 필요한 table의 role을 여기서만 얹는다. td·th의 style은 읽기
-// 전용 속성 집합(styleReadAttributes)으로 이미 들어 있다(Issue #334 전에는
-// 클립보드만 td style을 남겼다). 경고 기준(htmlAllowedAttributes)에는 style이
-// 없으므로 importHtml은 이전처럼 style 제거를 보고한다.
-export const clipboardAllowedAttributes: Record<string, string[]> = {
-  ...sanitizeAllowedAttributes,
-  table: [...(sanitizeAllowedAttributes.table ?? []), "role"],
-};
-
-// clipboard 경로 전용 tagNames. DELTA-03(Issue #72)에서는 h4~h6를 여기서만
-// 얹었다 — 당시 model HeadingBlock.level이 1~3이라 문서 import 공유 목록에는
-// 넣을 수 없었고, clipboard는 blockSequenceFromNodes가 h4~h6를 문단으로
-// 다운그레이드만 하므로 태그를 파서까지 살려 블록 경계로 인식시키기만 하면
-// 됐다. DELTA-06(Issue #38)이 h4~h6·hr을 공유 목록에 올려 두 목록의 내용이
-// 같아졌지만 이름은 따로 둔다 — 두 경로의 허용 목록이 같아야 한다는 계약은
-// 없고(clipboardStrippedTagNames가 이미 갈라져 있다) clipboardSanitizeSchema
-// 가 어느 목록을 쓰는지 드러나야 한다. hr은 clipboard 최상위 정책
-// (clipboard-table-parser.ts)이 divider 세그먼트로 인식하지 않아 pending
-// 인라인 노드로 지나가며 텍스트를 내지 않는다 — 최상위 hr 처리는 슬라이스 10
-// 소관이다. li 안 hr은 li 자식용 정책이 divider로 읽는다(Issue #351).
-export const clipboardAllowedTagNames = [...htmlAllowedTagNames];
-
 // <title>은 소스 문서 head의 메타데이터지 사용자가 선택한 본문이 아니다.
 // tagNames에도 strip에도 없으면 sanitize가 태그만 벗기고(unwrap) 그 텍스트를
-// fragment 최상위로 끌어올리는데, 그러면 clipboard-table-parser의 혼합 콘텐츠
-// 판정(spec §4.1)이 이를 "표 밖 실질 텍스트"로 보고 스프레드시트 표
-// 붙여넣기를 통째로 막는다 — sawTable 때문에 TSV 짝으로도 폴백하지 못한다.
-// 문서 import 경로는 import-warnings 계약이 걸려 있어 목록을 공유하지 않는다.
+// fragment 최상위로 끌어올린다. 그러면 스프레드시트 표 붙여넣기에 시트 이름
+// 문단이 표 앞에 붙는다. 그래서 클립보드는 title을 글자째 지운다.
+// 클립보드 sanitize 스키마(clipboard-sanitize-schema.ts)와 parse-html.ts의
+// 깊이-캡 평탄화가 이 목록을 쓴다. 문서 import 경로는 import-warnings 계약이
+// 걸려 있어 목록을 공유하지 않는다.
 export const clipboardStrippedTagNames = [...htmlStrippedTagNames, "title"];
-
-export const clipboardSanitizeSchema: Schema = {
-  ...htmlSanitizeSchema,
-  attributes: clipboardAllowedAttributes,
-  strip: clipboardStrippedTagNames,
-  tagNames: clipboardAllowedTagNames,
-};

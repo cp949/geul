@@ -6,14 +6,12 @@ import type {
 import { htmlElement } from "./inline-content.js";
 import { tableNonSectionChildren } from "./table-layout.js";
 
-// import-html.ts(documentFromRoot)와 clipboard-table-parser.ts
-// (blockSequenceFromNodes)가 각자 재구현하던 "HAST 노드 시퀀스를 문단/헤딩/
-// 구분선/표 경계로 쪼개는" 재귀 알고리즘을 여기 하나로 모은다(아키텍처
-// 리뷰 2차 후보 G). 두 소비자는 경계 태그 집합과 표 판정만 다르고 재귀
-// 구조 자체는 동일했다 — import-html.ts는 애초에 이 재귀가 없어(최상위
-// 노드만 훑는 평면 루프) div/li/blockquote/ul/ol처럼 중첩 가능한 경계를
-// 인식하지 못했고, 그 결과가 Issue #113과 같은 종류의 병합 버그였다
-// (clipboard 경로는 #113으로 이미 고쳐졌지만 import 경로는 반영되지 않았다).
+// "HAST 노드 시퀀스를 문단/헤딩/구분선/표 경계로 쪼개는" 재귀 알고리즘이다
+// (아키텍처 리뷰 2차 후보 G). 예전에는 import-html.ts와 클립보드 파서가 각자
+// 재구현했다. 지금 생산 소비자는 importHtml 변환기(import-html-blocks.ts)
+// 하나다. 클립보드 파서도 표 옆 블록을 그 변환기로 읽는다(Issue #356 RD-005).
+// 정책의 선택 필드 일부(isListTag, omitStructuralAncestors 끔)는 생산 소비자가
+// 쓰지 않고 이 모듈의 테스트만 쓴다.
 //
 // 이 모듈은 의도적으로 "판정"만 하고 "해석"은 하지 않는다 — 각 세그먼트의
 // 텍스트 정규화(공백 접기 여부), 실질 텍스트 판정, id 발급, 표 셀 파싱은
@@ -24,8 +22,8 @@ import { tableNonSectionChildren } from "./table-layout.js";
 // Level은 정책(headingLevelFromTagName)이 인식하는 heading 레벨의 타입이다.
 // 세그먼트는 정책이 준 값을 그대로 싣기만 하므로 타입도 그대로 흘려보낸다
 // — import-html.ts는 model HeadingBlock["level"]을 넘겨 세그먼트에서 캐스트
-// 없이 좁혀진 level을 받고(DELTA-06), clipboard-table-parser.ts와 테스트의
-// number 정책은 기본값 그대로다.
+// 없이 좁혀진 level을 받고(DELTA-06), 테스트의 number 정책은 기본값
+// 그대로다.
 export type BlockSegment<
   Level extends number = number,
   IncludeCodeBlock extends boolean = false,
@@ -39,8 +37,6 @@ export type BlockSegment<
   // 요소의 style 색·서식을 읽는 자리다. 래퍼 div(블록 자식 있음)와 ul·ol·table·
   // li·blockquote는 싣지 않는다 — 래퍼의 색은 소스 앱의 테마 색이라 문단에
   // 따라오면 안 된다.
-  // clipboard-table-parser.ts도 div의 origin을 읽는다(Issue #344). 클립보드 정책의
-  // 문단 경계는 div·li·blockquote뿐이라 origin은 div만 온다.
   | { kind: "paragraph"; nodes: HtmlElementContent[]; origin?: HtmlElementNode }
   // p 자신의 본문(wholesale 교체, 재귀하지 않음). node를 함께 주는 이유는
   // dataGeulBlockId 같은 그 요소 자신의 속성을 호출자가 읽어야 해서다 —
@@ -72,8 +68,8 @@ export type BlockSegment<
   // 않는다. 안쪽을 어떻게 나눌지(D6: 첫 <p>를 content로 승격, 나머지를
   // children으로 재귀)는 호출자 몫이라 원본 요소만 준다 — 여기서 재귀하면
   // children이 pending에 섞여 quote 경계가 사라진다. isQuoteTag를 넘긴
-  // 정책에서만 나온다 — 넘기지 않으면(clipboard) blockquote는 예전처럼
-  // isNestedBoundary(NESTED_BOUNDARY_TAG_NAMES)의 문단 경계로 남는다.
+  // 정책에서만 나온다 — 넘기지 않으면 blockquote는 isNestedBoundary
+  // (NESTED_BOUNDARY_TAG_NAMES)의 문단 경계로 남는다.
   | { kind: "blockquote"; node: HtmlElementNode }
   // ul/ol 태그 자신(DELTA-01, Issue #143 (b)) — blockquote와 같은 이유로
   // 재귀하지 않는다: 마커 타입(bulletListItem/numberedListItem)·중첩
@@ -81,14 +77,13 @@ export type BlockSegment<
   // 자식 전까지를 content로 승격, 그 지점부터는 children으로 재귀)은
   // 호출자 몫이라 원본 요소만 준다 — 여기서 재귀하면 li 경계가 pending에
   // 섞여 사라진다. isListTag를 넘긴 정책에서만 나온다 — 넘기지 않으면
-  // (import-html.ts) ul/ol은 예전처럼 isTransparent의 순수 wrapper로
-  // 남는다(문서 import의 리스트 매핑은 blocksFromListElement가 이미
-  // 따로 담당).
+  // (import-html.ts) ul/ol은 isTransparent의 순수 wrapper로 남는다(문서
+  // import의 리스트 매핑은 blocksFromListElement가 따로 담당). 지금 isListTag를
+  // 넘기는 생산 소비자는 없다(옛 클립보드 파서가 썼다).
   | { kind: "list"; node: HtmlElementNode }
-  // pre를 CodeBlock으로 해석할지는 document import policy와 clipboard의
-  // li 자식용 policy만 opt-in한다(Issue #351). 원본 sanitized 요소를 그대로
-  // 넘겨 source·metadata 선택은 호출자가 담당한다. clipboard 최상위 policy에서는
-  // 이 variant가 나오지 않는다.
+  // pre를 CodeBlock으로 해석할지는 policy가 opt-in한다(isCodeBlockTag).
+  // 원본 sanitized 요소를 그대로 넘겨 source·metadata 선택은 호출자가
+  // 담당한다.
   | (IncludeCodeBlock extends true
       ? { kind: "codeBlock"; node: HtmlElementNode }
       : never)
@@ -110,17 +105,16 @@ export type BlockSegment<
   // media인지)은 노드 전체를 봐야 하므로(RD-001.md "결정" — <a>는 일반
   // link mark의 보편적 캐리어라 태그명만으로는 판정할 수 없다) isMediaNode를
   // isDividerTag류(태그명만)가 아니라 isTableNode류(노드 전체) 시그니처로
-  // 둔다. isMediaNode를 넘기지 않는 소비자(clipboard-table-parser.ts)에서는
-  // 이 kind가 런타임에 나오지 않는다 — 다만 union 자체는 hr/blockquote/list와
-  // 같이 무조건 포함이라 그 소비자도 dead-branch를 명시해야 한다(그 파일의
-  // 주석 참고).
+  // 둔다. isMediaNode를 넘기지 않는 정책에서는 이 kind가 런타임에 나오지
+  // 않는다 — 다만 union 자체는 hr/blockquote/list와 같이 무조건 포함이라
+  // 소비자는 dead-branch를 명시해야 한다.
   | { kind: "media"; node: HtmlElementNode }
   // callout(Issue #209 RD-003 DELTA-01) — blockquote와 같은 이유로 안쪽을
   // 재귀하지 않는다(D6 분할은 호출자가 splitQuoteChildren 재사용으로 한다).
   // div가 own-content 블록을 겸하는 첫 사례라 isMediaNode와 같은 노드 전체
   // 검사 시그니처(isCalloutNode)를 쓴다. isCalloutNode를 넘기지 않는
-  // 소비자(clipboard-table-parser.ts)에서는 이 kind가 런타임에 나오지
-  // 않지만 union 자체는 무조건 포함이라 dead-branch를 명시해야 한다.
+  // 정책에서는 이 kind가 런타임에 나오지 않지만 union 자체는 무조건 포함이라
+  // dead-branch를 명시해야 한다.
   | { kind: "callout"; node: HtmlElementNode };
 
 export type BlockSegmentPolicy<
@@ -132,33 +126,29 @@ export type BlockSegmentPolicy<
   isSimpleBoundary: (tagName: string) => boolean;
   // heading 레벨을 인식한다. 반환값이 있으면 경계로 취급하고
   // {kind:"heading"} 세그먼트를 낸다 — 그 레벨을 실제 heading으로 쓸지
-  // 문단으로 다운그레이드할지는 호출자가 정한다(import·clipboard 둘 다
-  // h1~h6 전부 heading으로 쓴다 — DELTA-08, Issue #38 슬라이스 3 이후로
-  // clipboard의 h4~h6 다운그레이드는 없다).
+  // 문단으로 다운그레이드할지는 호출자가 정한다(importHtml 변환기는 h1~h6
+  // 전부 heading으로 쓴다 — DELTA-08, Issue #38 슬라이스 3).
   headingLevelFromTagName: (tagName: string) => Level | undefined;
   // hr처럼 콘텐츠 없이 그 자체가 블록(model divider)인 태그 판정. 선택적이다
-  // — 넘기지 않는 소비자(clipboard-table-parser.ts)에서는 hr이 예전처럼
-  // 경계가 아닌 일반 요소로 pending에 들어가 텍스트 없이 지나간다(클립보드
-  // 최상위 계약 불변 — 최상위 hr 처리는 슬라이스 10 소관). clipboard의 li
-  // 자식용 policy는 이 판정을 넘긴다(Issue #351).
+  // — 넘기지 않는 정책에서는 hr이 경계가 아닌 일반 요소로 pending에 들어가
+  // 텍스트 없이 지나간다.
   isDividerTag?: (tagName: string) => boolean;
   // blockquote처럼 그 자체가 블록(model quote)이면서 안쪽 해석을 호출자가
-  // 맡는 태그 판정. 선택적이다 — 넘기지 않는 소비자(clipboard-table-parser.ts)
-  // 에서는 blockquote가 isNestedBoundary 쪽으로 떨어져 예전처럼 문단
-  // 경계다(클립보드 계약 불변 — clipboard의 blockquote 매핑은 슬라이스 10
-  // 소관). isNestedBoundary보다 먼저 판정한다 — 같은 태그가 두 집합에 있을
-  // 때 세그먼트 승격이 이긴다.
+  // 맡는 태그 판정. 선택적이다 — 넘기지 않는 정책에서는 blockquote가
+  // isNestedBoundary 쪽으로 떨어져 문단 경계다. isNestedBoundary보다 먼저
+  // 판정한다 — 같은 태그가 두 집합에 있을 때 세그먼트 승격이 이긴다.
   isQuoteTag?: (tagName: string) => boolean;
   // ul/ol처럼 그 자체가 블록(목록)이면서 안쪽 해석(li 분할, 마커·순서·중첩)을
   // 호출자가 맡는 태그 판정. 선택적이다 — 넘기지 않는 소비자(import-html.ts)
   // 에서는 ul/ol이 isTransparent 쪽으로 떨어져 예전처럼 순수 wrapper고 li만
   // 경계다(문서 import 계약 불변 — 리스트 매핑은 blocksFromListElement
   // 소관). isNestedBoundary·isTransparent보다 먼저 판정한다 — 같은 태그가
-  // 두 집합에 있을 때 세그먼트 승격이 이긴다(isQuoteTag와 동일 원칙).
+  // 두 집합에 있을 때 세그먼트 승격이 이긴다(isQuoteTag와 동일 원칙). 지금
+  // 이 판정을 넘기는 생산 소비자는 없다(옛 클립보드 파서가 썼다).
   isListTag?: (tagName: string) => boolean;
   // pre처럼 마크·일반 인라인 해석을 바이패스하고 리프 블록으로
-  // 유지할 태그. document import와 clipboard의 li 자식용 policy만 넘긴다
-  // (Issue #351). clipboard 최상위 policy는 opt-in하지 않는다.
+  // 유지할 태그(isCodeBlockTag, 아래 교차 타입). document import policy가
+  // 넘긴다(Issue #351).
   // div/li/blockquote처럼 "경계를 만나면 flush하고, 안쪽을 재귀 탐색해
   // 더 깊은 경계를 개별 인식시킨 뒤 다시 flush한다"태그. 표 유무와
   // 무관하게 항상 재귀한다 — 임의 깊이의 중첩 경계를 전부 잡아야 하기
@@ -172,17 +162,18 @@ export type BlockSegmentPolicy<
   // blockquote·li·callout의 텍스트 leaf가 그 요소의 복제로 감싸지고, 호출자의
   // content/children 분할이 복제를 블록으로 보아 content가 빈다
   // (`<figure><blockquote>q</blockquote></figure>`, Issue #323). document
-  // import만 켠다. clipboard는 이 옵션을 켜지 않고 체인에 이 요소를 유지한다.
+  // import policy가 켠다. 클립보드도 같은 변환기로 읽어 켠 상태다.
   // 이 옵션과 무관하게 quote·list·callout 세그먼트의 leaf 복제에서는 항상 이
   // 요소를 뺀다(Issue #344, #350).
   omitStructuralAncestors?: boolean;
-  // 표로 취급할 노드 판정. import는 단순 태그명 검사, clipboard는
+  // 표로 취급할 노드 판정. importHtml은 단순 태그명 검사, 클립보드는
   // findDataTables가 미리 고른 표 집합의 멤버십 검사처럼 호출자마다
-  // 다르다 — 표 탐지 알고리즘 자체는 이 모듈이 아니라 호출자가 소유한다.
+  // 다르다(HtmlTableSeam, import-html-blocks.ts) — 표 탐지 알고리즘 자체는
+  // 이 모듈이 아니라 호출자가 소유한다.
   isTableNode: (node: HtmlElementNode) => boolean;
   // 4종 미디어 블록(file/image/video/audio) 태그 자신 판정(RD-001-DELTA-02).
-  // 선택적이다 — 넘기지 않는 소비자(clipboard-table-parser.ts)에서는 이
-  // kind가 나오지 않는다. isTableNode와 같은 노드 전체 검사 시그니처를
+  // 선택적이다 — 넘기지 않는 정책에서는 이 kind가 나오지 않는다.
+  // isTableNode와 같은 노드 전체 검사 시그니처를
   // 쓴다 — own-format <a>/<div>(마커 속성 존재)와 일반 <a>/<div>를
   // 구분하려면 태그명만으로는 부족하다(위 BlockSegment의 media variant
   // 주석 참고).
@@ -190,16 +181,13 @@ export type BlockSegmentPolicy<
   // 코드블록 caption(RD-002-DELTA-03)의 <figure><pre>…</pre>
   // <figcaption>…</figcaption></figure> 래핑 판별. isMediaNode와 같은 이유로
   // (figure가 여러 의미를 겸하는 태그라) 태그명만으로는 판정할 수 없어 노드
-  // 전체 검사 시그니처를 쓴다. 선택적이다 — 넘기지 않는 소비자
-  // (clipboard-table-parser.ts)에서는 figure로 만든 codeBlock kind가 나오지
-  // 않고, figure는 isMediaNode 판정만 받는다(media 마커가 없으면 그대로 문단
-  // 경계다). pre 자신의 codeBlock kind는 클립보드 li 자식 정책에서 나온다
-  // (Issue #351).
+  // 전체 검사 시그니처를 쓴다. 선택적이다 — 넘기지 않는 정책에서는 figure로
+  // 만든 codeBlock kind가 나오지 않고, figure는 isMediaNode 판정만 받는다.
   isCodeBlockFigureNode?: (node: HtmlElementNode) => boolean;
   // callout(Issue #209 RD-003 DELTA-01) 태그 자신 판정 — isMediaNode와 같은
   // 이유(div가 own-content 블록을 겸해 태그명만으로 판정 불가)로 노드 전체
-  // 검사 시그니처를 쓴다. 선택적이다 — 넘기지 않는 소비자
-  // (clipboard-table-parser.ts)에서는 이 kind가 나오지 않는다.
+  // 검사 시그니처를 쓴다. 선택적이다 — 넘기지 않는 정책에서는 이 kind가
+  // 나오지 않는다.
   isCalloutNode?: (node: HtmlElementNode) => boolean;
 } & (IncludeCodeBlock extends true
   ? { isCodeBlockTag: (tagName: string) => boolean }
@@ -227,12 +215,12 @@ const wrapInAncestors = (
 // 블록 구조가 숨으므로, 구조는 유지하고 각 텍스트 leaf에만 조상 체인을
 // 복원한다. isTableNode에 걸리는 노드는 재귀하지 않고 원본 참조를 그대로
 // 돌려준다 — walk() 자신이 표를 항상 policy.isTableNode로 먼저 걸러 원본
-// 노드를 세그먼트에 넣듯(233행), 여기서 새 복제본을 만들면
-// clipboard-table-parser.ts의 tableSet(node identity 멤버십) 판정이 깨져
-// li 안 중첩 표가 표로 인식되지 않고 인라인 텍스트로 뭉개진다(DELTA-01
-// 구현 중 RED로 실측). 표 내부는 어차피 조상 마크를 적용하지 않는다 —
+// 노드를 세그먼트에 넣듯, 여기서 새 복제본을 만들면 클립보드 표 seam의
+// node identity 멤버십 판정(clipboard-table-parser.ts)이 깨져 li·quote 안
+// 중첩 표가 표로 인식되지 않고 인라인 텍스트로 뭉개진다(DELTA-01 구현 중
+// RED로 실측). 표 내부는 어차피 조상 마크를 적용하지 않는다 —
 // walk의 kind: "table" 분기도 표 노드 자체는 wrapInAncestors 없이 그대로
-// 세그먼트에 넣는다(240행). 이 미상속은 공식 계약이다 — 세 진입 경로
+// 세그먼트에 넣는다. 이 미상속은 공식 계약이다 — 세 진입 경로
 // (top-level 직접 중첩·blockquote·list) 전부 동일함을 확정한 근거는
 // docs/adr/0014-table-content-ignores-ancestor-marks.md 참고.
 const wrapTextDescendantsInAncestors = (
@@ -271,7 +259,7 @@ const wrapTextDescendantsInAncestors = (
 // 문단의 origin이 될 수 있는 태그다(Issue #342). 정책이 문단 경계로 다루는
 // 요소 중 style 색·서식을 문단이 이어받는 것들이다. flush(origin) 판정에만
 // 쓴다. leaf 복제에서 뺄 조상은 정책의 구조 조상 판정이 정한다. summary·
-// figcaption은 import 정책만 문단 경계로 쓰므로 클립보드 경로에는 영향이 없다.
+// figcaption은 import 정책이 문단 경계로 쓴다.
 const paragraphOriginTagNames: ReadonlySet<string> = new Set([
   "div",
   "summary",
@@ -307,7 +295,7 @@ export function segmentBlocks<Level extends number = number>(
   // 안쪽에 소비자가 인식하는 블록이 있으면 재귀해 그 경계를 보존해야 한다.
   // 표만 찾으면 h1~h6·blockquote·hr가 조상 인라인 요소와 함께 pending에
   // 흡수돼 문단으로 강등되거나(hr) 완전히 사라진다. 정책 판정을 그대로
-  // 사용해 document import와 clipboard가 각자 허용한 경계만 탐지한다.
+  // 사용해 정책이 허용한 경계만 탐지한다.
   const containsAnyBlockBoundary = (list: readonly HtmlNode[]): boolean => {
     for (const node of list) {
       if (node.type !== "element") continue;
@@ -399,8 +387,8 @@ export function segmentBlocks<Level extends number = number>(
         continue;
       }
       // ul/ol도 안쪽을 통째로 호출자에 넘긴다 — li 분할(content/children)과
-      // 마커·순서·중첩 보존은 list-block-builder.ts+clipboard-table-parser.ts
-      // 몫이다. 아래 isNestedBoundary·isTransparent 분기보다 먼저 와야
+      // 마커·순서·중첩 보존은 호출자 몫이다. 아래 isNestedBoundary·
+      // isTransparent 분기보다 먼저 와야
       // 정책이 있는 소비자에서 ul/ol이 순수 wrapper로 풀리지 않는다.
       if (policy.isListTag?.(node.tagName) === true) {
         flush();
@@ -431,9 +419,7 @@ export function segmentBlocks<Level extends number = number>(
       // 코드블록 caption figure(RD-002-DELTA-03) — hr/quote/list/media와 같은
       // 이유로 안쪽(pre+figcaption)을 재귀하지 않는다. 디코드는
       // import-html-blocks.ts가 segment.node를 직접 들여다봐서 한다 — bare
-      // pre와 같은 "codeBlock" kind를 재사용한다(새 kind를 추가하면
-      // clipboard-table-parser.ts의 exhaustiveness도 건드려야 하지만, 그
-      // 소비자는 isCodeBlockFigureNode를 넘기지 않아 이 분기가 나오지 않는다).
+      // pre와 같은 "codeBlock" kind를 재사용한다.
       if (policy.isCodeBlockFigureNode?.(node) === true) {
         flush();
         segments.push({ kind: "codeBlock", node });
@@ -542,24 +528,17 @@ export function segmentBlocks<Level extends number = number>(
 // div/li는 model에 리스트 전용 Block 타입이 없어 heading처럼 별도 타입을
 // 만들 수 없으므로 문단으로만 분리한다(Issue #113, #72). blockquote는 model
 // quote가 생겼지만(DELTA-06a) 이 집합에 그대로 둔다 — isQuoteTag를 넘기는
-// import-html.ts에서는 위 walk가 isNestedBoundary보다 먼저 세그먼트로
-// 승격해 이 집합의 blockquote 항목에 도달하지 않고, 넘기지 않는
-// clipboard-table-parser.ts에서는 예전 그대로 문단 경계다.
-// import-html.ts와 clipboard-table-parser.ts가 정확히 같은 집합을 쓴다 —
-// 문단 경계 태그 집합을 공유하기로 한 그릴링 결정(2차 리뷰 후보 G, Q2).
+// 정책에서는 위 walk가 isNestedBoundary보다 먼저 세그먼트로 승격해 이
+// 집합의 blockquote 항목에 도달하지 않고, 넘기지 않는 정책에서는 문단
+// 경계다. import 정책과 경고 수집기(import-warnings.ts)가 이 집합을 쓴다.
 export const NESTED_BOUNDARY_TAG_NAMES = new Set(["div", "li", "blockquote"]);
 
-// ul/ol 태그 판정 자체는 하나만 있으면 된다 — 두 소비자가 이 판정을 서로
-// 다른 정책 필드에 꽂아 쓴다(DELTA-01, Issue #143 (b)). import-html.ts는
-// isTransparent에 꽂아 예전 그대로 ul/ol을 순수 wrapper로 재귀하고 li만
-// 경계로 본다(리스트 매핑은 blocksFromListElement가 이미 따로 담당).
-// clipboard-table-parser.ts는 isListTag에 꽂아 ul/ol 자신을 kind: "list"
-// 리프로 접는다 — 마커 타입(bulletListItem/numberedListItem)·중첩 계층·
-// 명시적 startNumber 보존은 list-block-builder.ts+clipboard-table-parser.ts가
-// 담당하고, segmentBlocks 자신은 여전히 문단/헤딩/표/quote와 동일한 원칙으로
-// 순수 경계 판정만 한다(해석은 하지 않는다).
+// ul/ol 태그 판정이다(DELTA-01, Issue #143 (b)). import 정책은 isTransparent에
+// 꽂아 ul/ol을 순수 wrapper로 재귀하고 li만 경계로 본다(리스트 매핑은
+// blocksFromListElement가 따로 담당). isListTag에 꽂으면 ul/ol 자신을
+// kind: "list" 리프로 접는다 — 지금은 이 모듈의 테스트만 그렇게 쓴다.
 export const isTransparentListTag = (tagName: string): boolean =>
   tagName === "ul" || tagName === "ol";
 
-// p는 두 소비자가 동일하게 "경계지만 재귀하지 않는" 태그로 취급한다.
+// p는 "경계지만 재귀하지 않는" 태그다.
 export const isParagraphTag = (tagName: string): boolean => tagName === "p";

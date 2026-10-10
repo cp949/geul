@@ -1,7 +1,8 @@
 /**
  * 클립보드 HTML 혼합 콘텐츠에서 어떤 태그가 문단/표 경계로 인식되는지
  * 검증한다 — heading(h1~h6, DELTA-03/Issue #72)과 div/li/blockquote,
- * ul/ol wrapper(Issue #113)가 이 파일의 관심사다. 표 앞뒤 문단 시퀀싱,
+ * ul/ol wrapper(Issue #113)가 이 파일의 관심사다. blockquote는 Issue #356
+ * RD-005부터 importHtml처럼 quote 블록이다. 표 앞뒤 문단 시퀀싱,
  * 레이아웃 표 래퍼, 마크 보존 등 나머지 혼합 콘텐츠 케이스는
  * `clipboard-mixed-content.test.ts`가 다룬다(원래 그 파일 하나였는데 20개를
  * 넘겨 관심사 단위로 나눴다 — 순수 이동, Issue #113).
@@ -44,8 +45,8 @@ const TABLE_BLOCK: ClipboardContentBlock = {
 };
 
 describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
-  // DELTA-03(Issue #72): blockSequenceFromNodes가 h1~h3를 heading 블록
-  // 경계로 인식한다. Issue #37 재발 방지 — toContainText 등 부분 문자열
+  // DELTA-03(Issue #72): 클립보드 파서가 h1~h3를 heading 블록 경계로
+  // 인식한다(Issue #356 RD-005부터 importHtml 변환기가 읽는다). Issue #37 재발 방지 — toContainText 등 부분 문자열
   // 단언은 인접 블록 병합을 감춘다(spec §4.1 '정정(2026-08-21 리뷰)').
   // 배열 전체를 toEqual로 단언해 3원소(heading×2 + table)를 고정한다.
   it("h1~h3 heading과 표가 섞이면 각각 정확히 분리된다", () => {
@@ -95,8 +96,8 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     }
   });
 
-  // heading 텍스트도 셀 텍스트와 같은 정규화(collapseHtmlWhitespace +
-  // normalizeCellContent)를 거쳐야 한다 — 누락되면 model의
+  // heading 텍스트도 공백 접기(importHtml 변환기의 collapseSourceWhitespace)와
+  // 무효 코드포인트 제거를 거쳐야 한다 — 누락되면 model의
   // isValidInlineText가 거절하는 코드포인트가 남아 readEditorDocument에서
   // throw된다(editor 영구 desync).
   it("heading 텍스트도 셀과 같은 공백·제어문자 정규화를 거친다", () => {
@@ -167,9 +168,8 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
   // 완료 조건 1(Issue #113, 발단 #72): div도 p/heading과 같은 문단 경계다
   // — 인접한 div끼리 구분자 없이 병합되지 않는다. 수정 전에는 div가
-  // clipboardAllowedTagNames에 없어 sanitize가 unwrap하고,
-  // blockSequenceFromNodes가 남은 텍스트를 전부 하나의 pending으로
-  // 흡수해 {p:"ab"} 하나로 뭉쳤다(이슈 실측 케이스).
+  // 클립보드 허용 태그에 없어 sanitize가 unwrap하고, 남은 텍스트가 전부
+  // 하나의 pending으로 흡수돼 {p:"ab"} 하나로 뭉쳤다(이슈 실측 케이스).
   it("연속된 div는 각각 독립된 문단으로 분리된다", () => {
     const result = parseClipboardTable({
       html: `<div>a</div><div>b</div>${TABLE}`,
@@ -219,8 +219,8 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
   // 완료 조건 2(Issue #143 (b), DELTA-01): ol[start]는 sanitize 단계에서
   // 소실되지 않고 첫 li의 numberedListItem.startNumber로 보존된다 —
-  // 로컬 sanitize schema 확장(clipboardListSanitizeSchema) 없이는 start가
-  // 제거돼 startNumber가 항상 undefined다.
+  // 클립보드 sanitize schema(clipboard-sanitize-schema.ts)가 ol[start]를
+  // 남기지 않으면 start가 제거돼 startNumber가 항상 undefined다.
   it("ol[start]는 첫 li의 startNumber로 보존된다", () => {
     const result = parseClipboardTable({
       html: `${TABLE}<ol start="3"><li>x</li></ol>`,
@@ -234,9 +234,10 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     ]);
   });
 
-  // 완료 조건 3(Issue #113): blockquote도 문단 경계다 — 인접한 p/div와
-  // 구분자 없이 병합되지 않고 독립된 문단으로 분리된다.
-  it("blockquote는 독립된 문단으로 분리되고 인접 p·div와 병합되지 않는다", () => {
+  // 완료 조건 3(Issue #113): blockquote도 블록 경계다 — 인접한 p/div와
+  // 구분자 없이 병합되지 않는다. Issue #356 RD-005부터 importHtml처럼 quote
+  // 블록이 된다(이전에는 문단이었다).
+  it("blockquote는 독립된 quote로 분리되고 인접 p·div와 병합되지 않는다", () => {
     const result = parseClipboardTable({
       html: `<p>x</p><blockquote>y</blockquote><div>z</div>${TABLE}`,
     });
@@ -245,7 +246,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     if (!result.ok) return;
     expect(withoutIds(result.value)).toEqual([
       { type: "paragraph", content: [{ text: "x" }] },
-      { type: "paragraph", content: [{ text: "y" }] },
+      { type: "quote", content: [{ text: "y" }] },
       { type: "paragraph", content: [{ text: "z" }] },
       TABLE_BLOCK,
     ]);
@@ -258,32 +259,44 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   // 취급을 접고 통과해 내려가 표 구조(셀 경계)를 보존한다. li 케이스는
   // 아래 별도 테스트로 분리했다 — DELTA-01(Issue #143 (b))부터 li는
   // 더 이상 문단 경계가 아니라 bulletListItem/numberedListItem의
-  // children으로 담긴다.
-  it("div/blockquote 안에 중첩된 표는 뭉개지지 않고 표 블록으로 보존된다", () => {
-    const cases = [
-      { label: "div", html: `<div>intro${TABLE}outro</div>` },
-      {
-        label: "blockquote",
-        html: `<blockquote>intro${TABLE}outro</blockquote>`,
-      },
-    ];
+  // children으로 담긴다. blockquote도 Issue #356 RD-005부터 quote가 되고
+  // 표는 그 children에 담긴다(importHtml과 같다).
+  it("div 안에 중첩된 표는 뭉개지지 않고 표 블록으로 보존된다", () => {
+    const result = parseClipboardTable({
+      html: `<div>intro${TABLE}outro</div>`,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(withoutIds(result.value)).toEqual([
+      { type: "paragraph", content: [{ text: "intro" }] },
+      TABLE_BLOCK,
+      { type: "paragraph", content: [{ text: "outro" }] },
+    ]);
+  });
 
-    for (const { label, html } of cases) {
-      const result = parseClipboardTable({ html });
-      expect(result.ok, label).toBe(true);
-      if (!result.ok) continue;
-      expect(withoutIds(result.value), label).toEqual([
-        { type: "paragraph", content: [{ text: "intro" }] },
-        TABLE_BLOCK,
-        { type: "paragraph", content: [{ text: "outro" }] },
-      ]);
-    }
+  it("blockquote 안에 중첩된 표는 quote의 children 표 블록으로 보존된다", () => {
+    const result = parseClipboardTable({
+      html: `<blockquote>intro${TABLE}outro</blockquote>`,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(withoutIds(result.value)).toEqual([
+      {
+        type: "quote",
+        content: [{ text: "intro" }],
+        children: [
+          TABLE_BLOCK,
+          { type: "paragraph", content: [{ text: "outro" }] },
+        ],
+      },
+    ]);
   });
 
   // 완료 조건 3(Issue #143 (b), DELTA-01): li 안에 중첩된 표는
-  // splitListItemChildren의 block-level 판정(isTableNode 포함)이 표를
-  // children으로 보존한다 — 인라인 텍스트로 뭉개지지도, div/blockquote
-  // 처럼 별도 paragraph 블록으로 흩어지지도 않는다. 첫 실질 자식이
+  // importHtml 변환기의 splitListItemChildren(import-html-wrappers.ts)
+  // block-level 판정(표 seam의 isTableNode 포함)이 표를
+  // children으로 보존한다 — 인라인 텍스트로 뭉개지지도, div처럼 별도
+  // paragraph 블록으로 흩어지지도 않는다. 첫 실질 자식이
   // 텍스트("intro")라 그 텍스트가 content로 승격되고, 표부터 끝까지가
   // children이다.
   it("li 안에 중첩된 표는 뭉개지지 않고 bulletListItem의 children으로 보존된다", () => {
@@ -306,10 +319,10 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
   });
 
   // 완료 조건 1(Issue #143 (b), DELTA-01): 중첩 li(리스트 안 리스트)도
-  // splitListItemChildren이 첫 block-level 자식(중첩 ul) 전까지를
-  // content로, 그 지점부터를 children으로 나누고, children은
-  // blocksFromNodeList로 재귀해 중첩 목록도 bulletListItem 트리로
-  // 보존한다 — 순서(one → nested → two)도 문서 순서 그대로 유지된다.
+  // importHtml 변환기의 splitListItemChildren(import-html-wrappers.ts)이
+  // 첫 block-level 자식(중첩 ul) 전까지를
+  // content로, 그 지점부터를 children으로 나누고, children은 다시
+  // 블록으로 재귀해 중첩 목록도 bulletListItem 트리로 보존한다 — 순서(one → nested → two)도 문서 순서 그대로 유지된다.
   it("중첩된 li도 각각 독립된 bulletListItem으로 분리되고 순서가 보존된다", () => {
     const result = parseClipboardTable({
       html: `<ul><li>one<ul><li>nested</li></ul></li><li>two</li></ul>${TABLE}`,

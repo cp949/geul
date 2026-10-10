@@ -1,7 +1,8 @@
-// document-import(importHtml) 전용 sanitize schema를 담는다. clipboard와
-// 공유하는 htmlSanitizeSchema(sanitize-schema.ts)를 얕은 복사해 details/
-// summary/img/figure/figcaption/video/audio 등 document-import 전용 태그·
-// 속성만 이 파일에서 추가로 허용한다.
+// document-import(importHtml) sanitize schema를 담는다. 공유
+// htmlSanitizeSchema(sanitize-schema.ts)를 얕은 복사해 details/summary/img/
+// figure/figcaption/video/audio 등 importHtml 변환기가 읽는 태그·속성을
+// 이 파일에서 추가로 허용한다. 클립보드 schema(clipboard-sanitize-schema.ts)도
+// 이 schema를 바탕으로 한다 — 표 옆 블록을 같은 변환기로 읽어서다.
 import {
   htmlAllowedAttributes,
   htmlAllowedTagNames,
@@ -35,22 +36,15 @@ const mediaDataAttributeNames = [
 
 // 목록 import가 의미로 소비하는 속성을 sanitizer의 document-import 전용
 // schema에 추가한다. raw HAST를 다시 읽지 않고 li ID와 ol start도 sanitized
-// HAST에서만 읽기 위한 경계다. 공유 schema 객체는 clipboard 소비자가 함께
-// 쓰므로 변경하지 않고 이 importer에서만 얕은 복사한다.
+// HAST에서만 읽기 위한 경계다. 공유 schema 객체는 경고 기준과 함께 쓰므로
+// 변경하지 않고 이 importer에서만 얕은 복사한다.
 export const htmlImportSanitizeSchema = {
   ...htmlSanitizeSchema,
-  // details/summary는 document-import 전용이다(RD-005-DELTA-01) — 공유
-  // htmlAllowedTagNames(clipboard와 공유)에는 올리지 않는다. tagNames를
-  // override하는 첫 사례라 li/ol의 attributes-only override와 다르다.
-  // img/figure/figcaption/video/audio(RD-001-DELTA-02)도 같은 이유로
-  // document-import 전용이다 — 공유 목록에 올리면 clipboardAllowedTagNames
-  // (= [...htmlAllowedTagNames])가 그대로 상속해 clipboard 붙여넣기
-  // sanitize도 이 태그를 보존하게 되는데, clipboard-table-parser.ts는
-  // isMediaNode를 전달하지 않아 이 태그를 전혀 인식하지 못하고 figure/img가
-  // pending 텍스트로 뭉개지는 의도치 않은 동작 변화가 생긴다(RD-001-
-  // DELTA-02.md "결정" — hast-util-sanitize의 tagNames 판정이 strip보다
-  // 항상 우선이라 clipboardStrippedTagNames에 추가해도 막지 못함을 실측
-  // 확인했다).
+  // details/summary는 공유 htmlAllowedTagNames에 올리지 않는다
+  // (RD-005-DELTA-01). tagNames를 override하는 첫 사례라 li/ol의
+  // attributes-only override와 다르다. img/figure/figcaption/video/audio
+  // (RD-001-DELTA-02)도 같다. 공유 목록은 경고 기준 schema
+  // (htmlSanitizeSchema)가 쓴다.
   tagNames: [
     ...htmlAllowedTagNames,
     "details",

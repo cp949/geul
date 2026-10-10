@@ -263,20 +263,24 @@ describe("경계 유지", () => {
     );
   });
 
-  // 06a-C3: 클립보드 정책은 isQuoteTag를 넘기지 않아 blockquote가 여전히
-  // 문단 경계(NESTED_BOUNDARY_TAG_NAMES)다 — 상세 계약은
+  // 06a-C3: 클립보드 파서도 Issue #356 RD-005부터 importHtml 변환기로 표 옆
+  // 블록을 읽어 blockquote가 quote다(이전에는 문단 경계였다). 상세 계약은
   // clipboard-mixed-content-block-boundary.test.ts가 소유한다.
-  it("클립보드 파서는 blockquote를 여전히 문단 경계로 다룬다", () => {
+  it("클립보드 파서도 blockquote를 quote로 읽는다", () => {
     const result = parseClipboardTable({
       html: "<blockquote><p>A</p><p>B</p></blockquote><table><tr><td>c</td><td>d</td></tr></table>",
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(withoutIds(result.value.slice(0, 2))).toEqual([
-      { type: "paragraph", content: [{ text: "A" }] },
-      { type: "paragraph", content: [{ text: "B" }] },
+    expect(withoutIds(result.value.slice(0, 1))).toEqual([
+      {
+        type: "quote",
+        content: [{ text: "A" }],
+        children: [{ type: "paragraph", content: [{ text: "B" }] }],
+      },
     ]);
-    expect(result.value[2]?.type).toBe("table");
+    expect(result.value[1]?.type).toBe("table");
+    expect(result.value).toHaveLength(2);
   });
 });

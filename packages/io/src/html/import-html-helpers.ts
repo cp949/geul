@@ -226,8 +226,8 @@ const classLanguageCandidates = (
   return valid;
 };
 
-// pre의 language 후보를 우선순위대로 고른다. importHtml과 클립보드 파서가
-// 공유한다(Issue #351).
+// pre의 language 후보를 우선순위대로 고른다(Issue #351). 클립보드 표
+// 붙여넣기도 같은 변환기로 pre를 읽어 이 규칙을 쓴다.
 // - 우선순위: 첫 직계 code의 data-language, pre의 data-language, 첫 직계
 //   code의 language-* class, pre의 language-* class.
 // - 무효 후보(비어 있지 않고 제어문자·짝 없는 surrogate가 든 값)는 없는

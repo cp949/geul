@@ -4,29 +4,27 @@ import type { TabularData } from "./tabular-data.js";
 
 // parseClipboardTable이 반환하는 블록 시퀀스의 원소 하나. 표가 아닌 블록은
 // model Block에서 table을 뺀 유니온에서 파생한다 — 필드명과 값 형식이 model과
-// 같다(id, content, level, textColor/backgroundColor, startNumber, codeBlock의
-// content/language 등). 표는 기존 TabularData variant 그대로다
-// (Issue #356 RD-004).
+// 같다. 표는 기존 TabularData variant 그대로다(Issue #356 RD-004).
 //
+// 표 옆 블록은 importHtml 블록 변환기가 읽는다(Issue #356 RD-005). 그래서
+// 파서는 model의 모든 비표 블록을 낸다. 최상위 codeBlock·divider, quote,
+// callout, checkListItem, toggleListItem, 미디어도 나온다. core가 모두 받는다.
 // - id는 파서가 호출마다 1부터 새로 번호를 매긴 임시값이다(`clipboard-1`, ...).
-//   같은 입력은 같은 id를 낸다. 문서 안에서 안정하지 않다 — core가 붙여넣을 때
-//   재발급한다. 표 variant에는 id가 없다.
+//   html에 data-geul-block-id가 있으면 그 값을 쓴다. 같은 입력은 같은 id를
+//   낸다. 호출 안에서 비어 있지 않고 유일하다. 문서 안에서 안정하지 않다 —
+//   core가 붙여넣을 때 재발급한다. 표 variant에는 id가 없다.
 // - children은 model의 Block[] 대신 ClipboardContentBlock을 재귀로 담는다.
-//   표도 children에 들 수 있어서다(li 안 <table>). readonly를 유지한다.
-// - heading level은 1~6 전부, textColor/backgroundColor는 블록 요소 자신의
-//   style 색이다(대문자 #RRGGBB만, Issue #343).
-// - 타입은 model의 모든 비표 블록을 허용하지만 현재 파서는 paragraph, heading,
-//   bulletListItem, numberedListItem, codeBlock, divider만 낸다. 나머지는
-//   다음 RD가 표 옆 블록을 importHtml 변환기에 위임하면 나온다.
-//
-// codeBlock/divider는 목록 항목의 children에서만 나온다(Issue #351). li 안
-// pre·hr다. 최상위 pre·hr는 이 variant가 되지 않고, core는 최상위의 두 타입을
-// CLIPBOARD_CONTENT_INVALID로 거절한다.
-// - codeBlock.content는 마크 없는 평문 런 하나다. 줄바꿈과 Tab을 보존하고
-//   model의 codeBlock 소스 계약이 거부하는 문자만 파서가 지운다. 내용 없는
-//   pre는 만들지 않아 런의 text는 비어 있지 않다.
+//   표도 children에 들 수 있어서다(li·quote 안 <table>). readonly를 유지한다.
+// - 블록 필드는 importHtml과 같다. textColor·backgroundColor·textAlignment,
+//   codeBlock의 wrap·caption, 빈 문단(Issue #356 Q8)도 그대로 나온다.
+// - codeBlock.content는 마크 없는 평문 런 하나이거나 빈 배열이다. 줄바꿈과
+//   Tab을 보존하고 model의 codeBlock 소스 계약이 거부하는 문자만 지운다.
 // - codeBlock.language는 importHtml과 같은 규칙으로 고른 뒤 model 정규형으로
-//   바꾼 값이다. wrap·caption은 담지 않는다.
+//   바꾼 값이다.
+// - 비표 블록은 children을 뗀 모양으로 model 검증(parseDocument)을 통과한다.
+//   무효 선택 필드(색·정렬·미디어 표시 속성 등)는 빠지고, 미디어 url처럼 뺄 수
+//   없는 필드가 무효인 블록은 빠진다(Issue #356 Q1). importHtml은 같은 입력을
+//   문서 전체 거절로 막는다. 클립보드는 표와 나머지 블록을 지킨다.
 export type ClipboardContentBlock =
   | { type: "table"; data: TabularData }
   | ClipboardNonTableBlock<Exclude<Block, TableBlock>>;

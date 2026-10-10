@@ -3,6 +3,7 @@
  * 검증한다(Issue #326). 비-li 자식은 연속 run으로 모여 블록이 되고,
  * 문서 순서대로 목록 항목 사이에 형제로 놓인다. `ol[start]`가 첫 `li`에만
  * 붙는 규칙, 블록을 만들지 않는 run, 정상 중첩 목록(대조군)도 함께 다룬다.
+ * 빈 `p`는 Issue #356 Q8부터 빈 문단으로 남는다.
  * 목록 항목 자체의 변환은 `clipboard-mixed-content-block-boundary.test.ts`가
  * 다룬다.
  */
@@ -148,9 +149,19 @@ describe("parseClipboardTable 목록의 li가 아닌 자식", () => {
     ]);
   });
 
-  it("텍스트가 없는 요소와 공백뿐인 run은 블록을 만들지 않는다", () => {
+  // 빈 p는 Issue #356 Q8부터 importHtml처럼 빈 문단으로 남는다. 이전에는
+  // 블록을 만들지 않았다. 텍스트 없는 span과 공백뿐인 run은 여전히 블록이 없다.
+  it("텍스트가 없는 span과 공백뿐인 run은 블록을 만들지 않고 빈 p는 빈 문단이다", () => {
     expect(
       blocksBeforeTable("<ul><li>a</li><span></span><p></p><li>b</li></ul>"),
+    ).toEqual([
+      { type: "bulletListItem", content: [{ text: "a" }] },
+      { type: "paragraph", content: [] },
+      { type: "bulletListItem", content: [{ text: "b" }] },
+      TABLE_BLOCK,
+    ]);
+    expect(
+      blocksBeforeTable("<ul><li>a</li><span></span><li>b</li></ul>"),
     ).toEqual([
       { type: "bulletListItem", content: [{ text: "a" }] },
       { type: "bulletListItem", content: [{ text: "b" }] },

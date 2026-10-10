@@ -19,8 +19,8 @@ import type { Schema } from "hast-util-sanitize";
 import { describe, expect, it } from "vitest";
 
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
+import { clipboardSanitizeSchema } from "../src/html/clipboard-sanitize-schema.js";
 import {
-  clipboardSanitizeSchema,
   htmlAllowedAttributes,
   htmlSanitizeSchema,
 } from "../src/html/sanitize-schema.js";

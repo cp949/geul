@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
-import { withoutIds } from "./clipboard-table-support.js";
+import { importedBlocks, withoutIds } from "./clipboard-table-support.js";
 
 const TABLE = "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>";
 
@@ -93,10 +93,11 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     ]);
   });
 
-  // Slack/Notion/Docs는 블록 경계에 제로폭 문자를 흔히 심는다 — 실질
-  // 콘텐츠가 아니므로 빈 문단 블록을 만들지 않는다(눈에 보이지 않는 빈
-  // 문단이 편집기에 남으면 사용자가 원인도 모르고 지울 수도 없다).
-  it("표 밖 제로폭 문자는 문단 블록을 만들지 않는다", () => {
+  // Slack/Notion/Docs는 블록 경계에 제로폭 문자를 흔히 심는다. 제로폭 문자만
+  // 든 p도 importHtml처럼 그 글자를 담은 문단으로 남긴다(Issue #356 Q8을 제로폭
+  // p까지 넓혔다). 이전에는 문단을 만들지 않았다. 표 유무로 결과가 갈리지 않게
+  // 한다 — 표 없는 일반 html 붙여넣기(importHtml)도 같은 문단을 만든다.
+  it("표 밖 제로폭 문자만 든 p는 importHtml처럼 그 글자의 문단이다", () => {
     for (const invisible of [
       "\u200B",
       "\u200D",
@@ -104,15 +105,20 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
       "\u00AD",
       "\uFEFF",
     ]) {
-      const result = parseClipboardTable({
-        html: `<p>${invisible}</p>${TABLE}`,
-        text: "a\tb",
-      });
+      const html = `<p>${invisible}</p>${TABLE}`;
+      const result = parseClipboardTable({ html, text: "a\tb" });
 
       expect(result.ok).toBe(true);
       if (!result.ok) continue;
-      expect(result.value).toHaveLength(1);
-      expect(result.value[0]?.type).toBe("table");
+      expect(result.value).toHaveLength(2);
+      expect(withoutIds(result.value[0])).toEqual({
+        type: "paragraph",
+        content: [{ text: invisible }],
+      });
+      expect(result.value[1]?.type).toBe("table");
+      expect(withoutIds(result.value[0])).toEqual(
+        withoutIds(importedBlocks(html)[0]),
+      );
     }
   });
 
@@ -209,9 +215,10 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     });
   });
 
-  // Finding 1 회귀: 표 밖 문단의 텍스트도 셀과 같은 정규화를 거쳐야 한다.
-  // collapseHtmlWhitespace와 normalizeCellContent가 없으면 TAB 등 C0 제어문자가
-  // model을 통과해 readEditorDocument에서 throw(editor 영구 desync).
+  // Finding 1 회귀: 표 밖 문단의 텍스트도 공백 접기와 무효 코드포인트 제거를
+  // 거쳐야 한다. 지금은 importHtml 변환기가 한다(collapseSourceWhitespace,
+  // Issue #356 RD-005). 없으면 TAB 등 C0 제어문자가 model을 통과해
+  // readEditorDocument에서 throw(editor 영구 desync).
   it("표 밖 문단도 셀과 같은 공백·제어문자 정규화를 거친다", () => {
     const html =
       "<p>\n\tintro\n\t</p>" +

@@ -34,7 +34,7 @@ export type ParsedHtmlFragment = {
   root: HtmlRoot;
   // 깊이 캡이 서브트리를 절단했는지. 문서 import 경로는 이 사실을
   // DEEP_TREE_FLATTENED 경고로 바꾸고, clipboard 경로는 경고 채널이 없어
-  // 무시한다.
+  // 경고로 내지 않는다. 두 경로 모두 절단되면 소스 공백을 접지 않는다.
   truncated: boolean;
 };
 

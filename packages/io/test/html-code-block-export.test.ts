@@ -950,7 +950,9 @@ describe("CodeBlock HTML 가져오기", () => {
     ]);
   });
 
-  it("clipboard의 pre는 문단 콘텐츠로 남고 CodeBlock segment를 opt-in하지 않는다", () => {
+  // 클립보드 파서도 Issue #356 RD-005부터 importHtml 변환기로 표 옆 블록을
+  // 읽어 최상위 pre가 CodeBlock이다(이전에는 code 마크 문단이었다).
+  it("clipboard의 최상위 pre도 CodeBlock이다", () => {
     const result = parseClipboardTable({
       html: "<pre><code>before</code></pre><table><tr><td>A</td></tr></table>",
     });
@@ -958,8 +960,8 @@ describe("CodeBlock HTML 가져오기", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
     expect(withoutIds(result.value[0])).toEqual({
-      type: "paragraph",
-      content: [{ text: "before", marks: [{ type: "code" }] }],
+      type: "codeBlock",
+      content: [{ text: "before" }],
     });
     expect(result.value[1]).toMatchObject({ type: "table" });
   });
