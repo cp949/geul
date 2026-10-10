@@ -442,6 +442,23 @@ describe("HTML 보안", () => {
     ]);
   });
 
+  // sanitize가 section을 벗기면 b가 루트 인라인이 된다. 벗긴 뒤 트리는
+  // `<b>x</b>`와 같다. 그래도 경고는 raw 위치 기준이라 section 하나다. 강등
+  // 판정을 sanitize 뒤 트리로 옮기면 b가 더해진다(Issue #356 RD-006 범위 축소).
+  it("sanitize가 벗긴 블록 안 인라인은 따로 강등 경고하지 않는다", () => {
+    const result = importHtml("<section><b>x</b></section>");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(result.value.warnings).toEqual([
+      {
+        kind: "SAFE_BLOCK_DOWNGRADED",
+        element: "section",
+        message: "Unsupported section block was downgraded to paragraph content",
+      },
+    ]);
+  });
+
   // Issue #113이 clipboard 경로(clipboard-table-parser.ts)의 div/li/
   // blockquote/ul/ol 문단 경계 인식을 고쳤을 때 HTML import 경로는 반영되지
   // 않아 남아 있었다 — sanitize가 이 다섯 태그를 unwrap해 인접 텍스트가

@@ -285,6 +285,36 @@ describe("벗겨져 색이 사라지는 font·mark는 #334 이전 경고를 그�
       "UNSAFE_ATTRIBUTE_REMOVED:font:color",
     ]);
   });
+
+  // sanitize가 남긴 color·style은 벗기는 함수가 벗기는 순간 알린다(Issue #356
+  // RD-006). sanitize가 지운 face는 수집기가 알린다. 그래서 수집기 경고 뒤에
+  // 변환기 경고가 온다.
+  it("sanitize가 지운 속성은 수집기가, 벗겨서 잃은 속성은 그 뒤에 변환기가 알린다", () => {
+    const warnings = imported(
+      '<div><font color="red" face="a"><p>x</p></font></div>',
+    ).warnings.map((warning) => {
+      const fields = warning as { element?: string; attribute?: string };
+      return `${warning.kind}:${fields.element ?? ""}:${fields.attribute ?? ""}`;
+    });
+    expect(warnings).toEqual([
+      "SAFE_BLOCK_DOWNGRADED:font:",
+      "UNSAFE_ATTRIBUTE_REMOVED:font:face",
+      "UNSAFE_ATTRIBUTE_REMOVED:font:color",
+    ]);
+  });
+
+  it("벗겨지는 font의 읽지 못하는 color도 경고는 한 번이다", () => {
+    const warnings = imported(
+      '<div><font color="#12"><p>a</p></font></div>',
+    ).warnings.map((warning) => {
+      const fields = warning as { element?: string; attribute?: string };
+      return `${warning.kind}:${fields.element ?? ""}:${fields.attribute ?? ""}`;
+    });
+    expect(warnings).toEqual([
+      "SAFE_BLOCK_DOWNGRADED:font:",
+      "UNSAFE_ATTRIBUTE_REMOVED:font:color",
+    ]);
+  });
 });
 
 describe("font color 값을 읽지 못하면 #334 이전 경고를 그대로 낸다", () => {
