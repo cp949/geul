@@ -27,7 +27,7 @@ import {
   htmlSanitizeSchema,
 } from "../src/html/sanitize-schema.js";
 import { exportHtml, importHtml } from "../src/index.js";
-import { expectSingleTable } from "./clipboard-table-support.js";
+import { expectSingleTable, withoutIds } from "./clipboard-table-support.js";
 
 /** `importHtml` 성공 결과를 꺼낸다. 실패하면 오류 메시지로 던진다. */
 const imported = (html: string) => {
@@ -976,7 +976,7 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       textColor: "#FF0000",
       content: [{ text: "intro", marks: [{ type: "bold" }] }],
@@ -991,7 +991,7 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
-    expect(result.value[1]).toEqual({
+    expect(withoutIds(result.value[1])).toEqual({
       type: "paragraph",
       backgroundColor: "#FFFF00",
       content: [{ text: "E", marks: [{ type: "italic" }] }],
@@ -1005,7 +1005,7 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [
         { text: "u", marks: [{ type: "strike" }, { type: "underline" }] },
@@ -1194,7 +1194,7 @@ describe("클립보드 문단 경로는 블록 자식 없는 div의 style을 imp
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       textColor: "#FF0000",
       content: [{ text: "intro", marks: [{ type: "bold" }] }],

@@ -15,6 +15,7 @@ import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportHtml, importHtml, parseClipboardTable } from "../src/index.js";
+import { withoutIds } from "./clipboard-table-support.js";
 import {
   buildDocument,
   dividerBlock,
@@ -272,7 +273,7 @@ describe("경계 유지", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.slice(0, 2)).toEqual([
+    expect(withoutIds(result.value.slice(0, 2))).toEqual([
       { type: "paragraph", content: [{ text: "A" }] },
       { type: "paragraph", content: [{ text: "B" }] },
     ]);

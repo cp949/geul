@@ -194,6 +194,15 @@ const blockSequenceFromNodes = (
   tables: readonly HtmlElementNode[],
 ): Result<ClipboardContentBlock[], ClipboardParseError> => {
   const tableSet = new Set(tables);
+  // 표가 아닌 블록에 붙이는 임시 id의 카운터다. 호출마다 0에서 시작한다 —
+  // 모듈 전역으로 두면 같은 입력이 호출 순서에 따라 다른 id를 낸다. 블록을
+  // 실제로 만들 때만 발급해 건너뛴 빈 문단이 번호를 먹지 않는다. 목록 항목은
+  // children을 읽기 전에 발급해 부모 id가 자식보다 앞선다(문서 순서).
+  let idCounter = 0;
+  const nextId = (): string => {
+    idCounter += 1;
+    return `clipboard-${idCounter}`;
+  };
   // headingLevelFromTagName의 반환 타입(1~6)을 그대로 실어 segment.level이
   // number가 아닌 좁혀진 리터럴 유니언으로 나오게 한다(import-html.ts의
   // importBlockSegmentPolicy와 같은 패턴) — heading 분기에서 캐스트 없이
@@ -310,6 +319,7 @@ const blockSequenceFromNodes = (
         promotedFormat(child, promoted),
       );
       const colors = blockColorsFromElement(child, promoted);
+      const id = nextId();
       const childrenResult = blocksFromNodeList(childrenNodes, true);
       if (!childrenResult.ok) return childrenResult;
       const children = childrenResult.value;
@@ -317,6 +327,7 @@ const blockSequenceFromNodes = (
       blocks.push(
         markerType === "numberedListItem"
           ? {
+              id,
               type: "numberedListItem",
               content,
               ...(startNumber === undefined ? {} : { startNumber }),
@@ -324,6 +335,7 @@ const blockSequenceFromNodes = (
               ...(children.length > 0 ? { children } : {}),
             }
           : {
+              id,
               type: "bulletListItem",
               content,
               ...colors,
@@ -350,7 +362,7 @@ const blockSequenceFromNodes = (
     const blocks: ClipboardContentBlock[] = [];
     for (const segment of segmentsOf(nodeList, inListItem)) {
       // paragraph(자연히 쌓인 pending)와 simpleBoundary(p 자신의 본문)를
-      // 똑같이 취급한다 — ClipboardContentBlock에는 id가 없어 p의
+      // 똑같이 취급한다 — id는 파서가 임시로 발급하므로 p의
       // dataGeulBlockId를 읽을 이유가 없고(clip에는 그런 속성도 없다),
       // 실질 텍스트 판정도 두 kind가 동일하게 받는다.
       // 출처 요소 자신의 style 색·서식을 읽는다. simpleBoundary는 p 자신이고
@@ -368,6 +380,7 @@ const blockSequenceFromNodes = (
         const text = visibleText(content);
         if (hasSubstantialText(text)) {
           blocks.push({
+            id: nextId(),
             type: "paragraph",
             content,
             ...(source === undefined ? {} : blockColorsFromElement(source)),
@@ -383,6 +396,7 @@ const blockSequenceFromNodes = (
         const text = visibleText(content);
         if (!hasSubstantialText(text)) continue;
         blocks.push({
+          id: nextId(),
           type: "heading",
           level: segment.level,
           content,
@@ -394,7 +408,7 @@ const blockSequenceFromNodes = (
       // divider다. 최상위 정책은 isDividerTag를 넘기지 않아 이 분기에 도달하지
       // 않는다 — 최상위 hr 처리는 슬라이스 10 소관이다.
       if (segment.kind === "hr") {
-        blocks.push({ type: "divider" });
+        blocks.push({ id: nextId(), type: "divider" });
         continue;
       }
       // pre는 li 자식용 정책에서만 나온다(Issue #351). 마크와 공백 접기를
@@ -409,8 +423,9 @@ const blockSequenceFromNodes = (
         if (!hasSubstantialText(text)) continue;
         const { language } = selectCodeBlockLanguage(segment.node);
         blocks.push({
+          id: nextId(),
           type: "codeBlock",
-          text,
+          content: [{ text }],
           ...(language === undefined
             ? {}
             : { language: canonicalizeCodeBlockLanguage(language) }),
@@ -445,7 +460,7 @@ const blockSequenceFromNodes = (
         const content = normalizedInlineContent(segment.nonSectionChildren);
         const text = visibleText(content);
         if (hasSubstantialText(text)) {
-          blocks.push({ type: "paragraph", content });
+          blocks.push({ id: nextId(), type: "paragraph", content });
         }
       }
       const parsed = tabularDataFromTable(segment.node);

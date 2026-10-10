@@ -35,9 +35,25 @@ export const importedBlocks = (html: string): readonly unknown[] => {
   return result.value.document.blocks;
 };
 
-/** parseClipboardTable이 만든 시퀀스의 블록이다. 실패하면 던진다. */
+/**
+ * 블록 트리에서 `id` 필드를 재귀로 뺀다. 파서가 붙이는 임시 id는 호출마다
+ * 새로 매겨지는 값이라, 기대값 리터럴이 id를 직접 쓰지 않고 이 헬퍼로
+ * 결과의 id를 뺀 뒤 비교한다. children은 재귀로 따라간다. 표 variant의
+ * `data`(TabularData)에는 id가 없어 그대로 둔다.
+ */
+export const withoutIds = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(withoutIds);
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "id")
+      .map(([key, entry]) => [key, withoutIds(entry)]),
+  );
+};
+
+/** parseClipboardTable이 만든 시퀀스의 블록이다. id는 뺀다. 실패하면 던진다. */
 export const clipboardBlocks = (html: string): readonly unknown[] => {
   const result = parseClipboardTable({ html });
   if (!result.ok) throw new Error("parseClipboardTable이 실패했다");
-  return result.value;
+  return withoutIds(result.value) as readonly unknown[];
 };

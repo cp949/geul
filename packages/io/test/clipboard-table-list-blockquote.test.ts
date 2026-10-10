@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ClipboardContentBlock } from "../src/clipboard/clipboard-content.js";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
+import { withoutIds } from "./clipboard-table-support.js";
 
 const TABLE = "<table><tbody><tr><td>1</td></tr></tbody></table>";
 
@@ -161,9 +162,9 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
 
     it("항목 하나는 content에 글자가 들어가고 자식 문단이 없다", () => {
       const blocks = parse(`<blockquote>${UL_A}</blockquote>${TABLE}`);
-      expect(blocks.filter((block) => block.type !== "table")).toEqual([
-        { type: "bulletListItem", content: [{ text: "a" }] },
-      ]);
+      expect(
+        withoutIds(blocks.filter((block) => block.type !== "table")),
+      ).toEqual([{ type: "bulletListItem", content: [{ text: "a" }] }]);
       expect(tableBlock(blocks)).toHaveLength(1);
     });
 
@@ -171,7 +172,9 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
       const blocks = parse(
         `<blockquote><ul><li>a</li><li>b</li></ul></blockquote>${TABLE}`,
       );
-      expect(blocks.filter((block) => block.type !== "table")).toEqual([
+      expect(
+        withoutIds(blocks.filter((block) => block.type !== "table")),
+      ).toEqual([
         { type: "bulletListItem", content: [{ text: "a" }] },
         { type: "bulletListItem", content: [{ text: "b" }] },
       ]);
@@ -181,7 +184,9 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
       const blocks = parse(
         `${TABLE}<blockquote><ol><li>a</li><li>b</li></ol></blockquote>`,
       );
-      expect(blocks.filter((block) => block.type !== "table")).toEqual([
+      expect(
+        withoutIds(blocks.filter((block) => block.type !== "table")),
+      ).toEqual([
         { type: "numberedListItem", content: [{ text: "a" }] },
         { type: "numberedListItem", content: [{ text: "b" }] },
       ]);
@@ -191,7 +196,9 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
       const blocks = parse(
         `<blockquote><ul><li>a<ul><li>b</li></ul></li></ul></blockquote>${TABLE}`,
       );
-      expect(blocks.filter((block) => block.type !== "table")).toEqual([
+      expect(
+        withoutIds(blocks.filter((block) => block.type !== "table")),
+      ).toEqual([
         {
           type: "bulletListItem",
           content: [{ text: "a" }],
@@ -204,16 +211,18 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
       const blocks = parse(
         `<blockquote><blockquote>${UL_A}</blockquote></blockquote>${TABLE}`,
       );
-      expect(blocks.filter((block) => block.type !== "table")).toEqual([
-        { type: "bulletListItem", content: [{ text: "a" }] },
-      ]);
+      expect(
+        withoutIds(blocks.filter((block) => block.type !== "table")),
+      ).toEqual([{ type: "bulletListItem", content: [{ text: "a" }] }]);
     });
   });
 
   describe("마크가 있는 조상은 계속 항목 글자에 씌워진다", () => {
     it("blockquote 안 b가 목록을 감싸면 항목 글자가 굵다", () => {
       const blocks = parse(`<blockquote><b>${UL_A}</b></blockquote>${TABLE}`);
-      expect(blocks.filter((block) => block.type !== "table")).toEqual([
+      expect(
+        withoutIds(blocks.filter((block) => block.type !== "table")),
+      ).toEqual([
         {
           type: "bulletListItem",
           content: [{ text: "a", marks: [{ type: "bold" }] }],
@@ -223,7 +232,9 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
 
     it("b 안 blockquote가 목록을 감싸면 항목 글자가 굵다", () => {
       const blocks = parse(`<b><blockquote>${UL_A}</blockquote></b>${TABLE}`);
-      expect(blocks.filter((block) => block.type !== "table")).toEqual([
+      expect(
+        withoutIds(blocks.filter((block) => block.type !== "table")),
+      ).toEqual([
         {
           type: "bulletListItem",
           content: [{ text: "a", marks: [{ type: "bold" }] }],
@@ -235,7 +246,9 @@ describe("parseClipboardTable blockquote가 감싼 목록 (Issue #350)", () => {
       const blocks = parse(
         `<blockquote><a href="https://x.test/">${UL_A}</a></blockquote>${TABLE}`,
       );
-      expect(blocks.filter((block) => block.type !== "table")).toEqual([
+      expect(
+        withoutIds(blocks.filter((block) => block.type !== "table")),
+      ).toEqual([
         {
           type: "bulletListItem",
           content: [

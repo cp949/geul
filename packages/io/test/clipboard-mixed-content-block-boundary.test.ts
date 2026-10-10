@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClipboardContentBlock } from "../src/clipboard/clipboard-content.js";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
+import { withoutIds } from "./clipboard-table-support.js";
 
 const TABLE = "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>";
 
@@ -54,7 +55,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       { type: "heading", level: 1, content: [{ text: "A" }] },
       { type: "heading", level: 2, content: [{ text: "B" }] },
       TABLE_BLOCK,
@@ -71,7 +72,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     });
     expect(merged.ok).toBe(true);
     if (merged.ok) {
-      expect(merged.value).toEqual([
+      expect(withoutIds(merged.value)).toEqual([
         { type: "heading", level: 4, content: [{ text: "A" }] },
         { type: "heading", level: 4, content: [{ text: "B" }] },
         TABLE_BLOCK,
@@ -85,7 +86,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     });
     expect(levels.ok).toBe(true);
     if (levels.ok) {
-      expect(levels.value).toEqual([
+      expect(withoutIds(levels.value)).toEqual([
         { type: "heading", level: 4, content: [{ text: "A" }] },
         { type: "heading", level: 5, content: [{ text: "B" }] },
         { type: "heading", level: 6, content: [{ text: "C" }] },
@@ -103,7 +104,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "heading",
       level: 1,
       content: [{ text: "A" }],
@@ -124,7 +125,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       { type: "paragraph", content: [{ text: "intro" }] },
       TABLE_BLOCK,
       { type: "paragraph", content: [{ text: "outro" }] },
@@ -139,7 +140,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       { type: "paragraph", content: [{ text: "intro" }] },
       TABLE_BLOCK,
       { type: "paragraph", content: [{ text: "outro" }] },
@@ -157,7 +158,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       TABLE_BLOCK,
       { type: "heading", level: 2, content: [{ text: "middle" }] },
       TABLE_BLOCK,
@@ -176,7 +177,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       { type: "paragraph", content: [{ text: "a" }] },
       { type: "paragraph", content: [{ text: "b" }] },
       TABLE_BLOCK,
@@ -196,7 +197,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     });
     expect(ulResult.ok).toBe(true);
     if (ulResult.ok) {
-      expect(ulResult.value).toEqual([
+      expect(withoutIds(ulResult.value)).toEqual([
         { type: "bulletListItem", content: [{ text: "one" }] },
         { type: "bulletListItem", content: [{ text: "two" }] },
         TABLE_BLOCK,
@@ -208,7 +209,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     });
     expect(olResult.ok).toBe(true);
     if (olResult.ok) {
-      expect(olResult.value).toEqual([
+      expect(withoutIds(olResult.value)).toEqual([
         { type: "numberedListItem", content: [{ text: "one" }] },
         { type: "numberedListItem", content: [{ text: "two" }] },
         TABLE_BLOCK,
@@ -227,7 +228,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       TABLE_BLOCK,
       { type: "numberedListItem", content: [{ text: "x" }], startNumber: 3 },
     ]);
@@ -242,7 +243,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       { type: "paragraph", content: [{ text: "x" }] },
       { type: "paragraph", content: [{ text: "y" }] },
       { type: "paragraph", content: [{ text: "z" }] },
@@ -271,7 +272,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
       const result = parseClipboardTable({ html });
       expect(result.ok, label).toBe(true);
       if (!result.ok) continue;
-      expect(result.value, label).toEqual([
+      expect(withoutIds(result.value), label).toEqual([
         { type: "paragraph", content: [{ text: "intro" }] },
         TABLE_BLOCK,
         { type: "paragraph", content: [{ text: "outro" }] },
@@ -292,7 +293,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       {
         type: "bulletListItem",
         content: [{ text: "intro" }],
@@ -316,7 +317,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       {
         type: "bulletListItem",
         content: [{ text: "one" }],

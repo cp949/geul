@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
-import { expectSingleTable } from "./clipboard-table-support.js";
+import { expectSingleTable, withoutIds } from "./clipboard-table-support.js";
 
 describe("parseClipboardTable", () => {
   it("HTML 표를 블록 시퀀스로 파싱한다", () => {
@@ -153,7 +153,7 @@ describe("parseClipboardTable", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(3);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "intro" }],
     });
@@ -163,7 +163,7 @@ describe("parseClipboardTable", () => {
     expect(result.value[1].data.rows[0]?.cells[0]?.content).toEqual([
       { text: "a" },
     ]);
-    expect(result.value[2]).toEqual({
+    expect(withoutIds(result.value[2])).toEqual({
       type: "paragraph",
       content: [{ text: "outro" }],
     });
@@ -194,7 +194,7 @@ describe("parseClipboardTable", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(2);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "Sales 2026" }],
     });
@@ -223,11 +223,11 @@ describe("parseClipboardTable", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(3);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "intro" }],
     });
-    expect(result.value[1]).toEqual({
+    expect(withoutIds(result.value[1])).toEqual({
       type: "paragraph",
       content: [{ text: "Sales 2026" }],
     });

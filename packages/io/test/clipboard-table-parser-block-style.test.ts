@@ -12,6 +12,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
+import { withoutIds } from "./clipboard-table-support.js";
 import { importHtml } from "../src/index.js";
 
 const TABLE =
@@ -75,7 +76,7 @@ describe("parseClipboardTable 표 옆 블록 style", () => {
     const html = `<p style="color:#0000FF;font-weight:bold">P</p>${TABLE}`;
 
     const result = parseClipboardTable({ html });
-    expect(result.ok && result.value[0]).toEqual({
+    expect(result.ok && withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       textColor: "#0000FF",
       content: [{ text: "P", marks: [{ type: "bold" }] }],
@@ -88,7 +89,7 @@ describe("parseClipboardTable 표 옆 블록 style", () => {
       TABLE;
 
     const result = parseClipboardTable({ html });
-    expect(result.ok && result.value[0]).toEqual({
+    expect(result.ok && withoutIds(result.value[0])).toEqual({
       type: "bulletListItem",
       content: [{ text: "A" }],
       children: [

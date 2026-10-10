@@ -17,7 +17,11 @@
 import { describe, expect, it } from "vitest";
 
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
-import { clipboardBlocks, importedBlocks } from "./clipboard-table-support.js";
+import {
+  clipboardBlocks,
+  importedBlocks,
+  withoutIds,
+} from "./clipboard-table-support.js";
 
 const TABLE =
   "<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>";
@@ -31,9 +35,8 @@ type BlockShape = {
   children: BlockShape[] | undefined;
 };
 
-/** codeBlock의 글자를 importHtml(content 런)과 클립보드(text) 양쪽에서 문자열로 읽는다. */
+/** codeBlock의 글자를 content 런에서 문자열로 읽는다. importHtml과 클립보드가 같은 모양이다. */
 const codeTextOf = (record: Record<string, unknown>): unknown => {
-  if (typeof record.text === "string") return record.text;
   if (Array.isArray(record.content)) {
     return record.content
       .map((item) => (item as { text: string }).text)
@@ -309,7 +312,10 @@ describe("parseClipboardTable li 안 pre·hr 자식 블록 (Issue #351)", () => 
       const codeBlock = (
         result.value[0] as { children?: readonly Record<string, unknown>[] }
       ).children?.[0];
-      expect(codeBlock).toEqual({ type: "codeBlock", text: "c" });
+      expect(withoutIds(codeBlock)).toEqual({
+        type: "codeBlock",
+        content: [{ text: "c" }],
+      });
     });
   });
 

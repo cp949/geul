@@ -13,7 +13,6 @@
  * - 기대값은 #334 이전(b5a2b8e5) 번들 실측이다. 아래 "블록 자손이 없는" 묶음은
  *   가드라 수정 전에도 통과한다.
  */
-import type { DocumentBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
@@ -26,8 +25,8 @@ const imported = (html: string) => {
   return result.value;
 };
 
-/** 블록에서 id 계열 필드를 지워 구조만 비교할 수 있게 한다. */
-const withoutIds = (blocks: DocumentBlock[]): unknown =>
+/** 블록에서 id 계열 필드를 지워 구조만 비교할 수 있게 한다. 클립보드 파서 출력에도 쓴다. */
+const withoutIds = (blocks: unknown): unknown =>
   JSON.parse(
     JSON.stringify(blocks, (key, value: unknown) =>
       key === "id" || key === "columnId" || key === "rowId" || key === "cellId"
@@ -191,7 +190,7 @@ describe("블록을 품은 font·mark는 태그만 벗겨 블록 구조를 유�
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toEqual([
+    expect(withoutIds(result.value)).toEqual([
       { type: "bulletListItem", content: [{ text: "a" }] },
       expect.objectContaining({ type: "table" }),
     ]);

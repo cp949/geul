@@ -7,11 +7,9 @@
  * 다룬다.
  */
 import { describe, expect, it } from "vitest";
-import type {
-  ClipboardContent,
-  ClipboardContentBlock,
-} from "../src/clipboard/clipboard-content.js";
+import type { ClipboardContentBlock } from "../src/clipboard/clipboard-content.js";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
+import { withoutIds } from "./clipboard-table-support.js";
 
 const TABLE =
   "<table><tbody><tr><td>1</td><td>2</td></tr>" +
@@ -62,14 +60,14 @@ const TABLE_BLOCK: ClipboardContentBlock = {
 
 /**
  * 목록 HTML 뒤에 2x2 표를 붙여 `parseClipboardTable`에 넣고 성공한
- * 블록 시퀀스를 돌려준다. 표가 있어야 클립보드 표 경로가 시퀀스를
- * 만들므로 모든 테스트가 같은 방식으로 표를 덧붙인다.
+ * 블록 시퀀스에서 임시 id를 뺀 값을 돌려준다. 표가 있어야 클립보드 표
+ * 경로가 시퀀스를 만들므로 모든 테스트가 같은 방식으로 표를 덧붙인다.
  */
-const blocksBeforeTable = (listHtml: string): ClipboardContent => {
+const blocksBeforeTable = (listHtml: string): unknown => {
   const result = parseClipboardTable({ html: listHtml + TABLE });
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error("unreachable");
-  return result.value;
+  return withoutIds(result.value);
 };
 
 describe("parseClipboardTable 목록의 li가 아닌 자식", () => {

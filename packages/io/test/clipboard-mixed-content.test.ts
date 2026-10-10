@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
+import { withoutIds } from "./clipboard-table-support.js";
 
 const TABLE = "<table><tbody><tr><td>a</td><td>b</td></tr></tbody></table>";
 
@@ -39,7 +40,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(2);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "intro" }],
     });
@@ -68,15 +69,15 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
       "table",
       "paragraph",
     ]);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "x" }],
     });
-    expect(result.value[2]).toEqual({
+    expect(withoutIds(result.value[2])).toEqual({
       type: "paragraph",
       content: [{ text: "y" }],
     });
-    expect(result.value[4]).toEqual({
+    expect(withoutIds(result.value[4])).toEqual({
       type: "paragraph",
       content: [{ text: "z" }],
     });
@@ -173,7 +174,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     expect(result.value[0].data.rows[0]?.cells[0]?.content).toEqual([
       { text: "a" },
     ]);
-    expect(result.value[1]).toEqual({
+    expect(withoutIds(result.value[1])).toEqual({
       type: "paragraph",
       content: [{ text: "signature text" }],
     });
@@ -197,12 +198,12 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(3);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "intro" }],
     });
     expect(result.value[1]?.type).toBe("table");
-    expect(result.value[2]).toEqual({
+    expect(withoutIds(result.value[2])).toEqual({
       type: "paragraph",
       content: [{ text: "outro" }],
     });
@@ -218,7 +219,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     const result = parseClipboardTable({ html });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "intro" }],
     });
@@ -235,7 +236,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     const result = parseClipboardTable({ html });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "bold", marks: [{ type: "bold" }] }],
     });
@@ -255,12 +256,12 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toHaveLength(3);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "bold", marks: [{ type: "bold" }] }],
     });
     expect(result.value[1]?.type).toBe("table");
-    expect(result.value[2]).toEqual({
+    expect(withoutIds(result.value[2])).toEqual({
       type: "paragraph",
       content: [{ text: "tail", marks: [{ type: "bold" }] }],
     });
@@ -276,7 +277,7 @@ describe("parseClipboardTable 혼합 콘텐츠 시퀀스 변환", () => {
     const result = parseClipboardTable({ html });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [
         {

@@ -9,6 +9,7 @@ import type { Document } from "@cp949/geul-model";
 import { describe, expect, it, vi } from "vitest";
 
 import { exportHtml, importHtml, parseClipboardTable } from "../src/index.js";
+import { withoutIds } from "./clipboard-table-support.js";
 
 describe("CodeBlock HTML 내보내기", () => {
   it("source와 안전한 language를 pre·code 요소에 보존한다", () => {
@@ -956,7 +957,7 @@ describe("CodeBlock HTML 가져오기", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "before", marks: [{ type: "code" }] }],
     });

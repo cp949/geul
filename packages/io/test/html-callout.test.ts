@@ -11,6 +11,7 @@ import type { Block, Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { exportHtml, importHtml, parseClipboardTable } from "../src/index.js";
+import { withoutIds } from "./clipboard-table-support.js";
 import {
   buildDocument,
   calloutBlock,
@@ -115,7 +116,7 @@ describe("data-geul-callout 판별이 일반 div를 오염시키지 않는다", 
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value[0]).toEqual({
+    expect(withoutIds(result.value[0])).toEqual({
       type: "paragraph",
       content: [{ text: "A" }],
     });
