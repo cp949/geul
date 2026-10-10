@@ -242,21 +242,32 @@ describe("접힌 캐럿 code mark의 상호 배제", () => {
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
-  it("code가 stored mark이면 다른 mark와 색상은 COMMAND_NOT_APPLICABLE로 거절하고 상태를 바꾸지 않는다", () => {
+  it("code가 stored mark이면 다른 mark는 COMMAND_NOT_APPLICABLE로 거절하고 상태를 바꾸지 않는다", () => {
     const fixture = mountedAtCaret();
     expect(fixture.editor.commands.toggleCaretMark("code")).toEqual(ok);
     fixture.listener.mockClear();
     const before = stateSnapshot(fixture);
 
-    expect(fixture.editor.commands.toggleCaretMark("bold")).toEqual(
-      notApplicable("toggleCaretMark"),
-    );
-    expect(fixture.editor.commands.toggleCaretTextColor("#FF0000")).toEqual(
-      notApplicable("toggleCaretTextColor"),
-    );
+    for (const type of ["bold", "italic", "underline", "strike"] as const) {
+      expect(fixture.editor.commands.toggleCaretMark(type)).toEqual(
+        notApplicable("toggleCaretMark"),
+      );
+    }
 
     expect(stateSnapshot(fixture)).toEqual(before);
     expect(fixture.listener).not.toHaveBeenCalled();
+  });
+
+  it("code가 stored mark이어도 색상은 허용하고 두 mark를 함께 둔다 (Issue #347)", () => {
+    const { editor, tiptap } = mountedAtCaret();
+    expect(editor.commands.toggleCaretMark("code")).toEqual(ok);
+
+    expect(editor.commands.toggleCaretTextColor("#FF0000")).toEqual(ok);
+
+    expect(tiptap.state.storedMarks?.map((mark) => mark.type.name)).toEqual([
+      "code",
+      "textColor",
+    ]);
   });
 });
 

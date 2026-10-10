@@ -350,8 +350,9 @@ export interface InlineFormattingCommands {
      * 성공하면 `subscribe` listener를 호출한다.
      *
      * 이미 mark가 걸린 텍스트 안 캐럿에서 호출하면 해제한다.
-     * `code`는 다른 mark와 함께 걸 수 없다. `code`를 켜면 다른 stored mark를 대체한다.
-     * `code`가 걸린 캐럿에서 다른 mark나 색을 켜면 `COMMAND_NOT_APPLICABLE`이다.
+     * `code`는 `bold`, `italic`, `underline`, `strike`와 함께 걸 수 없다. `code`를 켜면 이 네 mark의 stored mark를 대체한다.
+     * `code`가 걸린 캐럿에서 이 네 mark를 켜면 `COMMAND_NOT_APPLICABLE`이다.
+     * 글자색과 배경색은 `code`와 함께 걸 수 있다.
      * 범위 선택, 파괴된 편집기, 5종 밖의 `type`은 `COMMAND_NOT_APPLICABLE`로 거절한다.
      * 범위 선택이 codeBlock과 겹쳐도 `COMMAND_NOT_APPLICABLE`이 우선한다.
      * codeBlock 안 캐럿은 `CODE_BLOCK_MARK_NOT_ALLOWED`로 거절한다.

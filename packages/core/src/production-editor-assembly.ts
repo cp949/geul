@@ -9,7 +9,6 @@ import { Editor, mergeAttributes, Node, type JSONContent } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 import { Mark } from "@tiptap/pm/model";
-import StarterKit from "@tiptap/starter-kit";
 
 import {
   BlockContainerExtension,
@@ -24,6 +23,7 @@ import { BlockTypeKeyboardExtension } from "./block-type-keyboard-extension.js";
 import { CalloutBackgroundPresentationExtension } from "./callout-background-presentation-extension.js";
 import { CalloutExtension } from "./callout-extension.js";
 import { CheckListItemMarkerExtension } from "./check-list-item-marker-extension.js";
+import { StarterKitWithCodeColor } from "./code-mark-extension.js";
 import { CodeBlockExitExtension } from "./code-block-exit-extension.js";
 import { CodeBlockExtension } from "./code-block-extension.js";
 import { CodeBlockHighlightExtension } from "./code-block-highlight-extension.js";
@@ -528,7 +528,7 @@ export const createProductionEditor = (options: {
     injectCSS: false,
     editable: options.editable ?? true,
     extensions: [
-      StarterKit.configure({
+      StarterKitWithCodeColor.configure({
         blockquote: false,
         bulletList: false,
         codeBlock: false,
