@@ -285,6 +285,26 @@ describe("bold와 code는 스키마가 계속 배타로 둔다", () => {
     ]);
     expect(() => paragraph?.check()).toThrow(/Invalid collection of marks/);
   });
+
+  it("italic·underline·strike·link도 code와 함께 있으면 스키마가 거절한다", () => {
+    const editor = createTableFixtureEditor(docWithParagraph);
+    const schema = editor.schema;
+
+    const marks = {
+      italic: schema.marks.italic!.create(),
+      underline: schema.marks.underline!.create(),
+      strike: schema.marks.strike!.create(),
+      link: schema.marks.link!.create({ href: "https://example.com" }),
+    };
+    for (const [name, mark] of Object.entries(marks)) {
+      const paragraph = schema.nodes.paragraph?.create(null, [
+        schema.text("x", [mark, schema.marks.code!.create()]),
+      ]);
+      expect(() => paragraph?.check(), name).toThrow(
+        /Invalid collection of marks/,
+      );
+    }
+  });
 });
 
 /** 한 문단 b1(content)을 마운트하고 문자 범위 [from, to)를 선택한다. */
