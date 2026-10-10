@@ -329,7 +329,18 @@ const blocksFromSegments = (
       context.codePoints.codeTextIn(preNode.children);
       const source = sanitizeCodeBlockSource(textValue(preNode.children));
       const id = propertyString(preNode, "dataGeulBlockId") ?? createId();
-      const { language, metadataConflict } = selectCodeBlockLanguage(preNode);
+      // 무효 language 후보는 없는 것으로 보고 빠진 후보마다 경고한다(Issue #353).
+      // 소스 글자 경고 뒤, 충돌 경고 앞이다.
+      const { language, metadataConflict, rejected } =
+        selectCodeBlockLanguage(preNode);
+      for (const { node, attribute } of rejected ?? []) {
+        context.warnings.push({
+          kind: "UNSAFE_ATTRIBUTE_REMOVED",
+          element: node.tagName,
+          attribute,
+          message: `Unsupported ${attribute} attribute was removed from ${node.tagName}`,
+        });
+      }
       if (metadataConflict) {
         context.warnings.push(codeBlockLanguageMetadataIgnoredWarning(id));
       }

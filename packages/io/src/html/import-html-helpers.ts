@@ -7,6 +7,7 @@ import {
   appendOrMergeInlineItem,
   type IdFactory,
   type InlineContent,
+  isValidCodeBlockLanguage,
   sanitizeInlineText,
   type TextBlockProps,
   type TextMark,
@@ -193,43 +194,87 @@ export const firstDirectCode = (
       child.type === "element" && child.tagName === "code",
   );
 
+// language 후보 중 무효라서 빠진 속성이다. attribute는 hast 속성 이름이다.
+export type RejectedLanguageCandidate = {
+  node: HtmlElementNode;
+  attribute: "dataLanguage" | "className";
+};
+
+// 한 요소의 data-language 후보다. 무효면 빼고 rejected에 적는다. 빈 값은
+// propertyString이 이미 걸러 미지정으로 본다.
+const dataLanguageCandidates = (
+  node: HtmlElementNode,
+  rejected: RejectedLanguageCandidate[],
+): string[] => {
+  const value = propertyString(node, "dataLanguage");
+  if (value === undefined) return [];
+  if (isValidCodeBlockLanguage(value)) return [value];
+  rejected.push({ node, attribute: "dataLanguage" });
+  return [];
+};
+
+// 한 요소의 language-* class 후보다. 무효 토큰은 빼고, 하나라도 빠지면
+// (노드, className)을 한 번만 rejected에 적는다.
+const classLanguageCandidates = (
+  node: HtmlElementNode,
+  rejected: RejectedLanguageCandidate[],
+): string[] => {
+  const all = classLanguages(node);
+  const valid = all.filter(isValidCodeBlockLanguage);
+  if (valid.length < all.length)
+    rejected.push({ node, attribute: "className" });
+  return valid;
+};
+
 // pre의 language 후보를 우선순위대로 고른다. importHtml과 클립보드 파서가
 // 공유한다(Issue #351).
 // - 우선순위: 첫 직계 code의 data-language, pre의 data-language, 첫 직계
 //   code의 language-* class, pre의 language-* class.
-// - 후보가 하나라도 고른 값과 다르면 metadataConflict가 참이다. 한 요소의
-//   language-* 토큰 여럿도 후보다.
+// - 무효 후보(비어 있지 않고 제어문자·짝 없는 surrogate가 든 값)는 없는
+//   것으로 본다. 선택 후보와 exact 후보 양쪽에서 뺀다(Issue #353).
+// - 빠진 후보는 rejected에 후보 순서대로 담는다. 같은 노드의 같은 속성은
+//   한 번이다. 빠진 후보가 없으면 rejected 키가 없다.
+// - 유효 후보가 하나라도 고른 값과 다르면 metadataConflict가 참이다. 한
+//   요소의 language-* 토큰 여럿도 후보다.
 // - 경고를 낼지는 호출자가 정한다. 값 정규화(canonicalize)도 호출자 몫이다.
 export const selectCodeBlockLanguage = (
   preNode: HtmlElementNode,
-): { language: string | undefined; metadataConflict: boolean } => {
+): {
+  language: string | undefined;
+  metadataConflict: boolean;
+  rejected?: RejectedLanguageCandidate[];
+} => {
+  const rejected: RejectedLanguageCandidate[] = [];
   const directCode = firstDirectCode(preNode);
-  const directCodeDataLanguage =
+  const directCodeData =
     directCode === undefined
-      ? undefined
-      : propertyString(directCode, "dataLanguage");
-  const preDataLanguage = propertyString(preNode, "dataLanguage");
-  const directCodeClassLanguages =
-    directCode === undefined ? [] : classLanguages(directCode);
-  const preClassLanguages = classLanguages(preNode);
+      ? []
+      : dataLanguageCandidates(directCode, rejected);
+  const preData = dataLanguageCandidates(preNode, rejected);
+  const directCodeClass =
+    directCode === undefined
+      ? []
+      : classLanguageCandidates(directCode, rejected);
+  const preClass = classLanguageCandidates(preNode, rejected);
   const selectionCandidates = [
-    directCodeDataLanguage,
-    preDataLanguage,
-    directCodeClassLanguages[0],
-    preClassLanguages[0],
+    directCodeData[0],
+    preData[0],
+    directCodeClass[0],
+    preClass[0],
   ].filter((value): value is string => value !== undefined);
   const language = selectionCandidates[0];
   const exactMetadataCandidates = [
-    directCodeDataLanguage,
-    preDataLanguage,
-    ...directCodeClassLanguages,
-    ...preClassLanguages,
-  ].filter((value): value is string => value !== undefined);
+    ...directCodeData,
+    ...preData,
+    ...directCodeClass,
+    ...preClass,
+  ];
   return {
     language,
     metadataConflict:
       language !== undefined &&
       exactMetadataCandidates.some((candidate) => candidate !== language),
+    ...(rejected.length > 0 ? { rejected } : {}),
   };
 };
 

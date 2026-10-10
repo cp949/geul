@@ -4,7 +4,6 @@ import {
   type InlineContentItem,
   isCanonicalCellAlign,
   isCanonicalCellColor,
-  isValidCodeBlockLanguage,
   sanitizeCodeBlockSource,
   tableSizeViolationMessage,
   validateTableSize,
@@ -402,7 +401,8 @@ const blockSequenceFromNodes = (
       // 거치지 않는다 — 줄바꿈·들여쓰기가 코드 내용이다. model의 codeBlock 소스
       // 계약이 거부하는 문자만 지운다. 내용 없는 pre는 만들지 않는다.
       // language는 importHtml과 같은 규칙(selectCodeBlockLanguage)으로 고르고
-      // model 정규형으로 바꾼다. model이 거부하는 값(제어문자 등)이면 버린다.
+      // model 정규형으로 바꾼다. 무효 후보는 선택 함수가 이미 뺀다. 빠진 후보
+      // 목록(rejected)은 버린다. 클립보드 경로는 경고를 내지 않는다.
       // wrap·caption·id는 읽지 않는다.
       if (segment.kind === "codeBlock") {
         const text = sanitizeCodeBlockSource(textValue(segment.node.children));
@@ -411,9 +411,9 @@ const blockSequenceFromNodes = (
         blocks.push({
           type: "codeBlock",
           text,
-          ...(language !== undefined && isValidCodeBlockLanguage(language)
-            ? { language: canonicalizeCodeBlockLanguage(language) }
-            : {}),
+          ...(language === undefined
+            ? {}
+            : { language: canonicalizeCodeBlockLanguage(language) }),
         });
         continue;
       }
