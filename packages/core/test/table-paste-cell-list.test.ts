@@ -371,6 +371,18 @@ describe("표 안 캐럿에 목록 항목 자식 codeBlock·divider가 든 클�
     expect(cellContents(editor)[3]).toEqual([{ text: "d\nT\na\nb" }]);
   });
 
+  it("codeBlock 안 공백뿐인 줄과 Tab뿐인 줄도 빈 줄로 건너뛰고 글자가 있는 줄의 들여쓰기는 지킨다", () => {
+    const { editor, result } = pasteInCell([
+      table2x2,
+      bullet("T", {
+        children: [{ type: "codeBlock", text: "a\n   \n\t\n  b" }],
+      }),
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(cellContents(editor)[3]).toEqual([{ text: "d\nT\na\n  b" }]);
+  });
+
   it("children 안에 codeBlock·divider만 있어도 표 개수를 셀 때 예외를 내지 않는다", () => {
     const { result } = pasteInCell([
       bullet("L", {

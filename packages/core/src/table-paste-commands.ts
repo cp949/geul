@@ -448,8 +448,9 @@ const countTables = (blocks: readonly ClipboardContentBlock[]): number => {
 // 접두어·들여쓰기는 없다. 셀 안 html 붙여넣기의 줄 정책과 같다.
 // 블록 색은 셀에 속성으로 남을 수 없어 텍스트 마크로 옮긴다(Issue #343).
 // 표는 줄이 아니다. 최상위 표는 호출부가 떼고, children 안 표는 거절한다.
-// codeBlock은 글자의 줄마다 셀 줄이다(Issue #351). 공백 들여쓰기는 지키고 빈 줄은
-// 만들지 않는다. 셀 텍스트는 Tab을 거부하므로 Tab은 지운다. divider는 글자가 없어
+// codeBlock은 글자의 줄마다 셀 줄이다(Issue #351). 글자가 있는 줄의 공백 들여쓰기는
+// 지키고, 비었거나 공백·Tab뿐인 줄은 만들지 않는다. 셀 텍스트는 Tab을 거부하므로
+// Tab은 지운다. divider는 글자가 없어
 // 줄이 없다.
 // 빈 줄은 withParagraphsMergedIntoCells가 건너뛴다.
 const cellLinesOf = (
@@ -461,7 +462,7 @@ const cellLinesOf = (
       return block.text
         .split("\n")
         .map((line) => line.replace(/\t/g, ""))
-        .filter((line) => line.length > 0)
+        .filter((line) => line.trim().length > 0)
         .map((line) => [{ text: line }]);
     }
     const line = withBlockColorMarks(block.content, block);
