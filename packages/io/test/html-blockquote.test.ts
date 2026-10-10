@@ -211,6 +211,116 @@ describe("외부 blockquote import(D6 첫 문단 승격)", () => {
   });
 });
 
+describe("children wrapper 안 인용의 자기 children(Issue #357)", () => {
+  // wrapper의 own 노드가 blockquote면 D6 분할이 인용 자신의 children을
+  // 만든다. 수정 전에는 wrapper children이 그 children을 덮어써 x가
+  // 경고 없이 사라졌다. 문서 순서대로 own children 뒤에 wrapper children을
+  // 잇는다.
+  it("bare 인라인 승격 인용의 자기 children 뒤에 wrapper children이 이어진다", () => {
+    expectImportedBlocks(
+      '<div data-geul-block-id="a"><blockquote>인용<p>x</p></blockquote><div data-geul-children="1"><p>y</p></div></div>',
+      [
+        quoteBlock("a", "인용", [
+          paragraphBlock("html-2", "x"),
+          paragraphBlock("html-3", "y"),
+        ]),
+      ],
+    );
+  });
+
+  // 인용 안 표는 D6 분할로 인용의 children이 된다. 빈 data-geul-children
+  // 값과 data-geul-block-group 컨테이너도 같은 wrapper 경로를 탄다.
+  it("인용 안 표 children 뒤에 block-group wrapper children이 이어진다", () => {
+    expectImportedBlocks(
+      '<div data-geul-children=""><blockquote>x<table><tr><td>t</td></tr></table></blockquote><div data-geul-block-group=""><p>c</p></div></div>',
+      [
+        quoteBlock("html-1", "x", [
+          {
+            id: "html-2",
+            type: "table",
+            columns: [{ id: "html-3", width: 160 }],
+            rows: [
+              {
+                id: "html-4",
+                cells: [
+                  {
+                    id: "html-5",
+                    columnId: "html-3",
+                    rowSpan: 1,
+                    columnSpan: 1,
+                    content: [{ text: "t" }],
+                  },
+                ],
+              },
+            ],
+            headerRows: 0,
+            headerColumns: 0,
+          },
+          paragraphBlock("html-6", "c"),
+        ]),
+      ],
+    );
+  });
+
+  // 첫 <p> 승격(D6)만 쓰는 형태도 나머지 <p>가 인용 children이라 같은
+  // 손실을 겪었다.
+  it("첫 문단 승격 인용의 나머지 문단 뒤에 wrapper children이 이어진다", () => {
+    expectImportedBlocks(
+      '<div data-geul-block-id="a"><blockquote><p>인용</p><p>x</p></blockquote><div data-geul-children="1"><p>y</p></div></div>',
+      [
+        quoteBlock("a", "인용", [
+          paragraphBlock("html-2", "x"),
+          paragraphBlock("html-3", "y"),
+        ]),
+      ],
+    );
+  });
+
+  // wrapper children은 따로 변환돼 바로 앞 형제(own children 마지막 블록)를
+  // 몰랐다. 그래서 이음매의 기본 ol이 번호를 이어 3번이 됐다. 같은 인용 안
+  // 연속 ol처럼 첫 항목이 1번에서 다시 시작해야 한다.
+  it("own children 끝 번호 목록 뒤 wrapper children의 기본 ol은 번호를 1부터 다시 시작한다", () => {
+    expectImportedBlocks(
+      '<div data-geul-block-id="a"><blockquote>q<ol><li>a</li><li>b</li></ol></blockquote><div data-geul-children="1"><ol><li>c</li></ol></div></div>',
+      [
+        quoteBlock("a", "q", [
+          { id: "html-2", type: "numberedListItem", content: [{ text: "a" }] },
+          { id: "html-3", type: "numberedListItem", content: [{ text: "b" }] },
+          {
+            id: "html-4",
+            type: "numberedListItem",
+            content: [{ text: "c" }],
+            startNumber: 1,
+          },
+        ]),
+      ],
+    );
+  });
+
+  // 클립보드 파서도 documentFromRoot로 같은 분기를 탄다. 수정 전에는 버려진
+  // 인용 안 표가 표 슬롯 대조를 어겨 NOT_TABULAR로 거절됐다.
+  it("클립보드 파서도 인용 안 표 children 뒤에 wrapper children을 잇는다", () => {
+    const result = parseClipboardTable({
+      html: '<div data-geul-children=""><blockquote>x<table><tr><td>t</td></tr></table></blockquote><div data-geul-block-group=""><p>c</p></div></div>',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toHaveLength(1);
+    const quote = result.value[0];
+    expect(quote?.type).toBe("quote");
+    if (quote?.type !== "quote") return;
+    expect(quote.content).toEqual([{ text: "x" }]);
+    expect(quote.children?.map((child) => child.type)).toEqual([
+      "table",
+      "paragraph",
+    ]);
+    expect(withoutIds(quote.children?.slice(1) ?? [])).toEqual([
+      { type: "paragraph", content: [{ text: "c" }] },
+    ]);
+  });
+});
+
 describe("경계 유지", () => {
   // 64·65단 체인은 HTML 트리 깊이(65·66)가 MAX_HTML_TREE_DEPTH(256)에 한참
   // 못 미쳐 DEEP_TREE_FLATTENED 없이 model 상한 가드(#132)만 걸린다: 상한
