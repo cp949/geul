@@ -7,6 +7,7 @@
 import {
   type Block,
   type Document,
+  type HeadingBlock,
   type IdFactory,
   type IframeEmbedConfig,
   type ListItemBlock,
@@ -15,7 +16,7 @@ import {
   sanitizeInlineText,
 } from "@cp949/geul-model";
 
-import { segmentBlocks } from "./block-segmenter.js";
+import { type BlockSegment, segmentBlocks } from "./block-segmenter.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
 import {
@@ -32,7 +33,10 @@ import {
   productionListItemType,
 } from "./import-html-list.js";
 import { mediaBlockFromNode } from "./import-html-media.js";
-import { importBlockSegmentPolicy } from "./import-html-segment-policy.js";
+import {
+  importBlockSegmentPolicy,
+  importBlockSegmentPolicyWith,
+} from "./import-html-segment-policy.js";
 import { parseTable } from "./import-html-table.js";
 import {
   findChildrenWrapper,
@@ -52,6 +56,65 @@ import {
 } from "./import-warnings.js";
 import { hasSubstantialText } from "./table-layout.js";
 
+// 표 판정·처리 seam(Issue #356 RD-003). 변환기는 어느 노드가 표인지와 표를
+// 어떤 블록으로 읽는지를 호출자에게서 받는다. importHtml은 defaultHtmlTableSeam을
+// 넘기고, 클립보드는 자기 처리기를 꽂는다. 공개 API가 아니다(index.ts에서
+// export하지 않는다).
+export type TableSegment = Extract<
+  BlockSegment<HeadingBlock["level"], true>,
+  { kind: "table" }
+>;
+
+export type HtmlTableHelpers = {
+  createId: IdFactory;
+  context: HtmlImportContext;
+  // 같은 변환기(같은 depth·context·iframe 설정·표 seam)로 노드 목록을 블록으로
+  // 읽는다. 레이아웃 표를 안쪽 내용으로 읽는 처리기가 쓴다. depth는 표 노드의
+  // 깊이 그대로다 — 표는 children 컨테이너가 아니라 +1 하지 않는다.
+  blocksFromNodes: (nodes: readonly HtmlNode[]) => Block[];
+};
+
+export type HtmlTableSeam = {
+  // 표 자리로 넘길 노드 판정. 세그먼트 정책, 변환기 호출, li·인용 분할이 모두
+  // 이 판정을 본다. 한 곳이라도 다른 판정을 보면 중첩 위치에서 표가 다르게 읽힌다.
+  isTableNode: (node: HtmlElementNode) => boolean;
+  // 표 세그먼트 하나를 블록 0개 이상으로 읽는다.
+  blocksFromTable: (
+    segment: TableSegment,
+    helpers: HtmlTableHelpers,
+  ) => Block[];
+};
+
+// importHtml의 기본 처리: table 태그를 표로 보고, caption 문단 다음에 표 블록을
+// 낸다. caption 문단은 "표를 어떻게 읽는가"의 일부라 처리기 몫이다.
+export const defaultHtmlTableSeam: HtmlTableSeam = {
+  isTableNode: importBlockSegmentPolicy.isTableNode,
+  blocksFromTable: (segment, { createId, context }) => {
+    // caption 등 표 직속 비섹션 자식(thead/tbody/tfoot/tr/colgroup이 아닌
+    // 나머지)은 sanitize가 unwrap한 caption 텍스트가 대표 사례다(caption은
+    // htmlAllowedTagNames에 없다). parseTable은 이 노드들을 읽지 않으므로
+    // 표 블록 앞에 문단으로 옮겨 담지 않으면 조용히 사라진다(이슈 #70).
+    // 표 직속 비섹션 자식 사이에는 HTML5 tree construction 규칙상
+    // foster-parenting되지 않는 구조적 공백(들여쓰기·개행) 텍스트 노드가
+    // 그대로 남는다. 노드 단위로 "통째로 공백뿐인가"만 걸러내고, 실질
+    // 텍스트가 있는 노드(caption 자체의 앞뒤 공백 포함)는 내부를 손대지
+    // 않는다 — 일반 문단 생성 경로의 collapse-없음 관례를 그대로 따른다.
+    const nonSectionChildren = segment.nonSectionChildren.filter((child) =>
+      hasSubstantialText(textValue([child])),
+    );
+    const blocks: Block[] = [];
+    if (nonSectionChildren.length > 0) {
+      blocks.push({
+        id: createId(),
+        type: "paragraph",
+        content: paragraphContentFromNodes(nonSectionChildren, context),
+      });
+    }
+    blocks.push(parseTable(segment.node, createId, context));
+    return blocks;
+  },
+};
+
 // segmentBlocks의 경계 판정을 실제 Block으로 옮기는 변환 하나만 한다(재귀
 // unwrap은 다루지 않는다 — blocksFromNodes가 감싼다). documentFromRoot의
 // 기존 루프 그대로이고, DELTA-04는 이 함수를 두 자리에서 재사용한다: (1)
@@ -65,10 +128,12 @@ const blocksFromSegments = (
   depth: number,
   context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
+  tableSeam: HtmlTableSeam,
 ): Block[] => {
   const blocks: Block[] = [];
 
-  for (const segment of segmentBlocks(nodes, importBlockSegmentPolicy)) {
+  const segmentPolicy = importBlockSegmentPolicyWith(tableSeam.isTableNode);
+  for (const segment of segmentBlocks(nodes, segmentPolicy)) {
     if (segment.kind === "paragraph") {
       // 경계 태그 없이 자연히 쌓인 pending(예: div/li 재귀 안 텍스트,
       // 인식하지 않는 태그 통과분)이라 originating 요소가 없다 — 기존
@@ -177,6 +242,7 @@ const blocksFromSegments = (
       const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
       const { contentNodes, childrenNodes, promoted } = splitQuoteChildren(
         segment.node,
+        tableSeam.isTableNode,
       );
       const content = paragraphContentFromNodes(
         contentNodes,
@@ -194,6 +260,7 @@ const blocksFromSegments = (
           depth,
           context,
           iframeEmbedConfig,
+          tableSeam,
         );
         if (flattened.length > 0)
           context.warnings.push(nestedChildrenFlattenedWarning());
@@ -209,6 +276,7 @@ const blocksFromSegments = (
         depth + 1,
         context,
         iframeEmbedConfig,
+        tableSeam,
       );
       blocks.push(
         children.length > 0
@@ -226,6 +294,7 @@ const blocksFromSegments = (
       const id = propertyString(segment.node, "dataGeulBlockId") ?? createId();
       const { contentNodes, childrenNodes, promoted } = splitQuoteChildren(
         segment.node,
+        tableSeam.isTableNode,
       );
       const content = paragraphContentFromNodes(
         contentNodes,
@@ -243,6 +312,7 @@ const blocksFromSegments = (
           depth,
           context,
           iframeEmbedConfig,
+          tableSeam,
         );
         if (flattened.length > 0)
           context.warnings.push(nestedChildrenFlattenedWarning());
@@ -264,6 +334,7 @@ const blocksFromSegments = (
         depth + 1,
         context,
         iframeEmbedConfig,
+        tableSeam,
       );
       blocks.push(
         children.length > 0
@@ -359,26 +430,21 @@ const blocksFromSegments = (
       continue;
     }
 
-    // caption 등 표 직속 비섹션 자식(thead/tbody/tfoot/tr/colgroup이 아닌
-    // 나머지)은 sanitize가 unwrap한 caption 텍스트가 대표 사례다(caption은
-    // htmlAllowedTagNames에 없다). parseTable은 이 노드들을 읽지 않으므로
-    // 표 블록 앞에 문단으로 옮겨 담지 않으면 조용히 사라진다(이슈 #70).
-    // 표 직속 비섹션 자식 사이에는 HTML5 tree construction 규칙상
-    // foster-parenting되지 않는 구조적 공백(들여쓰기·개행) 텍스트 노드가
-    // 그대로 남는다. 노드 단위로 "통째로 공백뿐인가"만 걸러내고, 실질
-    // 텍스트가 있는 노드(caption 자체의 앞뒤 공백 포함)는 내부를 손대지
-    // 않는다 — 일반 문단 생성 경로의 collapse-없음 관례를 그대로 따른다.
-    const nonSectionChildren = segment.nonSectionChildren.filter((child) =>
-      hasSubstantialText(textValue([child])),
+    blocks.push(
+      ...tableSeam.blocksFromTable(segment, {
+        createId,
+        context,
+        blocksFromNodes: (innerNodes) =>
+          blocksFromNodes(
+            innerNodes,
+            createId,
+            depth,
+            context,
+            iframeEmbedConfig,
+            tableSeam,
+          ),
+      }),
     );
-    if (nonSectionChildren.length > 0) {
-      blocks.push({
-        id: createId(),
-        type: "paragraph",
-        content: paragraphContentFromNodes(nonSectionChildren, context),
-      });
-    }
-    blocks.push(parseTable(segment.node, createId, context));
   }
 
   return blocks;
@@ -395,9 +461,13 @@ const blocksFromListItem = (
   depth: number,
   context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
+  tableSeam: HtmlTableSeam,
 ): Block[] => {
   const id = propertyString(node, "dataGeulBlockId") ?? createId();
-  const { contentNodes, childrenNodes, promoted } = splitListItemChildren(node);
+  const { contentNodes, childrenNodes, promoted } = splitListItemChildren(
+    node,
+    tableSeam.isTableNode,
+  );
   const content = paragraphContentFromNodes(
     contentNodes,
     context,
@@ -430,6 +500,7 @@ const blocksFromListItem = (
       depth,
       context,
       iframeEmbedConfig,
+      tableSeam,
     );
     if (flattened.length > 0) {
       context.warnings.push(nestedChildrenFlattenedWarning());
@@ -443,6 +514,7 @@ const blocksFromListItem = (
     depth + 1,
     context,
     iframeEmbedConfig,
+    tableSeam,
   );
   return children.length > 0 ? [{ ...ownBlock, children }] : [ownBlock];
 };
@@ -463,6 +535,7 @@ const blocksFromListElement = (
   depth: number,
   context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
+  tableSeam: HtmlTableSeam,
   restartDefaultOrderedList: boolean,
 ): Block[] => {
   const blocks: Block[] = [];
@@ -486,6 +559,7 @@ const blocksFromListElement = (
         depth,
         context,
         iframeEmbedConfig,
+        tableSeam,
       ),
     );
     if (itemIndex > 0 && blocks.length > previousLength) {
@@ -546,6 +620,7 @@ const blocksFromListElement = (
         depth,
         context,
         iframeEmbedConfig,
+        tableSeam,
       ),
     );
     itemIndex += 1;
@@ -582,6 +657,7 @@ const blocksFromNodes = (
   depth: number,
   context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
+  tableSeam: HtmlTableSeam,
 ): Block[] => {
   const blocks: Block[] = [];
   let plainRun: HtmlNode[] = [];
@@ -595,6 +671,7 @@ const blocksFromNodes = (
         depth,
         context,
         iframeEmbedConfig,
+        tableSeam,
       ),
     );
     plainRun = [];
@@ -611,6 +688,7 @@ const blocksFromNodes = (
           depth,
           context,
           iframeEmbedConfig,
+          tableSeam,
           node.tagName === "ol" && previousBlock?.type === "numberedListItem",
         ),
       );
@@ -644,6 +722,7 @@ const blocksFromNodes = (
         depth + 1,
         context,
         iframeEmbedConfig,
+        tableSeam,
       );
 
       // summary에서 읽는 속성을 표시한다. style의 "제거됨" 판정은
@@ -706,6 +785,7 @@ const blocksFromNodes = (
               depth,
               context,
               iframeEmbedConfig,
+              tableSeam,
             );
             const candidate = ownBlocks[0];
             return ownBlocks.length === 1 &&
@@ -766,6 +846,7 @@ const blocksFromNodes = (
       depth + 1,
       context,
       iframeEmbedConfig,
+      tableSeam,
     );
     // codeBlock(model CodeBlock)엔 children 필드가 없다 — findChildrenWrapper
     // 가 이미 pre를 2-child(children 컨테이너 형제 있음) 분기에서 거절해
@@ -788,6 +869,7 @@ export const documentFromRoot = (
   createId: IdFactory,
   context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
+  tableSeam: HtmlTableSeam,
 ): Document => {
   const blocks = blocksFromNodes(
     root.children,
@@ -795,6 +877,7 @@ export const documentFromRoot = (
     1,
     context,
     iframeEmbedConfig,
+    tableSeam,
   );
   return { formatVersion: 1, revision: 0, blocks };
 };

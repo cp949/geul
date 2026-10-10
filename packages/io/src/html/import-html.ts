@@ -24,7 +24,10 @@ import {
   HtmlDocumentInvalidError,
 } from "./import-html-helpers.js";
 import { createImportContext } from "./import-context.js";
-import { documentFromRoot } from "./import-html-blocks.js";
+import {
+  defaultHtmlTableSeam,
+  documentFromRoot,
+} from "./import-html-blocks.js";
 import { htmlImportSanitizeSchema } from "./import-html-sanitize-schema.js";
 import { unwrapBlockBearingColorTags } from "./inline-content.js";
 import {
@@ -99,6 +102,7 @@ export const importHtml = (
       options?.createId ?? createDefaultIdFactory(safeRoot),
       context,
       options?.iframeEmbed ?? {},
+      defaultHtmlTableSeam,
     );
     // 변환기가 보존했다고 표시하지 않은 감사 대상 속성을 경고한다. 변환기
     // 경고라 가장 뒤에 붙는다.

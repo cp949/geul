@@ -24,7 +24,12 @@ import { hasSubstantialText } from "./table-layout.js";
 // 집합이다(그 외 요소와 텍스트는 인라인이라 pending으로 쌓인다). D6의 "첫
 // 자식이 문단인가/비문단인가"는 이 판정 위에서만 뜻이 있다 — strong 같은
 // 인라인 요소를 블록으로 세면 인라인만 든 인용문이 빈 content가 된다.
-const isBlockLevelElement = (node: HtmlElementNode): boolean =>
+// 표 판정은 변환기가 주입받은 것을 넘긴다 — 모듈 상수 판정을 보면 주입 판정이
+// 고른 노드가 li·인용 본문에 섞인다.
+const isBlockLevelElement = (
+  node: HtmlElementNode,
+  isTableNode: (node: HtmlElementNode) => boolean,
+): boolean =>
   importBlockSegmentPolicy.isSimpleBoundary(node.tagName) ||
   importBlockSegmentPolicy.headingLevelFromTagName(node.tagName) !==
     undefined ||
@@ -34,7 +39,7 @@ const isBlockLevelElement = (node: HtmlElementNode): boolean =>
   importBlockSegmentPolicy.isCodeBlockFigureNode?.(node) === true ||
   importBlockSegmentPolicy.isNestedBoundary(node.tagName) ||
   importBlockSegmentPolicy.isTransparent(node.tagName) ||
-  importBlockSegmentPolicy.isTableNode(node) ||
+  isTableNode(node) ||
   importBlockSegmentPolicy.isMediaNode?.(node) === true;
 
 // li가 목록 블록의 안정 ID와 content를 직접 소유한다(RD-003 HTML 정규형).
@@ -45,6 +50,7 @@ const isBlockLevelElement = (node: HtmlElementNode): boolean =>
 // 이후 flow content는 종류와 무관하게 children 변환 경계로 넘긴다.
 export const splitListItemChildren = (
   node: HtmlElementNode,
+  isTableNode: (node: HtmlElementNode) => boolean,
 ): {
   contentNodes: HtmlNode[];
   childrenNodes: HtmlNode[];
@@ -68,7 +74,7 @@ export const splitListItemChildren = (
       promoted: first,
     };
   }
-  if (isElementNode(first) && isBlockLevelElement(first)) {
+  if (isElementNode(first) && isBlockLevelElement(first, isTableNode)) {
     return { contentNodes: [], childrenNodes: node.children };
   }
 
@@ -76,7 +82,7 @@ export const splitListItemChildren = (
     (child, index) =>
       index >= firstSubstantialIndex &&
       isElementNode(child) &&
-      isBlockLevelElement(child),
+      isBlockLevelElement(child, isTableNode),
   );
   if (firstBoundaryIndex < 0) {
     return { contentNodes: node.children, childrenNodes: [] };
@@ -108,6 +114,7 @@ export const splitListItemChildren = (
 // 적용한다).
 export const splitQuoteChildren = (
   node: HtmlElementNode,
+  isTableNode: (node: HtmlElementNode) => boolean,
 ): {
   contentNodes: HtmlNode[];
   childrenNodes: HtmlNode[];
@@ -118,13 +125,13 @@ export const splitQuoteChildren = (
   );
   if (head === undefined) return { contentNodes: [], childrenNodes: [] };
 
-  if (!isElementNode(head) || !isBlockLevelElement(head)) {
+  if (!isElementNode(head) || !isBlockLevelElement(head, isTableNode)) {
     const headIndex = node.children.indexOf(head);
     const firstBoundaryIndex = node.children.findIndex(
       (child, index) =>
         index >= headIndex &&
         isElementNode(child) &&
-        isBlockLevelElement(child),
+        isBlockLevelElement(child, isTableNode),
     );
     if (firstBoundaryIndex < 0) {
       return { contentNodes: node.children, childrenNodes: [] };

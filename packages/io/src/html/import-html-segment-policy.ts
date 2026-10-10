@@ -97,3 +97,12 @@ export const importBlockSegmentPolicy: BlockSegmentPolicy<
   isMediaNode,
   isCalloutNode,
 };
+
+// 표 판정만 바꾼 정책. 판정이 기본 판정이면 모듈 상수를 그대로 돌려준다.
+// 표 seam을 주입받는 변환기가 세그먼트 분할에 쓴다.
+export const importBlockSegmentPolicyWith = (
+  isTableNode: (node: HtmlElementNode) => boolean,
+): typeof importBlockSegmentPolicy =>
+  isTableNode === importBlockSegmentPolicy.isTableNode
+    ? importBlockSegmentPolicy
+    : { ...importBlockSegmentPolicy, isTableNode };
