@@ -86,32 +86,32 @@ export const parseClipboardTable = (input: {
 
 정정(2026-08-21 리뷰): 그렇다고 폴백이 **무손실은 아니다**. ProseMirror의 `blockTags`에는 `table`은 있지만 `tr`/`td`/`th`/`tbody`는 없어서, 표의 모든 셀이 구분자 없이 하나의 인라인 런으로 이어 붙는다. 실제 브라우저에서 확인: `<p>intro</p><table>12|34 / 56|78</table><p>outro</p>`를 붙이면 문서에 `intro` / `12345678` / `outro` 세 문단이 생긴다 — 셀 경계뿐 아니라 행 경계도 사라지고, 숫자 셀에서는 조용한 값 손상이 된다. 즉 이 정책은 "표 밖 문단 유실"과 "표 구조·셀 경계 유실"을 맞바꾼 것이지 손실을 없앤 것이 아니다. 당시 e2e(`e2e/table-paste.spec.ts`)는 `toContainText`가 아니라 병합된 정확한 문자열을 assert해 이 동작을 고정했다 — `toContainText("cellA")`는 `cellAcellB`에도 통과해 병합을 감췄다. 이 e2e 고정은 Issue #71 구현으로 대체됐다(바로 아래 '구현 반영' 단락과 현재 `e2e/table-paste.spec.ts` 참고).
 
-구현 반영(무손실 시퀀스 계약, Issue #71): 위 정정이 지적한 손실은 `parseClipboardTable`의 반환 타입을 바꿔 해소한다. 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고, 표 앞뒤 문단을 문단 블록으로 옮겨 담아 `ClipboardContent`(`ClipboardContentBlock[]`, `packages/io/src/clipboard/clipboard-content.ts`) 시퀀스로 반환한다 — `{type:"paragraph"; content: InlineContent} | {type:"table"; data: TabularData}`(이 모양은 Issue #356 RD-004가 model `Block` 모양으로 바꿨다. §4.1 마지막 '구현 반영'을 본다). 표를 찾지 못한 HTML과 TSV 경로는 `[{type:"table", data}]`(1개짜리 시퀀스)로 반환해 계약을 하나로 통일한다. `core`의 `pasteClipboardContent`(`table-commands.ts`)가 이 시퀀스를 순서대로 조립해 한 트랜잭션으로 삽입한다 — 표는 `buildPasteTableSkeleton`+`pasteInto`로 안정 id를 배정하고, 문단은 id 없이 삽입해 `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다(ADR-0001, G-EDT-001; Issue #356 이후 입력 블록에 파서의 임시 id가 있으나 core는 쓰지 않는다). 단일 표 시퀀스는 `pasteTabularData`에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을 바꾸지 않는다 — 새 경로는 문단이 섞인 시퀀스에서만 탄다. 표 안(커서가 이미 표 셀)에서 문단이 섞인 시퀀스를 받으면 표 부분은 기존 grid-paste 경로로 붙이고, 문단 텍스트는 `withParagraphsMergedIntoCells`가 셀 인라인 콘텐츠에 합친다 — 표 셀은 블록 자식을 가질 수 없으므로(model `TableCell.content: InlineContent`) 문단을 블록으로 끼울 자리가 없지만, 버리면 조용한 텍스트 손실이 된다(변경 전에는 같은 클립보드가 `NOT_TABULAR`로 Tiptap 기본 붙여넣기에 넘어가 텍스트가 셀에 남았다). 읽기 순서를 지켜 표 앞 문단은 붙여넣은 표의 좌상단 셀 앞에, 표 뒤 문단은 마지막 셀 뒤에 LF 하나로 구분해 붙인다(셀 안 줄바꿈을 LF로 표현하는 것은 `<br>` → LF와 같은 기존 셀 텍스트 계약이다). 1×1 표에서는 두 셀이 같으므로 앞뒤 문단이 한 셀에 순서대로 쌓인다. 표 밖 텍스트의 인라인 마크는 서식 요소가 표의 형제든 표를 감싼 조상이든 같게 보존한다 — 조상인 경우 시퀀스 변환이 그 요소를 통과해 내려가므로 `wrapInAncestors`가 조상 체인을 얕은 클론으로 다시 씌워 마크(link의 `href` 포함)를 살린다. 여러 개의 독립된 데이터 표가 한 클립보드에 섞인 경우는 범위 밖으로 남는다 — `findDataTable`은 여전히 표 하나만 고르고, 고르지 않은 다른 `<table>`은 레이아웃 래퍼와 동일하게 취급돼 그 안 텍스트가 셀 경계 없이 인라인 콘텐츠로 흡수된다.
+구현 반영(무손실 시퀀스 계약, Issue #71): 위 정정이 지적한 손실은 `parseClipboardTable`의 반환 타입을 바꿔 해소한다. 표를 찾은 뒤에는 표 밖 콘텐츠를 거절하지 않고, 표 앞뒤 문단을 문단 블록으로 옮겨 담아 `ClipboardContent`(`ClipboardContentBlock[]`, `packages/io/src/clipboard/clipboard-content.ts`) 시퀀스로 반환한다 — `{type:"paragraph"; content: InlineContent} | {type:"table"; data: TabularData}`(이 모양은 Issue #356 RD-004가 model `Block` 모양으로 바꿨다. 표 옆 블록이 문단·제목뿐이라는 서술은 RD-005가 대체했다. §4.1 마지막 두 '구현 반영'을 본다). 표를 찾지 못한 HTML과 TSV 경로는 `[{type:"table", data}]`(1개짜리 시퀀스)로 반환해 계약을 하나로 통일한다. `core`의 `pasteClipboardContent`(`table-commands.ts`)가 이 시퀀스를 순서대로 조립해 한 트랜잭션으로 삽입한다 — 표는 `buildPasteTableSkeleton`+`pasteInto`로 안정 id를 배정하고, 문단은 id 없이 삽입해 `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다(ADR-0001, G-EDT-001; Issue #356 이후 입력 블록에 파서의 임시 id가 있으나 core는 쓰지 않는다). 단일 표 시퀀스는 `pasteTabularData`에 그대로 위임해 기존 표 안/밖 계약(TBL-012~014)을 바꾸지 않는다 — 새 경로는 문단이 섞인 시퀀스에서만 탄다. 표 안(커서가 이미 표 셀)에서 문단이 섞인 시퀀스를 받으면 표 부분은 기존 grid-paste 경로로 붙이고, 문단 텍스트는 `withParagraphsMergedIntoCells`가 셀 인라인 콘텐츠에 합친다 — 표 셀은 블록 자식을 가질 수 없으므로(model `TableCell.content: InlineContent`) 문단을 블록으로 끼울 자리가 없지만, 버리면 조용한 텍스트 손실이 된다(변경 전에는 같은 클립보드가 `NOT_TABULAR`로 Tiptap 기본 붙여넣기에 넘어가 텍스트가 셀에 남았다). 읽기 순서를 지켜 표 앞 문단은 붙여넣은 표의 좌상단 셀 앞에, 표 뒤 문단은 마지막 셀 뒤에 LF 하나로 구분해 붙인다(셀 안 줄바꿈을 LF로 표현하는 것은 `<br>` → LF와 같은 기존 셀 텍스트 계약이다). 1×1 표에서는 두 셀이 같으므로 앞뒤 문단이 한 셀에 순서대로 쌓인다. 표 밖 텍스트의 인라인 마크는 서식 요소가 표의 형제든 표를 감싼 조상이든 같게 보존한다 — 조상인 경우 시퀀스 변환이 그 요소를 통과해 내려가므로 `wrapInAncestors`가 조상 체인을 얕은 클론으로 다시 씌워 마크(link의 `href` 포함)를 살린다. 여러 개의 독립된 데이터 표가 한 클립보드에 섞인 경우는 범위 밖으로 남는다 — `findDataTable`은 여전히 표 하나만 고르고, 고르지 않은 다른 `<table>`은 레이아웃 래퍼와 동일하게 취급돼 그 안 텍스트가 셀 경계 없이 인라인 콘텐츠로 흡수된다.
 
 구현 반영(Issue #73): 다중 표 지원. 바로 위 문단 끝의 "여러 개의 독립된 데이터 표가 한 클립보드에 섞인 경우는 범위 밖으로 남는다 — `findDataTable`은 여전히 표 하나만 고르고…"는 TBL-012를 근거로 든 오독이었다. TBL-012의 실제 정의는 "단일 표 10,000 논리 셀 보장"(성능 계약, `docs/product/blocknote-free-feature-inventory.md`)이지 "클립보드당 표 1개" 제품 계약이 아니다 — 다중 표 지원은 TBL-012와 충돌하지 않는다. `findDataTable`은 `findDataTables`(배열 반환)로 교체됐다: 형제 최상위 데이터 표를 문서 순서(기존 pre-order DFS 순회 순서를 그대로 쓴다, 별도 정렬 없음)대로 모두 찾아 각각 독립된 `{type:"table"}` 블록으로 시퀀스에 담는다. 중첩 표는 기존 innermost wins(표를 품은 바깥 표 자신은 후보에서 제외)를 그대로 유지한다 — model이 중첩 표를 표현하지 못하는 것은 여전하므로, 표를 품은 바깥 `<table>`은 여전히 래퍼로 취급돼 그 안 텍스트가 인라인 콘텐츠로 흡수된다(바뀐 것은 "형제" 최상위 표 사이의 관계뿐이다). 표 안(커서가 이미 표 셀)에서 붙여넣는 경로(`pasteClipboardContent`의 `isInTable` 분기)는 이 DELTA의 변경 범위 밖이다 — 별도 DELTA가 이 경로를 다중 표 시퀀스에 대해 `CLIPBOARD_CONTENT_INVALID`로 명시 거절(뮤테이션 없음)하도록 바로 고쳤으므로, "첫 표만 붙고 나머지는 조용히 버려진다"는 이 문단 작성 시점의 임시 상태였을 뿐 최종 동작이 아니다(트랙-6 결함 탐지에서 spec-코드 불일치로 발견, 정정). 표 밖 붙여넣기(이 DELTA가 다루는 경로)만 표 여러 개를 모두 문서에 남긴다.
 
-구현 반영(Issue #72): `blockSequenceFromNodes`가 `p`/표 외에 `h1`~`h6`도 블록 경계로 인식한다. h1~h3는 model `HeadingBlock.level`(1~3)을 그대로 만족하므로 새 `ClipboardContentBlock` variant `{type:"heading"; level:1|2|3; content:InlineContent}`로 분리한다 — `import-html.ts`의 `parseBlock`이 이미 하는 h1~h3→heading 변환(태그명 마지막 문자에서 level 추출)과 같은 방식이다. h4~h6는 model에 대응하는 Block variant가 아예 없어 heading으로 만들 수 없으므로 문단으로 다운그레이드한다 — 다만 여전히 블록 경계로는 인식해 인접 h4~h6나 문단과 병합하지 않는다(다운그레이드는 "블록 분리 포기"가 아니라 "표현 타입만 문단으로 낮춤"이다). 이 인식은 sanitize 단계에 먼저 걸린다: 문서 import 공유 목록(`htmlAllowedTagNames`)은 `h1`~`h3`뿐이라 h4~h6는 `hast-util-sanitize`가 unwrap해 태그 자체가 파서에 도달하지 못한다. 그래서 clipboard 전용 `clipboardAllowedTagNames`(`sanitize-schema.ts`)를 `[...htmlAllowedTagNames, "h4", "h5", "h6"]`로 신설해 `clipboardSanitizeSchema.tagNames`에만 적용한다 — 문서 import 경로(`htmlSanitizeSchema`/`importHtml`)는 이 확장과 무관하게 그대로다: `importHtml("<h4>x</h4>")`은 여전히 h4가 unwrap돼 문단으로 흡수되고 `SAFE_BLOCK_DOWNGRADED`(`element:"h4"`) 경고가 그대로 난다. heading/h4~h6 텍스트도 셀 텍스트와 같은 정규화(`collapseHtmlWhitespace`+`normalizeCellContent`)를 거친다 — `flush()`가 쓰던 정규화 로직을 `normalizedInlineContent` 헬퍼로 뽑아 문단 분기와 heading 분기가 공유한다. `core`가 새 `heading` variant를 실제로 소비(표 밖 삽입, 표 안 병합)하는 것은 범위 밖으로 남는다 — 뒤따르는 DELTA가 다룬다.
+구현 반영(Issue #72): `blockSequenceFromNodes`가 `p`/표 외에 `h1`~`h6`도 블록 경계로 인식한다. h1~h3는 model `HeadingBlock.level`(1~3)을 그대로 만족하므로 새 `ClipboardContentBlock` variant `{type:"heading"; level:1|2|3; content:InlineContent}`로 분리한다 — `import-html.ts`의 `parseBlock`이 이미 하는 h1~h3→heading 변환(태그명 마지막 문자에서 level 추출)과 같은 방식이다. h4~h6는 model에 대응하는 Block variant가 아예 없어 heading으로 만들 수 없으므로 문단으로 다운그레이드한다 — 다만 여전히 블록 경계로는 인식해 인접 h4~h6나 문단과 병합하지 않는다(다운그레이드는 "블록 분리 포기"가 아니라 "표현 타입만 문단으로 낮춤"이다). 이 인식은 sanitize 단계에 먼저 걸린다: 문서 import 공유 목록(`htmlAllowedTagNames`)은 `h1`~`h3`뿐이라 h4~h6는 `hast-util-sanitize`가 unwrap해 태그 자체가 파서에 도달하지 못한다. 그래서 clipboard 전용 `clipboardAllowedTagNames`(`sanitize-schema.ts`)를 `[...htmlAllowedTagNames, "h4", "h5", "h6"]`로 신설해 `clipboardSanitizeSchema.tagNames`에만 적용한다 — 문서 import 경로(`htmlSanitizeSchema`/`importHtml`)는 이 확장과 무관하게 그대로다: `importHtml("<h4>x</h4>")`은 여전히 h4가 unwrap돼 문단으로 흡수되고 `SAFE_BLOCK_DOWNGRADED`(`element:"h4"`) 경고가 그대로 난다. heading/h4~h6 텍스트도 셀 텍스트와 같은 정규화(`collapseHtmlWhitespace`+`normalizeCellContent`)를 거친다 — `flush()`가 쓰던 정규화 로직을 `normalizedInlineContent` 헬퍼로 뽑아 문단 분기와 heading 분기가 공유한다. `core`가 새 `heading` variant를 실제로 소비(표 밖 삽입, 표 안 병합)하는 것은 범위 밖으로 남는다 — 뒤따르는 DELTA가 다룬다. (Issue #356 RD-005 이후 `blockSequenceFromNodes`와 `clipboardAllowedTagNames`는 없다. 제목은 `importHtml` 변환기와 import 스키마가 읽는다. h1~h6가 heading level 그대로 나오는 결과는 같다.)
 
 구현 반영(2026-08-28, Issue #38 슬라이스 3): 위 문단의 "h4~h6는 model에 대응하는 Block variant가 아예 없어 heading으로 만들 수 없으므로 문단으로 다운그레이드한다"는 서술은 더 이상 사실이 아니다. 선행 DELTA에서 model `HeadingBlock.level`이 `1|2|3`에서 `1|2|3|4|5|6`으로 확장됐고, `core`의 heading 변환(`tiptap-to-model.ts`)·에디터 컨트롤러(`editor-controller.ts`)도 이미 level 1~6 전부를 수용하도록 열려 있었다. 이 io 쪽 강등만 남아 있던 거짓 손실이었으므로, `ClipboardContentBlock`의 heading variant를 `{type:"heading"; level:1|2|3|4|5|6; content:InlineContent}`로 넓히고 `blockSequenceFromNodes`의 heading 분기에서 h4~h6를 문단으로 내리던 분기를 제거했다. 이제 h1~h6 전부가 heading level 그대로 `ClipboardContentBlock`에 담긴다 — 다운그레이드도, 그에 따른 블록 경계 유지 특례도 더 이상 필요 없다. (variant 표기는 Issue #356 RD-004 이후 model `HeadingBlock` 모양이다.)
 
-구현 반영(표 직속 비섹션 자식 보존, Issue #70): 위 무손실 시퀀스 계약은 표 서브트리 **바깥**(형제·조상)의 텍스트만 다뤘다. 표 서브트리 **안쪽**, 즉 `<table>` 직속 자식 중 `thead`/`tbody`/`tfoot`/`tr`/`colgroup`이 아닌 나머지에도 실질 텍스트가 남을 수 있다 — 대표 사례는 `caption`이다. `caption`은 `htmlAllowedTagNames`에 없어 sanitize가 unwrap하고(`sanitize-schema.ts`), 그 텍스트는 `<table>`의 직속 텍스트 노드가 된다. 이 빈틈은 위와 같은 정책(표 밖 문단)으로 흡수한다: `table-layout.ts`의 `tableNonSectionChildren`이 이 노드들을 뽑아내고(텍스트 노드를 포함한 `table.children` 원본을 순회한다 — 요소만 통과하는 `childElements`를 쓰면 unwrap된 caption 텍스트가 걸러져 사라진다), `hasSubstantialText`(같은 파일로 이관, clipboard·import 공유)가 실질 텍스트 여부를 판정한다. clipboard 경로(`clipboard-table-parser.ts`의 `walk()`)는 기존 `pending`을 `flush()`로 먼저 내보낸 뒤 caption을 담아 한 번 더 `flush()`한다 — 그래서 표 앞 기존 문단(intro)과 순서가 뒤바뀌지 않고, caption 텍스트도 `collapseHtmlWhitespace`/`normalizeCellContent`(셀 텍스트와 같은 정규화)를 그대로 거친다. import 경로(`import-html.ts`의 `documentFromRoot`)는 같은 헬퍼로 뽑은 노드에 실질 텍스트가 있으면 `parseTable` 결과 앞에 문단 블록을 삽입한다 — caption→문단 다운그레이드에 `SAFE_BLOCK_DOWNGRADED`류 warning은 붙지 않는다(범위 밖, `import-warnings.ts` 미변경).
+구현 반영(표 직속 비섹션 자식 보존, Issue #70): 위 무손실 시퀀스 계약은 표 서브트리 **바깥**(형제·조상)의 텍스트만 다뤘다. 표 서브트리 **안쪽**, 즉 `<table>` 직속 자식 중 `thead`/`tbody`/`tfoot`/`tr`/`colgroup`이 아닌 나머지에도 실질 텍스트가 남을 수 있다 — 대표 사례는 `caption`이다. `caption`은 `htmlAllowedTagNames`에 없어 sanitize가 unwrap하고(`sanitize-schema.ts`), 그 텍스트는 `<table>`의 직속 텍스트 노드가 된다. 이 빈틈은 위와 같은 정책(표 밖 문단)으로 흡수한다: `table-layout.ts`의 `tableNonSectionChildren`이 이 노드들을 뽑아내고(텍스트 노드를 포함한 `table.children` 원본을 순회한다 — 요소만 통과하는 `childElements`를 쓰면 unwrap된 caption 텍스트가 걸러져 사라진다), `hasSubstantialText`(같은 파일로 이관, clipboard·import 공유)가 실질 텍스트 여부를 판정한다. clipboard 경로(`clipboard-table-parser.ts`의 `walk()`)는 기존 `pending`을 `flush()`로 먼저 내보낸 뒤 caption을 담아 한 번 더 `flush()`한다 — 그래서 표 앞 기존 문단(intro)과 순서가 뒤바뀌지 않고, caption 텍스트도 `collapseHtmlWhitespace`/`normalizeCellContent`(셀 텍스트와 같은 정규화)를 그대로 거친다. (Issue #356 RD-005 이후 `walk()`와 `flush()`는 없다. caption 문단은 클립보드 표 처리기의 `captionContent`가 같은 정규화로 읽어 표 앞에 낸다. 결과는 같다.) import 경로(`import-html.ts`의 `documentFromRoot`)는 같은 헬퍼로 뽑은 노드에 실질 텍스트가 있으면 `parseTable` 결과 앞에 문단 블록을 삽입한다 — caption→문단 다운그레이드에 `SAFE_BLOCK_DOWNGRADED`류 warning은 붙지 않는다(범위 밖, `import-warnings.ts` 미변경).
 
 구현 반영(표 밖 시퀀스 블록 모양, Issue #315): 위 Issue #71 문단의 "문단은 id 없이 삽입해 `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다"는 bare 문단 노드를 가리켰다. 그 모양은 틀렸다. `buildSequenceNode`가 문단·heading을 bare 노드로 만들면 `transaction.insert`가 연속한 bare 노드를 앞 컨테이너의 `blockGroup`으로 감싼다. `<p>x</p><p>y</p><table>`은 `x[y, table]`이 됐다. 표 앞뒤 문단·제목이 형제가 아니라 자식으로 중첩됐다.
 
-- 문단·heading은 `blockContainer(blockContent)`로 감싸 만든다. `model-to-tiptap.ts`의 `blockToTiptapJson`과 같은 shape이다. 코드는 공유하지 않는다(id 없는 입력). Issue #356 RD-004 이후 입력에 임시 id가 있으나 이 조립은 쓰지 않는다.
-- `blockId`는 비워 둔다. `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다. `createId` 소비 순서와 횟수는 바뀌지 않는다.
-- 표는 `blockContainer`로 감싸지 않는다. 목록 항목은 `listItemToTiptapJson`이 이미 컨테이너를 만든다.
+- 문단·heading은 `blockContainer(blockContent)`로 감싸 만든다. `model-to-tiptap.ts`의 `blockToTiptapJson`과 같은 shape이다. 코드는 공유하지 않는다(id 없는 입력). Issue #356 RD-004 이후 입력에 임시 id가 있으나 이 조립은 쓰지 않는다. (Issue #356 RD-005 이후 조립은 `blockToTiptapJson`을 직접 쓴다. 자리표시 id로 인코딩한 뒤 최상위 문단·제목의 컨테이너 `blockId`를 비운다.)
+- `blockId`는 비워 둔다. `BlockIdExtension.appendTransaction`이 같은 dispatch 안에서 사후 배정한다. `createId` 소비 순서와 횟수는 바뀌지 않는다. (최상위 문단·제목 자신에 한정된다. 그 밖의 비표 블록과 모든 children은 RD-005 이후 `createId`를 부모 먼저 문서 순서로 소비한다. 이전 목록 항목 children은 자식 먼저였다.)
+- 표는 `blockContainer`로 감싸지 않는다. 목록 항목은 `listItemToTiptapJson`이 이미 컨테이너를 만든다. (RD-005 이후 `listItemToTiptapJson`은 없다. 목록 항목도 `blockToTiptapJson`이 컨테이너를 만든다.)
 - 결과: 표 앞뒤 문단·제목이 최상위 형제 블록이다. 캐럿은 첫 표 좌상단 셀이고 undo 1회로 원복된다.
 
 구현 반영(표 밖 블록의 자기 style, Issue #343): 위 Issue #71 문단의 문단 variant `{type:"paragraph"; content}`에 블록 색 자리가 없었다. 표 옆 `p`·`h1`–`h6`·`li`의 자기 `style`이 사라졌다.
 
 - `ClipboardContentBlock`의 문단·heading·목록 항목에 선택 필드 `textColor`·`backgroundColor`가 있다. 값은 대문자 `#RRGGBB`다.
-- `blockSequenceFromNodes`는 `importHtml`과 같은 함수로 읽는다. 색은 `textBlockPropsFromElement(el, { styleOnly: true, promoted })`, 서식은 `blockPresentation(el).format`과 `promotedFormat`이다. 서식은 안쪽 텍스트 마크가 된다.
+- `blockSequenceFromNodes`는 `importHtml`과 같은 함수로 읽는다. 색은 `textBlockPropsFromElement(el, { styleOnly: true, promoted })`, 서식은 `blockPresentation(el).format`과 `promotedFormat`이다. 서식은 안쪽 텍스트 마크가 된다. (Issue #356 RD-005 이후 `blockSequenceFromNodes`는 없다. `importHtml` 변환기가 직접 읽는다. 색·서식 결과는 같다.)
 - `li`가 첫 자식 `p`를 승격하면 그 `p`의 색·서식이 `li`보다 이긴다.
 - 표 밖 붙여넣기는 블록 색을 `blockContainer` attrs에 싣는다. 목록 children도 같다.
 - 표 안 붙여넣기는 셀에 합치는 문단·heading의 블록 색을 텍스트 `textColor`·`backgroundColor` 마크로 옮긴다. 같은 종류의 안쪽 마크가 이긴다.
 - `pasteClipboardContent`는 비정규 블록 색을 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 문서는 바뀌지 않는다.
-- 읽지 않는 것: 블록 `data-geul-*`(색·정렬), 블록 자식 없는 `div`의 `style`, `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`의 `style`. 마지막 경우 그 글자는 `li` content에 합쳐져 `li` 색을 받는다.
+- 읽지 않는 것: 블록 `data-geul-*`(색·정렬), 블록 자식 없는 `div`의 `style`, `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`의 `style`. 마지막 경우 그 글자는 `li` content에 합쳐져 `li` 색을 받는다. (Issue #356 RD-005 이후 `data-geul-*`도 읽는다. `data-geul-text-color`는 `textColor`, `data-geul-text-alignment`는 `textAlignment`가 된다. `style`과 함께 있으면 `importHtml`처럼 `data-geul-*`가 이긴다. 정규형이 아닌 값은 그 필드만 빠진다. 나머지 두 경우는 #344·#346이 이미 해소했다.)
 
 구현 반영(표 밖 블록 자식 없는 div의 자기 style, Issue #344): 위 Issue #343 문단은 블록 자식 없는 `div`의 `style`을 읽지 않는 것으로 적었다. 공유 분할기 `segmentBlocks`는 클립보드 정책에서도 그 `div`가 만든 `paragraph` segment에 `origin`(그 `div`)을 싣는데, `blockSequenceFromNodes`가 읽지 않았다.
 
@@ -120,43 +120,114 @@ export const parseClipboardTable = (input: {
 - 블록 자식이 있는 래퍼 `div`는 `origin`이 없어 색이 따라오지 않는다. `importHtml`과 같다. 안쪽 `div`의 색만 남는다.
 - `div` 안 `<br>`는 줄바꿈으로 보존되고 안쪽 `span` 색 마크는 `div`의 블록 색과 공존한다.
 - 셀 안 캐럿 붙여넣기는 core 변경 없이 #343 규칙으로 `div` 문단의 블록 색을 셀 텍스트 마크로 옮긴다.
-- 읽지 않는 것: 블록 `data-geul-*`(색·정렬), `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`의 `style`. 위 #343 서술과 같다.
+- 읽지 않는 것: 블록 `data-geul-*`(색·정렬), `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`의 `style`. 위 #343 서술과 같다. (`data-geul-*`는 Issue #356 RD-005 이후 읽는다.)
 
 구현 반영(목록 항목 안 p·제목의 자식 블록, Issue #346): 위 Issue #343·#344 문단은 `li` 안 첫 자식이 아닌 `p`·`h1`–`h6`를 `li` content에 합치고 자기 `style`을 읽지 않는 것으로 적었다. `isBlockLevelNode`가 표·목록·`div`·`li`·`blockquote`만 블록으로 보았기 때문이다.
 
-- `isBlockLevelNode`가 정책의 `isSimpleBoundary`(`p`)와 `headingLevelFromTagName`(`h1`–`h6`)도 블록으로 본다. `importHtml`의 `isBlockLevelElement`가 블록으로 보는 `p`·제목과 맞춘다. `isBlockLevelElement`는 구분선·인용·코드 블록·미디어도 블록으로 보지만 이 시점의 클립보드에는 그 블록 타입이 없었다. 구분선과 코드 블록은 Issue #351이 `li` 자식으로 읽는다.
+- `isBlockLevelNode`가 정책의 `isSimpleBoundary`(`p`)와 `headingLevelFromTagName`(`h1`–`h6`)도 블록으로 본다. `importHtml`의 `isBlockLevelElement`가 블록으로 보는 `p`·제목과 맞춘다. `isBlockLevelElement`는 구분선·인용·코드 블록·미디어도 블록으로 보지만 이 시점의 클립보드에는 그 블록 타입이 없었다. 구분선과 코드 블록은 Issue #351이 `li` 자식으로 읽는다. (Issue #356 RD-005 이후 `isBlockLevelNode`는 없다. `importHtml`의 `isBlockLevelElement`가 그대로 판정하므로 인용·미디어도 블록으로 읽는다.)
 - content로 승격되는 첫 `p`를 뺀 `p`·제목은 목록 항목의 자식 블록이 된다. 첫 자식이 제목이면 항목 content는 비고 그 제목이 자식 블록이 된다. 자기 `style` 색·서식은 위 #343 규칙으로 읽는다.
 - 첫 실질 자식이 `p`이면 승격 경로가 먼저 처리한다. 이 변경은 그 경로를 바꾸지 않는다.
 - 글자 사이 제목(`t<h3>H</h3>u`)은 `importHtml`과 같이 항목 content `t`, 자식 제목 `H`, 자식 문단 `u`가 된다.
 - `span`이 감싼 `p`는 이전과 같다. `importHtml`도 인라인으로 읽는다.
-- 차이: 내용 없는 `p`·`h1`–`h6`(빈 요소, 공백뿐, `<br>`만 든 `p`)는 클립보드가 자식 블록을 만들지 않는다. `importHtml`은 빈 자식 블록을 만든다.
-- 읽지 않는 것: 블록 `data-geul-*`(색·정렬). `li` 안 `pre`·`hr`는 Issue #351이 자식 블록으로 읽는다(아래 문단).
+- 차이: 내용 없는 `p`·`h1`–`h6`(빈 요소, 공백뿐, `<br>`만 든 `p`)는 클립보드가 자식 블록을 만들지 않는다. `importHtml`은 빈 자식 블록을 만든다. (Issue #356 RD-005 이후 이 차이는 없다. 클립보드도 빈 자식 블록을 만든다. `<br>`만 든 `p`는 줄바꿈 하나를 가진 문단이다.)
+- 읽지 않는 것: 블록 `data-geul-*`(색·정렬). `li` 안 `pre`·`hr`는 Issue #351이 자식 블록으로 읽는다(아래 문단). (`data-geul-*`는 Issue #356 RD-005 이후 읽는다.)
 
 구현 반영(목록 항목 안 pre·hr의 자식 블록, Issue #351): 위 Issue #346 문단은 `li` 안 `pre`·`hr`를 클립보드 블록 타입이 없어 글자가 붙거나 사라지는 것으로 적었다. `ClipboardContentBlock`에 `codeBlock`·`divider`가 없었고, `isBlockLevelNode`가 `pre`·`hr`를 블록으로 보지 않았다.
 
-- `ClipboardContentBlock`에 `{ type: "codeBlock"; text: string; language?: string }`와 `{ type: "divider" }`를 더한다. 목록 항목의 children에서만 나온다. (`text`는 Issue #356 RD-004가 `content: [{ text }]`로 바꿨다.)
-- `li` 자식용 세그먼트 정책(`listChildPolicy`)이 기존 정책에 `isDividerTag`(`hr`)와 `isCodeBlockTag`(`pre`)를 더한다. 최상위와 `li`가 아닌 자식 run은 기존 정책이다. 표 밖 최상위 `pre`·`hr`의 결과는 바뀌지 않는다.
-- `isBlockLevelNode`가 `pre`·`hr`도 블록으로 본다. 첫 자식이 `pre`·`hr`이면 항목 content는 비고 자식 블록만 남는다. `div`·`blockquote`·중첩 목록 안 `pre`·`hr`도 자식 블록이다.
+- `ClipboardContentBlock`에 `{ type: "codeBlock"; text: string; language?: string }`와 `{ type: "divider" }`를 더한다. 목록 항목의 children에서만 나온다. (`text`는 Issue #356 RD-004가 `content: [{ text }]`로 바꿨다. 최상위에서도 나온다는 점은 Issue #356 RD-005가 바꿨다.)
+- `li` 자식용 세그먼트 정책(`listChildPolicy`)이 기존 정책에 `isDividerTag`(`hr`)와 `isCodeBlockTag`(`pre`)를 더한다. 최상위와 `li`가 아닌 자식 run은 기존 정책이다. 표 밖 최상위 `pre`·`hr`의 결과는 바뀌지 않는다. (Issue #356 RD-005 이후 `listChildPolicy`는 없고, 최상위 `pre`는 `codeBlock`, 최상위 `hr`는 `divider`가 된다. `importHtml`과 같다.)
+- `isBlockLevelNode`가 `pre`·`hr`도 블록으로 본다. 첫 자식이 `pre`·`hr`이면 항목 content는 비고 자식 블록만 남는다. `div`·`blockquote`·중첩 목록 안 `pre`·`hr`도 자식 블록이다. (`isBlockLevelNode`는 Issue #356 RD-005 이후 없다. 판정 결과는 같다.)
 - `codeBlock.text`(현재 `codeBlock.content[0].text`, Issue #356 RD-004)는 `br`을 줄바꿈으로 읽고 줄바꿈·들여쓰기·Tab을 보존한다. 공백을 접지 않고 마크를 싣지 않는다. model의 codeBlock 소스 계약이 거부하는 문자만 지운다.
-- 내용 없는 `pre`(빈 요소, 공백뿐)는 만들지 않는다. `hr`는 항상 `divider`다.
-- `language` 선택 규칙을 함수 `selectCodeBlockLanguage`로 추출해 `importHtml`과 클립보드가 공유한다. `importHtml`의 결과와 경고는 바뀌지 않는다. 클립보드는 고른 값을 model 정규형으로 바꾼다. model이 거부하는 값이면 버린다. `wrap`·`caption`·`id`·경고는 읽지 않는다. `figure` 안 `pre`의 `figcaption` 글자는 `codeBlock.caption`이 아니라 별도 자식 문단으로 남는다.
-- core: `listChildToTiptapJson`이 `divider`(컨테이너 없이 `blockId`만)와 `codeBlock`(`blockContainer` 안 `codeBlock` 노드)을 만든다. `validateOutOfTableContent`가 `codeBlock` 글자와 `language`를 model 계약으로 검사하고 최상위의 두 타입을 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 문서는 바뀌지 않는다.
+- 내용 없는 `pre`(빈 요소, 공백뿐)는 만들지 않는다. `hr`는 항상 `divider`다. (Issue #356 RD-005 이후 내용 없는 `pre`도 빈 `codeBlock`이 된다. 공백뿐인 `pre`는 그 공백이 글자다.)
+- `language` 선택 규칙을 함수 `selectCodeBlockLanguage`로 추출해 `importHtml`과 클립보드가 공유한다. `importHtml`의 결과와 경고는 바뀌지 않는다. 클립보드는 고른 값을 model 정규형으로 바꾼다. model이 거부하는 값이면 버린다. `wrap`·`caption`·`id`·경고는 읽지 않는다. `figure` 안 `pre`의 `figcaption` 글자는 `codeBlock.caption`이 아니라 별도 자식 문단으로 남는다. (Issue #356 RD-005 이후 `wrap`·`caption`·`data-geul-block-id`를 `importHtml`처럼 읽고, `figcaption` 글자는 `codeBlock.caption`이 된다. 경고는 여전히 내지 않는다.)
+- core: `listChildToTiptapJson`이 `divider`(컨테이너 없이 `blockId`만)와 `codeBlock`(`blockContainer` 안 `codeBlock` 노드)을 만든다. `validateOutOfTableContent`가 `codeBlock` 글자와 `language`를 model 계약으로 검사하고 최상위의 두 타입을 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 문서는 바뀌지 않는다. (Issue #356 RD-005 이후 `listChildToTiptapJson`은 없고, 최상위 `codeBlock`·`divider`를 거절하지 않는다. 최상위 블록 앞에 그대로 붙는다.)
 - 셀 안 캐럿: `codeBlock`은 글자의 줄마다 셀 줄이고 `divider`는 줄이 없다. `countTables`는 `children`이 없는 타입을 건너뛴다.
 - 막은 타입: `containsBlockedType`가 타입 이름으로 `codeBlock`·`divider`를 판정한다. 막았고 캐럿이 표 밖이면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 처리한다. 캐럿이나 선택이 표 안이면 막은 타입을 검사하지 않아 셀 줄로 붙는다.
-- 차이: `importHtml`은 빈 `pre`를 빈 `codeBlock`으로 만들 수 있고 클립보드는 만들지 않는다. `blockquote`는 클립보드에서 `quote`가 되지 않는다(Issue #350).
-- 읽지 않는 것: `li` 안 `img` 등 미디어. 클립보드에 미디어 블록 타입이 없어 사라진다.
+- 차이: `importHtml`은 빈 `pre`를 빈 `codeBlock`으로 만들 수 있고 클립보드는 만들지 않는다. `blockquote`는 클립보드에서 `quote`가 되지 않는다(Issue #350). (Issue #356 RD-005 이후 두 차이 모두 없다. 빈 `pre`는 빈 `codeBlock`이고 `blockquote`는 `quote`다. `blockquote`가 감싼 목록은 `quote`의 자식 목록 항목이다.)
+- 읽지 않는 것: `li` 안 `img` 등 미디어. 클립보드에 미디어 블록 타입이 없어 사라진다. (Issue #356 RD-005 이후 `li` 안 `img`는 자식 `image` 블록이다. url이 model 검증을 통과할 때만이다. `file:`·`cid:` url은 블록이 빠진다.)
 
 구현 반영(클립보드 블록의 model Block 모양, Issue #356 RD-004): 위 Issue #71·#72·#343·#346·#351 문단은 `ClipboardContentBlock`을 전용 variant 7종(paragraph, heading, 두 목록 항목, codeBlock, divider, table)으로 적었다. 표 아닌 블록은 id 없는 전용 모양이었다. 그 서술은 이 문단으로 대체된다.
 
 - `ClipboardContentBlock`은 `{ type: "table"; data: TabularData }`와 model `Block`에서 `TableBlock`을 뺀 유니온에서 파생한 모양의 합이다. 필드명과 값 형식이 model과 같다.
 - 표 아닌 블록은 `id`를 가진다. 파서가 `parseClipboardTable` 호출마다 1부터 새로 번호를 매겨 `clipboard-1`, `clipboard-2`…로 붙인 임시값이다. 같은 입력은 같은 id를 낸다. 목록 항목은 children을 읽기 전에 발급해 부모 id가 자식보다 앞선다. 문서 안에서 안정하지 않다. core는 입력 id를 읽지 않고 붙일 때 `createId`나 `BlockIdExtension`으로 재발급한다. 표 variant에는 id가 없다.
-- `children`은 model의 `Block[]` 대신 `readonly ClipboardContentBlock[]`다. 표가 `li` 안 children에 들 수 있어서다.
-- `codeBlock`은 `text` 대신 `content: [{ text }]`를 가진다. 마크 없는 런 하나다. `language`는 이전과 같다. 타입에는 `wrap`·`caption`이 있으나 파서는 내지 않는다.
-- 타입은 model의 모든 비표 블록을 허용한다. 파서는 이전과 같은 paragraph, heading, `bulletListItem`, `numberedListItem`, 목록 children 안 `codeBlock`·`divider`만 낸다. 최상위 `pre`·`hr`는 여전히 블록이 되지 않는다.
-- 파서가 읽는 내용과 붙여넣기 결과는 바뀌지 않는다. 문단·제목·목록 항목의 `content`, `level`, 블록 색, `startNumber`, `children`은 이름과 값이 같다.
-- core: `validateOutOfTableContent`가 파서가 내지 않는 type(quote, callout 등)을 깊이와 상관없이 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 메시지는 `Unsupported clipboard block type: <type>`이다. 표 안 캐럿도 같다. 검증이 표 안/밖 분기보다 먼저 돈다. 문서는 바뀌지 않는다. 이 범위는 후속 작업(RD-005)이 넓힌다.
+- `children`은 model의 `Block[]` 대신 `readonly ClipboardContentBlock[]`다. 표가 `li` 안 children에 들 수 있어서다. (RD-005 이후 `quote` 등 children을 가진 모든 블록의 children에 표가 들 수 있다.)
+- `codeBlock`은 `text` 대신 `content: [{ text }]`를 가진다. 마크 없는 런 하나다. `language`는 이전과 같다. 타입에는 `wrap`·`caption`이 있으나 파서는 내지 않는다. (RD-005 이후 파서도 낸다.)
+- 타입은 model의 모든 비표 블록을 허용한다. 파서는 이전과 같은 paragraph, heading, `bulletListItem`, `numberedListItem`, 목록 children 안 `codeBlock`·`divider`만 낸다. 최상위 `pre`·`hr`는 여전히 블록이 되지 않는다. (RD-004 시점의 서술이다. Issue #356 RD-005 이후 파서는 model의 모든 비표 블록을 낸다. 최상위 `pre`는 `codeBlock`, `hr`는 `divider`다.)
+- 파서가 읽는 내용과 붙여넣기 결과는 바뀌지 않는다. 문단·제목·목록 항목의 `content`, `level`, 블록 색, `startNumber`, `children`은 이름과 값이 같다. (RD-004 한정이다. 읽는 내용은 RD-005가 바꿨다.)
+- core: `validateOutOfTableContent`가 파서가 내지 않는 type(quote, callout 등)을 깊이와 상관없이 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 메시지는 `Unsupported clipboard block type: <type>`이다. 표 안 캐럿도 같다. 검증이 표 안/밖 분기보다 먼저 돈다. 문서는 바뀌지 않는다. 이 범위는 후속 작업(RD-005)이 넓힌다. (RD-005가 넓혔다. 이제 model이 모르는 type만 이 메시지로 거절한다. 최종 계약은 아래 RD-005 문단이다.)
 - core: `codeBlock.content`에 커스텀 inline 원소가 있으면 같은 코드로 거절한다(`CodeBlock content must be plain text runs`). 런의 `text`를 이어 붙여 소스로 쓰고 마크는 무시한다. 파서 출력은 이 경우를 내지 않는다.
 - 공개 타입이 바뀌어 `@cp949/geul-io`는 minor다. 이전 `text` 소비자와 `block.type` 분기는 타입 오류가 난다.
+
+구현 반영(표 옆 블록을 `importHtml` 변환기로 읽기, Issue #356 RD-005): 위 Issue #70·#72·#343·#344·#346·#350·#351 문단은 표 옆 블록을 클립보드 전용 순회(`blockSequenceFromNodes`)가 읽는 것으로 적었다. 그 순회와 전용 블록 변환 코드(`blocksFromNodeList`, `blocksFromListNode`, `isBlockLevelNode`, `list-block-builder.ts`)는 없어졌다. 아래가 해당 서술을 대체한다. 표를 읽는 규칙은 바뀌지 않는다.
+
+읽는 순서:
+
+- `parseHtmlTable`이 sanitize, `sanitizeLinks`, `unwrapBlockBearingColorTags`, 소스 공백 접기, 데이터 표 찾기(`findDataTables`) 순으로 처리한다.
+- 소스 공백 접기 조건은 `importHtml`과 같다. 깊이 캡으로 절단되지 않았고 `data-geul-*` 신원 속성이 없을 때만 접는다. 표 셀은 `tabularDataFromTable`이 한 번 더 접는다.
+- 그다음 `documentFromRoot`(`importHtml` 블록 변환기)가 표 옆 블록을 읽는다. 표는 RD-003 seam(`HtmlTableSeam`)으로 클립보드 표 처리기에 맡긴다.
+- 변환기는 표 자리에 자리표시 블록(`divider`)을 둔다. 처리기는 그 객체를 키로 표 읽기 결과(`TabularData` 또는 거절)를 담는다. 변환 뒤 자리표시를 `{ type: "table"; data }`로 되돌린다.
+- 거절은 던지지 않고 담아 둔다. 변환이 끝나면 문서 순서상 첫 거절을 `CLIPBOARD_TABLE_INVALID`로 낸다.
+- caption 문단은 표 처리기가 읽는다(`captionContent`). 정규화는 셀과 같다.
+- 변환기가 표 자리로 읽지 않은 데이터 표는 `importHtml`처럼 글자가 된다. `pre`·미디어 `figure`·`summary` 안 표가 그렇다. 표 자리가 하나도 없으면 `NOT_TABULAR`다. 글자가 된 표가 거절 대상이어도 거절하지 않는다.
+- sanitize 스키마(`clipboardSanitizeSchema`)는 `htmlImportSanitizeSchema`를 얕게 복사하고 `table[role]`(레이아웃 표 판정)과 `title` strip(시트 이름 문단 방지)만 더한다. 공유 스키마 객체는 바꾸지 않는다. 이전 클립보드 스키마에 없던 `details`·`summary`·`img`·`figure`·`figcaption`이 남는다.
+
+표 옆 블록의 결과는 `importHtml`과 같다. 같은 html의 표 옆 입력이 바뀐 행은 다음과 같다. 입력마다 2x2 데이터 표를 앞이나 뒤에 붙였다.
+
+| 표 옆 입력                                     | RD-005 이전              | RD-005 이후                            |
+| ---------------------------------------------- | ------------------------ | -------------------------------------- |
+| `<p data-geul-text-color="#FF0000">`           | 색 없음                  | `textColor` `#FF0000`                  |
+| 빈 `<p></p>`, 빈 제목, 제로폭 문자만 든 `p`    | 버림                     | 빈 블록 또는 제로폭 글자 문단          |
+| `<ol><li>a</li></ol><ol><li>b</li></ol>`       | b에 `startNumber` 없음   | b `startNumber` 1                      |
+| `li data-geul-checked`                         | `bulletListItem`         | `checkListItem`                        |
+| `<blockquote>`, 안의 문단·목록                 | 문단, 목록만             | `quote`, 안의 자식 문단·목록           |
+| 최상위 `<pre data-language="javascript">`      | 문단, 개행·language 소실 | `codeBlock` `javascript`               |
+| 최상위 `pre` 안 `&#1;`, 무효 language 후보     | 문단                     | `codeBlock`, 무효 문자 제거, 후보 무시 |
+| `figure` 안 `pre`+`figcaption`                 | 문단                     | `codeBlock` `caption`                  |
+| `figure` 안 `img`, 단독 `img`                  | caption만, 사라짐        | `image`                                |
+| 최상위 `<hr>`                                  | 사라짐                   | `divider`                              |
+| 자기 export callout·toggle·quote·문단 children | 평탄 문단                | 구조 보존                              |
+| 자기 export codeBlock `wrap`                   | 문단(code 마크)          | `codeBlock` `wrap`                     |
+
+- 이미 같았던 입력은 이전과 같다. `p`·`span` 색, 소스 공백, h1–h3, 중첩 `ul`, `ol start`, `li` 안 `p`·`pre`·`hr`, `div` `style`, 표 뒤 `p`·`ul`, caption, 표 둘, `javascript:` 링크, 원시 `details`가 그렇다.
+- 중첩은 `MAX_NESTING_DEPTH`(64)에서 평탄화한다. 변환기 가드다. 이전 클립보드 순회에는 깊이 가드가 없었다.
+- 내용 없는 `pre`(빈 요소, 공백뿐)는 빈 `codeBlock`이나 공백 글자 `codeBlock`이 된다. `li` 안도 같다.
+- 표 옆 블록의 소스 공백 접기 구현이 `collapseHtmlWhitespace`에서 `importHtml`의 `collapseSourceWhitespace`로 바뀌었다(Issue #356 Q9). 위 대조군 입력의 결과는 같다.
+
+표 읽기는 클립보드 규칙을 유지한다. `importHtml`을 따르지 않는다.
+
+- 짧은 행은 빈 셀로 채운다. `importHtml`은 `UNCOVERED_COORDINATE`로 거절한다.
+- 셀 없는 빈 표는 무시하고 데이터 표를 읽는다. `importHtml`은 `INVALID_GRID_SIZE`로 거절한다.
+- 레이아웃 표(`role=presentation`·`none`, 표를 품은 표)는 풀고 안쪽 데이터 표를 읽는다. 문단은 표 앞에 남는다. `importHtml`은 바깥 1x1 표다.
+- `th`는 header 행을 만들지 않고 `td`의 `text-align`은 `align`이 된다. `importHtml`은 `headerRows` 1을 만들고 `align`을 읽지 않는다.
+- TSV 경로와 크기 상한 거절은 바뀌지 않는다.
+- 셀 안 `details`·`figure` 경계에 줄바꿈이 생긴다. `<td>s<details>d</details></td>`는 `s`, 줄바꿈, `d`다. 이전에는 `sd`였다. `importHtml` 셀과 같다.
+
+`importHtml`과 다른 점:
+
+- 경고를 내지 않는다(Issue #356 Q14). 경고 수집기와 보존 속성 감사를 부르지 않는다.
+- `importHtml`이 문서 전체를 거절하는 값은 표 붙여넣기를 막지 않는다(Issue #356 Q1). 비표 블록마다 children을 뗀 모양을 `parseDocument`로 프로브한다.
+  - 무효 선택 필드(`textColor`, `backgroundColor`, `textAlignment`, `icon`, `collapsed`, `startNumber`, `language`, `wrap`, `caption`, `name`, `showPreview`, `previewWidth`, `aspectRatio`)는 그 필드만 뺀다. `data-geul-text-color="red"`는 문단만 남는다.
+  - 미디어 `url`처럼 뺄 수 없는 필드가 무효이면 블록을 버린다. 버린 블록의 children은 같은 자리 형제로 올린다. Word의 `file:///` `img`와 Outlook의 `cid:` `img`는 표 붙여넣기를 막지 않고 빠진다.
+- iframe 설정은 `{}`다. 호스트의 `iframeEmbed`를 받지 않아 `iframe` 블록이 url 없이 붙는다(`importHtml`을 설정 없이 부른 결과와 같다). 일반 html 붙여넣기는 `deps.iframeEmbed`를 넘긴다. 같은 `iframe`이 표 유무에 따라 다르게 판정된다. 공개 API를 늘리지 않으려는 선택이다.
+- id: 변환기가 `data-geul-block-id`를 쓰고 없으면 `clipboard-1`부터 붙인다. 이미 나온 id나 빈 id는 새로 발급한다. 호출 안에서 비어 있지 않고 유일하다(RD-004). 편집기 안 복사의 id는 core가 재발급한다.
+
+core:
+
+- `pasteClipboardContent`는 model의 모든 비표 블록(`quote`, `callout`, `checkListItem`, `toggleListItem`, 미디어 4종, `iframe`, 최상위 `codeBlock`·`divider`)을 받는다. 조립은 `blockToTiptapJson`이다. 일반 html 붙여넣기와 같은 인코딩이라 `textAlignment`, `codeBlock` `wrap`·`caption`도 싣는다.
+- 검증은 뮤테이션 전에 시퀀스 전체에 한다. 문단, 제목, 두 목록 항목, `codeBlock`은 type별 판정과 기존 메시지가 먼저 돈다. 이어서 모든 비표 블록을 children을 뗀 모양으로 `parseDocument`에 프로브한다. model 프로브 위반은 `Clipboard <type> block <field> is invalid: <model message>`다. 새 type의 `content` inline 위반(빈 텍스트 런, 미등록 커스텀 inline)은 `Clipboard <type> block content <reason>`이다. model이 모르는 type은 `Unsupported clipboard block type: <type>`이다.
+- children을 가질 수 있는 블록은 model `isNestableBlockType`(문단, 제목, `quote`, `callout`, 목록 4종)뿐이다. 리프 블록(`codeBlock`, `divider`, 미디어 4종, `iframe`)의 비어 있지 않은 children은 `Clipboard <type> block cannot have children`으로 거절한다. 문서는 바뀌지 않는다.
+- id: 최상위 문단·제목은 이전처럼 `BlockIdExtension`이 배정한다. 그 밖의 최상위 블록과 모든 children은 `createId`다. 부모가 자식보다 먼저다. 목록 항목 children은 이전에 자식 먼저였다.
+- 표 안 캐럿: 셀 줄 정책이 셀 안 html 붙여넣기의 `collectLines`와 같다. `content`를 가진 블록(문단, 제목, `quote`, `callout`, 목록 4종)은 줄 하나이고 children이 부모 다음에 깊이 우선으로 이어진다. `codeBlock`은 줄마다 셀 줄이다(Issue #351 정책). `content`가 없는 블록(`divider`, 미디어 4종, `iframe`)은 줄이 없다. 블록 색은 텍스트 색 마크가 된다(Issue #343). 표 개수 검사는 모든 블록의 children 안 표를 센다.
+- 막은 타입: `containsBlockedType`이 모든 비표 블록의 type과 children을 훑는다. 표 밖 캐럿에서 막은 타입이 있으면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 받는다. 캐럿이나 선택이 표 안이면 검사하지 않는다.
+- 최상위 표가 없고 `quote`·`callout` 등 children 안에만 표가 있는 html도 #315처럼 `TablePasteExtension`이 물러난다.
+
+알려진 한계(`importHtml` 변환기 결함, #336 계열. 영구 테스트 `it.fails` 12건이 고정한다):
+
+- `div`·`span`·`b`·`a` 안의 `ul`·`ol`이 목록 항목이 아니라 문단이 된다(9건). Google Docs 복사 모양 `<b id="docs-internal-guid-…"><ul>…</ul></b>`가 이 경로다. 이전 클립보드 순회는 보존했다. 표 없는 일반 html 붙여넣기와 `importHtml`은 이미 같은 결과다.
+- 인용 안 인라인 래퍼(`span`·`b`·`a`)가 품은 표가 표로 나오지 않는다(3건). 다른 표가 없으면 `NOT_TABULAR`다. 이전 클립보드 순회는 표로 읽었다.
+- 변환기가 고쳐지면 `it.fails`가 실패해 알린다.
+
+소비자 영향: `ClipboardContentBlock` 타입은 RD-004와 같다. 파서가 이전에 나오지 않던 type을 낸다. `parseClipboardTable` 결과에 `switch (block.type)`을 쓰는 소비자는 새 type을 처리해야 한다.
 
 ### 4.2 HTML 경로 — 테이블 변환기 재사용
 
@@ -169,7 +240,7 @@ export const parseClipboardTable = (input: {
 
 sanitizer는 `htmlSanitizeSchema`를 그대로 쓰되 `htmlAllowedAttributes.td`/`.th`에 `style`을 추가한다. 이 allowlist 확장은 공유 스키마라 `importHtml` 경로도 `style` 속성이 sanitize에서 살아남게 되지만, `import-html.ts`의 `parseTable`은 여전히 `style`을 읽지 않으므로(`data-geul-*`만 읽음) `importHtml`의 관찰 가능한 동작은 바뀌지 않는다. 이 "관찰 가능한 동작 비영향"은 `style` 속성에 한정된 서술이다 — caption 보존(위 §4.1 '구현 반영(표 직속 비섹션 자식 보존, Issue #70)')은 `documentFromRoot`가 `tableNonSectionChildren`/`hasSubstantialText`를 같은 파일에서 가져다 써 `importHtml`의 `Document.blocks` 산출을 실제로 바꾼다(표 앞 문단 블록 추가).
 
-**style 파싱(클립보드 경로 전용, 신규 코드)**: `style` 속성 문자열에서 `color`/`background-color`/`text-align` 세 선언만 최소 정규식으로 추출한다. `color`/`background-color` 값은 `isCanonicalCellColor`(model)를 통과할 때만(대문자 `#RRGGBB`로 정규화 후) 반영하고, `text-align` 값은 `isCanonicalCellAlign`을 통과할 때만 반영한다. 나머지 CSS 선언, 통과하지 못한 값은 조용히 버린다(파싱 실패로 전체를 거절하지 않는다). `data-geul-text-color`/`data-geul-background-color`/`data-geul-align`(자기 복사)가 있으면 그걸 `style`보다 우선한다. **`data-geul-*` 값도 `style` 값과 똑같이 `isCanonicalCellColor`/`isCanonicalCellAlign`을 통과해야 하고, 통과하지 못하면 조용히 버린다** — 통과시키면 클립보드 HTML이 임의 값을 문서로 밀어넣어 `parseDocument`가 커밋 시점에 거절하고 모델과 에디터가 영구 desync된다. 클립보드 sanitize 스키마는 `importHtml` 스키마와 분리해서 쓴다(`clipboardSanitizeSchema`) — 공유하면 `style`/`role` 허용이 `importHtml`의 속성 제거 경고까지 없애버린다.
+**style 파싱(클립보드 경로 전용, 신규 코드)**: `style` 속성 문자열에서 `color`/`background-color`/`text-align` 세 선언만 최소 정규식으로 추출한다. `color`/`background-color` 값은 `isCanonicalCellColor`(model)를 통과할 때만(대문자 `#RRGGBB`로 정규화 후) 반영하고, `text-align` 값은 `isCanonicalCellAlign`을 통과할 때만 반영한다. 나머지 CSS 선언, 통과하지 못한 값은 조용히 버린다(파싱 실패로 전체를 거절하지 않는다). `data-geul-text-color`/`data-geul-background-color`/`data-geul-align`(자기 복사)가 있으면 그걸 `style`보다 우선한다. **`data-geul-*` 값도 `style` 값과 똑같이 `isCanonicalCellColor`/`isCanonicalCellAlign`을 통과해야 하고, 통과하지 못하면 조용히 버린다** — 통과시키면 클립보드 HTML이 임의 값을 문서로 밀어넣어 `parseDocument`가 커밋 시점에 거절하고 모델과 에디터가 영구 desync된다. 클립보드 sanitize 스키마는 `importHtml` 스키마와 분리해서 쓴다(`clipboardSanitizeSchema`) — 공유하면 `style`/`role` 허용이 `importHtml`의 속성 제거 경고까지 없애버린다. (Issue #356 RD-005 이후 이 스키마는 `clipboard-sanitize-schema.ts`에서 문서 import 스키마 `htmlImportSanitizeSchema`를 얕게 복사하고 `table[role]`과 `title` strip만 더한 별도 객체다. 공유 객체는 바꾸지 않는다. 이전에는 `htmlSanitizeSchema` 기반의 `clipboardAllowedTagNames` 확장이었다.)
 
 구현 반영(과대 colspan 거절, Issue #35): `tabularDataFromTable`이 `columnCount`(colgroup과 실제 셀 중 넓은 쪽)를 산출하기 전에, 표가 이미 실제로 보여준 열 수보다 넓게 뻗는 셀이 있으면 패딩으로 감추지 않고 `CLIPBOARD_TABLE_INVALID`로 거절한다. "표가 이미 보여준 열 수"는 colgroup 선언 열 수(`cols.length`)와 실제 셀들의 distinct 시작 `columnIndex` 개수 중 큰 쪽이다 — 이 개수는 각 셀의 `colspan` 크기를 반영하지 않고 오직 몇 개의 서로 다른 위치에서 셀이 시작하는지만 센다. 그래야 과대 `colspan` 셀 자기 자신이 이 상한을 부풀리지 못한다. 어떤 셀의 `layoutColumnSpan(colSpan)`이든 이 상한을 초과하면 거절한다. §4.1의 "비율 임계값은 근거 없는 매직 넘버가 되고 결정적으로 테스트할 수 없다" 원칙에 따라 비율이 아니라 "표 자신이 실제로 보여준 구조" 하나로 판정하는 이진 조건이다: `colspan="500"`인 단일 셀만 있는 표(colgroup 없음)는 상한이 1(그 셀 자신의 시작 위치 하나뿐)이라 거절되지만, 같은 표에서 `colspan` 없이(=1) 셀 하나뿐인 평범한 표는 상한도 1, span도 1이라 통과한다 — colgroup·다른 셀·다른 행이 전혀 없어도 이 둘이 구분된다. colgroup보다 실제 셀이 많아 넓히는 기존 동작(`clipboard-table-normalization.test.ts`의 "colgroup보다 실제 셀이 많으면 넓은 쪽을 열 수로 잡는다")은 그 넓히는 셀들의 `colspan`이 각각 1이라 이 조건에 걸리지 않아 그대로 유지된다. `MAX_TABLE_COLUMNS`/`MAX_TABLE_LOGICAL_CELLS` 상한 검사(값 변경 없음)는 이 거절 다음에 그대로 실행된다. `rowSpan`의 동일 구조 위험과 `import-html.ts` 쪽 동일 정책 적용은 이번 범위 밖이다(각각 별도 이슈).
 
@@ -325,7 +396,7 @@ addProseMirrorPlugins() {
 - 한계: 앱 내부 표 복사는 커스텀 `clipboardTextSerializer`가 없다. 평문이 PM 기본(셀 텍스트 연결)이라 TSV가 아니다. codeBlock 안에 붙이면 셀 텍스트가 이어 붙는다.
 - 한계: 시작이 codeBlock 밖인 범위는 끝이 codeBlock 안이어도 이전처럼 표 붙여넣기가 가로챈다(범위를 지운 뒤 표를 넣는다).
 
-구현 반영(최상위 표 없음 물러남, Issue #315): `NOT_TABULAR`만 기본 붙여넣기로 폴백한다는 위 계약에 한 가지가 더해진다. `parseClipboardTable`이 성공했어도 결과에 최상위 `type === "table"` 블록이 없으면 `handlePaste`가 `false`로 물러난다. 목록 항목 children 안에만 표가 있는 html이 이 경우다(`<ul><li><table>…</table></li><li>hello</li></ul>`).
+구현 반영(최상위 표 없음 물러남, Issue #315): `NOT_TABULAR`만 기본 붙여넣기로 폴백한다는 위 계약에 한 가지가 더해진다. `parseClipboardTable`이 성공했어도 결과에 최상위 `type === "table"` 블록이 없으면 `handlePaste`가 `false`로 물러난다. 목록 항목 children 안에만 표가 있는 html이 이 경우다(`<ul><li><table>…</table></li><li>hello</li></ul>`). (Issue #356 RD-005 이후 `quote`·`callout` 등 children을 가진 모든 블록 안에만 표가 있는 html도 같다.)
 
 - 이전에는 표 밖 시퀀스가 옮길 첫 표를 찾지 못해 `PASTE_TARGET_NOT_FOUND`로 거절했다. 붙여넣기가 사라졌다.
 - 물러남은 거절이 아니다. `onPasteRejected`를 부르지 않는다. dispatch 전이라 원자성(G-EDT-001)이 유지된다.
@@ -337,13 +408,13 @@ addProseMirrorPlugins() {
 
 구현 반영(셀 안 캐럿의 목록 항목, Issue #345): 표 셀 안 캐럿에 목록과 표가 든 `ClipboardContent` 시퀀스를 붙일 때 표 안 분기가 문단·heading만 셀에 합쳤다. 목록 항목과 그 `children`은 버려졌고 `ok: true`라 `onPasteRejected`도 불리지 않았다. 글자가 무신호로 사라졌다.
 
-- 정책: 목록 항목(`bulletListItem`·`numberedListItem`)을 문단처럼 셀 줄로 합친다. 셀 안 html 붙여넣기(#304·#308)의 줄 정책과 같다.
+- 정책: 목록 항목(`bulletListItem`·`numberedListItem`)을 문단처럼 셀 줄로 합친다. 셀 안 html 붙여넣기(#304·#308)의 줄 정책과 같다. (Issue #356 RD-005 이후 `content`를 가진 모든 블록이 같다. `quote`·`callout`·`checkListItem`·`toggleListItem`도 셀 줄이고, `content`가 없는 `divider`·미디어·`iframe`은 줄이 없다.)
 - 줄 순서: 목록 항목 `children`은 부모 다음 줄이고 깊이 우선이다. `children`의 문단·heading도 줄이다.
 - 접두어(번호·글머리)와 들여쓰기는 남기지 않는다. 줄 사이는 기존 합치기대로 LF 하나다.
 - 위치: 표 앞 줄은 좌상단 셀 앞에, 표 뒤 줄은 우하단 셀 뒤에 읽기 순서로 붙는다. 셀 위치 판정은 `withParagraphsMergedIntoCells`가 한다. 우하단 판정은 Issue #348이 논리 격자 좌표로 고쳤다(아래 문단).
 - 블록 색: 목록 항목의 `textColor`·`backgroundColor`는 줄 텍스트의 색 마크가 된다. 같은 종류의 안쪽 마크가 이긴다(#343).
 - 빈 목록 항목은 빈 줄을 내지 않는다. 그 `children`은 줄이 된다.
-- 표 개수 검사는 목록 항목 `children` 안 표까지 센다. 둘 이상이면 `CLIPBOARD_CONTENT_INVALID`("Cannot paste multiple tables inside an existing table cell")로 거절한다. 최상위 표 하나와 `children` 안 표 하나도 거절이다. 거절은 뮤테이션 전이라 문서가 바뀌지 않고, 확장 경로에서는 `onPasteRejected`가 불린다.
+- 표 개수 검사는 목록 항목 `children` 안 표까지 센다. (RD-005 이후 모든 블록의 `children` 안 표를 센다.) 둘 이상이면 `CLIPBOARD_CONTENT_INVALID`("Cannot paste multiple tables inside an existing table cell")로 거절한다. 최상위 표 하나와 `children` 안 표 하나도 거절이다. 거절은 뮤테이션 전이라 문서가 바뀌지 않고, 확장 경로에서는 `onPasteRejected`가 불린다.
 - 최상위 표 없이 `children` 안 표만 있으면 이전과 같다. 확장이 먼저 물러나고(#315), `pasteClipboardContent`를 직접 호출하면 `PASTE_TARGET_NOT_FOUND`다.
 - 표 밖 캐럿과 문단만 섞인 표 안 붙여넣기 결과는 이전과 같다.
 - 한계: 셀은 inline만 담아 목록 모양(번호·글머리·들여쓰기)은 남지 않는다. 글자만 남는다.

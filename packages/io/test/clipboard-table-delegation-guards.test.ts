@@ -11,7 +11,11 @@ import { describe, expect, it } from "vitest";
 
 import type { ClipboardContentBlock } from "../src/clipboard/clipboard-content.js";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
-import { clipboardBlocks, importedBlocks } from "./clipboard-table-support.js";
+import {
+  clipboardBlocks,
+  importedBlocks,
+  withoutIds,
+} from "./clipboard-table-support.js";
 
 const TABLE =
   "<table><tr><td>1</td><td>2</td></tr><tr><td>3</td><td>4</td></tr></table>";
@@ -341,6 +345,22 @@ describe("셀 안 details·figure 경계 (Issue #356 RD-005)", () => {
 
     expect(cells).toEqual([[{ text: "s\nd" }], [{ text: "c\nx" }]]);
     expect(cells).toEqual(imported);
+  });
+});
+
+// 표 경로는 변환기에 iframe 설정 {}를 넘긴다. 호스트의 iframeEmbed를 받지 않아
+// importHtml을 설정 없이 부른 결과와 같다. 일반 html 붙여넣기와 다른 점이다.
+describe("iframe 설정 (Issue #356 RD-005)", () => {
+  it("own-export iframe wrapper는 url 없는 iframe 블록으로 붙고 importHtml 기본 결과와 같다", () => {
+    const iframe =
+      '<div data-geul-block-id="j" data-geul-media-type="iframe" data-geul-src="https://example.com/x"></div>';
+    const imported = importedBlocks(iframe);
+
+    expect(imported).toEqual([{ id: "j", type: "iframe" }]);
+    expect(clipboardBlocks(`${iframe}${TABLE}`)).toEqual([
+      ...(withoutIds(imported) as unknown[]),
+      { type: "table", data: expect.any(Object) },
+    ]);
   });
 });
 
