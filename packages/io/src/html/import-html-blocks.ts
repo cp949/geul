@@ -689,6 +689,9 @@ const blocksFromListElement = (
 // 최외곽 catch가 아니라 parseHtmlFragment 자신의 설계된 경계 catch가 받아
 // undefined → HTML_PARSE_FAILED로 흡수된다(PIT-0034가 경계하는 "우연한
 // catch 의존"은 결정 6 + 그 경계 catch로 제거됐다).
+//
+// precedingBlock은 blocksFromSegments와 같은 관례다. 이 nodes 앞 형제
+// 블록이 따로 만들어졌을 때만 넘긴다(Issue #357 wrapper 이음매).
 const blocksFromNodes = (
   nodes: readonly HtmlNode[],
   createId: IdFactory,
@@ -696,6 +699,7 @@ const blocksFromNodes = (
   context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
   tableSeam: HtmlTableSeam,
+  precedingBlock?: Block,
 ): Block[] => {
   const blocks: Block[] = [];
   let plainRun: HtmlNode[] = [];
@@ -710,7 +714,7 @@ const blocksFromNodes = (
         context,
         iframeEmbedConfig,
         tableSeam,
-        blocks[blocks.length - 1],
+        blocks[blocks.length - 1] ?? precedingBlock,
       ),
     );
     plainRun = [];
@@ -719,7 +723,7 @@ const blocksFromNodes = (
   for (const node of nodes) {
     if (isListElement(node)) {
       flushPlainRun();
-      const previousBlock = blocks[blocks.length - 1];
+      const previousBlock = blocks[blocks.length - 1] ?? precedingBlock;
       blocks.push(
         ...blocksFromListElement(
           node,
@@ -879,24 +883,35 @@ const blocksFromNodes = (
         ? rawOwnBlock
         : { ...rawOwnBlock, id: outerBlockId };
 
-    const children = blocksFromNodes(
+    // wrapper children의 앞 형제는 own children의 마지막 블록이다. 넘겨야
+    // 이음매의 기본 ol이 번호를 다시 시작한다(Issue #357).
+    const ownChildren =
+      ownBlock.type === "codeBlock" ? undefined : ownBlock.children;
+    const wrapperChildren = blocksFromNodes(
       wrapper.childrenNodes,
       createId,
       depth + 1,
       context,
       iframeEmbedConfig,
       tableSeam,
+      ownChildren?.[ownChildren.length - 1],
     );
+    // own 블록이 자기 children을 가질 수 있다 — 현재 quote뿐이다(D6 분할이
+    // blockquote 안 나머지 블록을 children으로 만든다). 문서 순서가 own 노드
+    // → children 컨테이너이므로 own children 뒤에 wrapper children을 잇는다.
+    // 덮어쓰면 own children이 경고 없이 사라진다(Issue #357, G-CNV-002). 둘
+    // 다 depth + 1에서 만들어져 깊이 상한을 넘지 않는다.
     // codeBlock(model CodeBlock)엔 children 필드가 없다 — findChildrenWrapper
     // 가 이미 pre를 2-child(children 컨테이너 형제 있음) 분기에서 거절해
     // children이 항상 빈 배열이지만, 그 보장은 값 단계라 타입엔 드러나지
     // 않는다. 판정식에 타입 좁히기를 그대로 반영해 스프레드가 CodeBlock에
     // 없는 키를 얹지 않게 한다.
-    blocks.push(
-      children.length > 0 && ownBlock.type !== "codeBlock"
-        ? { ...ownBlock, children }
-        : ownBlock,
-    );
+    if (ownBlock.type === "codeBlock") {
+      blocks.push(ownBlock);
+      continue;
+    }
+    const children = [...(ownBlock.children ?? []), ...wrapperChildren];
+    blocks.push(children.length > 0 ? { ...ownBlock, children } : ownBlock);
   }
   flushPlainRun();
 
