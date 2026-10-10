@@ -762,7 +762,7 @@ describe("CodeBlock HTML 가져오기", () => {
     expect(result.value.warnings).toEqual([]);
   });
 
-  it("우선 선택된 language나 source의 금지 문자를 fallback·보정 없이 거절한다", () => {
+  it("우선 선택된 language의 금지 문자를 fallback·보정 없이 거절한다", () => {
     expect(
       importHtml(
         '<pre data-language="valid"><code data-language="bad&#x7f;">source</code></pre>',
@@ -771,10 +771,22 @@ describe("CodeBlock HTML 가져오기", () => {
       ok: false,
       error: { code: "HTML_DOCUMENT_INVALID" },
     });
-    expect(importHtml("<pre>one\u0001two</pre>")).toMatchObject({
-      ok: false,
-      error: { code: "HTML_DOCUMENT_INVALID" },
-    });
+  });
+
+  it("source의 금지 문자는 거절하지 않고 지운 뒤 UNSAFE_CODE_POINT_REMOVED를 반환한다(Issue #352)", () => {
+    const result = importHtml("<pre>one\u0001two</pre>");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.document.blocks).toEqual([
+      { id: "html-1", type: "codeBlock", content: [{ text: "onetwo" }] },
+    ]);
+    expect(result.value.warnings).toEqual([
+      expect.objectContaining({
+        kind: "UNSAFE_CODE_POINT_REMOVED",
+        element: "pre",
+      }),
+    ]);
   });
 
   it("제거된 raw descendant·주석을 source로 부활시키지 않는다", () => {
@@ -907,11 +919,20 @@ describe("CodeBlock HTML 가져오기", () => {
     });
   });
 
-  it("parser가 변형하는 NUL CodeBlock source를 HTML_DOCUMENT_INVALID로 거절한다", () => {
-    expect(importHtml("<pre><code>before\u0000after</code></pre>")).toEqual({
-      ok: false,
-      error: expect.objectContaining({ code: "HTML_DOCUMENT_INVALID" }),
-    });
+  it("parser가 변형하는 NUL CodeBlock source를 지우고 UNSAFE_CODE_POINT_REMOVED를 반환한다(Issue #352)", () => {
+    const result = importHtml("<pre><code>before\u0000after</code></pre>");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.document.blocks).toEqual([
+      { id: "html-1", type: "codeBlock", content: [{ text: "beforeafter" }] },
+    ]);
+    expect(result.value.warnings).toEqual([
+      expect.objectContaining({
+        kind: "UNSAFE_CODE_POINT_REMOVED",
+        element: "code",
+      }),
+    ]);
   });
 
   it("clipboard의 pre는 문단 콘텐츠로 남고 CodeBlock segment를 opt-in하지 않는다", () => {

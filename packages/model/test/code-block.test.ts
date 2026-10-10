@@ -1,6 +1,8 @@
 /**
  * CodeBlock language 정규화와 HTML class token 판정을 검증한다.
  * model 공개 helper가 core와 io가 공유할 단일 정책 경계임을 고정한다.
+ * source 정제(sanitizeCodeBlockSource)는 Tab·LF를 남기고 나머지 무효 문자만 지우며,
+ * 출력이 항상 isValidCodeBlockSource를 통과하고 멱등임을 고정한다(Issue #352).
  */
 import { describe, expect, it } from "vitest";
 
@@ -10,6 +12,7 @@ import {
   isSafeCodeBlockLanguageClassToken,
   isValidCodeBlockLanguage,
   isValidCodeBlockSource,
+  sanitizeCodeBlockSource,
 } from "../src/index.js";
 
 describe("CodeBlock language 정규화", () => {
@@ -85,5 +88,51 @@ describe("CodeBlock 공개 계약", () => {
     expect(isValidCodeBlockLanguage(block.language ?? "")).toBe(true);
     expect(isValidCodeBlockLanguage("")).toBe(false);
     expect(isValidCodeBlockLanguage("bad\nlanguage")).toBe(false);
+  });
+});
+
+describe("CodeBlock source 정제(Issue #352)", () => {
+  it.each([
+    ["빈 문자열", "", ""],
+    ["무효 문자 없는 입력", "a b\tc\nd", "a b\tc\nd"],
+    ["Tab과 LF만", "\t\t\n\t", "\t\t\n\t"],
+    ["CR을 지운다", "a\rb", "ab"],
+    ["CRLF의 CR만 지우고 LF를 남긴다", "a\r\nb", "a\nb"],
+    ["C0 제어문자를 지운다", "a\u0001b\u001fc", "abc"],
+    ["NUL을 지운다", "a\u0000b", "ab"],
+    ["DEL을 지운다", "a\u007fb", "ab"],
+    ["Tab 사이 제어문자를 지우고 Tab을 남긴다", "a\t\u0001\tb", "a\t\tb"],
+    ["짝 없는 high surrogate를 지운다", "a\ud800b", "ab"],
+    ["짝 없는 low surrogate를 지운다", "a\udc00b", "ab"],
+    ["짝 있는 surrogate는 남긴다", "a\u{1F600}b", "a\u{1F600}b"],
+    [
+      "U+2028·U+FEFF·U+0085는 남긴다",
+      "a\u2028\ufeff\u0085b",
+      "a\u2028\ufeff\u0085b",
+    ],
+  ])("%s", (_name, input, expected) => {
+    const output = sanitizeCodeBlockSource(input);
+
+    expect(output).toBe(expected);
+    expect(isValidCodeBlockSource(output)).toBe(true);
+    expect(sanitizeCodeBlockSource(output)).toBe(output);
+  });
+
+  it("모든 C0·DEL·surrogate 단독 입력의 출력이 유효하고 멱등이다", () => {
+    const codePoints = [
+      ...Array.from({ length: 0x20 }, (_, index) => index),
+      0x7f,
+      0xd800,
+      0xdbff,
+      0xdc00,
+      0xdfff,
+    ];
+    for (const codePoint of codePoints) {
+      const input = `a${String.fromCharCode(codePoint)}b\tc`;
+      const output = sanitizeCodeBlockSource(input);
+
+      expect(isValidCodeBlockSource(output)).toBe(true);
+      expect(sanitizeCodeBlockSource(output)).toBe(output);
+    }
   });
 });

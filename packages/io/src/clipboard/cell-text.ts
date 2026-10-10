@@ -18,16 +18,6 @@ const HTML_WHITESPACE_RUN = /[\t\n\f\r ]+/g;
 export const sanitizeCellText = (text: string): string =>
   sanitizeInlineText(text);
 
-// codeBlock 소스용 정제다(Issue #351). model의 codeBlock 소스 계약
-// (isValidCodeBlockSource)은 LF와 Tab을 허용하고 나머지 C0·DEL·짝 없는
-// surrogate를 거부한다. sanitizeInlineText는 Tab도 지우므로 Tab으로 나눠
-// 각 조각만 정제하고 Tab으로 다시 잇는다. 공백은 접지 않는다.
-export const sanitizeCodeText = (text: string): string =>
-  text
-    .split("\t")
-    .map((part) => sanitizeInlineText(part))
-    .join("\t");
-
 // hast 텍스트 노드 단계에서 whitespace를 접는다. inlineContentFromNodes가
 // br을 LF로 바꾸기 전에 접어야 "원본 마크업 들여쓰기가 만든 개행"과
 // "br이 만든 줄바꿈"을 구분할 수 있다.

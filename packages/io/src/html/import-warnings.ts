@@ -1,6 +1,7 @@
 import {
   isSupportedLinkHref,
   MAX_NESTING_DEPTH,
+  sanitizeCodeBlockSource,
   sanitizeInlineText,
 } from "@cp949/geul-model";
 
@@ -333,10 +334,11 @@ const collectFromNodes = (
       // raw HAST 텍스트 노드 기준으로 sanitize 전후를 비교한다(G-CNV-002 —
       // warning fact는 raw HAST에서 수집한다). 정책은 model의
       // sanitizeInlineText가 단독 소유한다(G-CNV-001).
-      if (
-        !insideCodeBlockPre &&
-        sanitizeInlineText(node.value) !== node.value
-      ) {
+      // pre 안 텍스트는 codeBlock 소스 정제(Tab·LF 허용)와 비교한다(Issue #352).
+      const sanitized = insideCodeBlockPre
+        ? sanitizeCodeBlockSource(node.value)
+        : sanitizeInlineText(node.value);
+      if (sanitized !== node.value) {
         warnings.push({
           kind: "UNSAFE_CODE_POINT_REMOVED",
           element: parentElement,

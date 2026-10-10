@@ -2,6 +2,7 @@
  * HTML/GFM importer 결과를 production core에 무보정으로 load·replace하고,
  * 저장 문서를 다시 HTML/GFM으로 export·re-import하는 통합 경계를 검증한다.
  * importer의 structured Result 실패가 core 호출보다 먼저 처리되는지도 확인한다.
+ * `pre` 안 무효 문자를 지운 import 결과도 core가 수용함을 고정한다(Issue #352).
  */
 import { describe, expect, it } from "vitest";
 
@@ -61,6 +62,41 @@ describe("CodeBlock importer와 production core 왕복", () => {
     );
   });
 
+  it("pre 안 무효 문자를 지운 HTML import 결과를 createEditor와 replaceDocument가 보정 없이 수용한다(Issue #352)", () => {
+    const imported = importedDocument(
+      importHtml('<pre data-geul-block-id="ctl-code">a&#13;b&#1;\tc\nd</pre>'),
+    );
+
+    expect(imported.blocks).toEqual([
+      {
+        id: "ctl-code",
+        type: "codeBlock",
+        content: [{ text: "ab\tc\nd" }],
+      },
+    ]);
+    const expected = {
+      ...imported,
+      blocks: [...imported.blocks, paragraphBlock("ctl-trailing", "")],
+    };
+    const created = createEditor({
+      initialDocument: imported,
+      createId: () => "ctl-trailing",
+    });
+    mountTiptapEditor(created);
+    expect(created.getDocument()).toEqual(expected);
+
+    const replaced = createEditor({
+      initialDocument: documentOf(paragraphBlock("before", "before")),
+      createId: () => "ctl-trailing",
+    });
+    mountTiptapEditor(replaced);
+    expect(replaced.replaceDocument(imported)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(replaced.getDocument()).toEqual({ ...expected, revision: 1 });
+  });
+
   it("GFM import 결과를 production core에서 저장하고 strict GFM으로 source·language·LF를 왕복한다", () => {
     const imported = importedDocument(
       importMarkdown("```unknown\nline 1\n\tline 2\n```\n", {
@@ -91,7 +127,7 @@ describe("CodeBlock importer와 production core 왕복", () => {
   });
 
   it("HTML/GFM invalid import는 structured Result 실패로 끝나 core를 호출하지 않는다", () => {
-    const invalidHtml = importHtml("<pre>one\u0001two</pre>");
+    const invalidHtml = importHtml('<pre data-language="bad&#x7f;">one</pre>');
     const invalidMarkdown = importMarkdown("```\n\ud800\n```\n");
 
     expect(invalidHtml).toMatchObject({

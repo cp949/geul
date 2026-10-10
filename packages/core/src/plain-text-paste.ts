@@ -1,4 +1,8 @@
-import { isNestableBlockType, sanitizeInlineText } from "@cp949/geul-model";
+import {
+  isNestableBlockType,
+  sanitizeCodeBlockSource,
+  sanitizeInlineText,
+} from "@cp949/geul-model";
 import {
   Fragment,
   Slice,
@@ -62,7 +66,8 @@ export const normalizePasteText = (text: string): string =>
 
 // Tab을 지우지 않고 CR을 줄 경계로 바꾼 뒤 나머지 무효 문자(LF 외 C0·DEL·
 // 짝 없는 surrogate)를 지운다. 삽입용(normalizePasteText)과 Tab 처리만
-// 다르다. 두 곳이 쓴다.
+// 다르다. 지우는 규칙은 model의 sanitizeCodeBlockSource가 소유한다
+// (Issue #352, G-CNV-001). 두 곳이 쓴다.
 // - Markdown 감지(Issue #291). Tab은 중첩 목록·들여쓴 코드의 구조이고 마커
 //   뒤 공백이며 코드 내용이다. model의 codeBlock 정책도 Tab을 허용한다.
 //   인라인 본문에 남은 Tab은 importMarkdown이 거절해 감지가 꺼진다(QA-078
@@ -72,10 +77,7 @@ export const normalizePasteText = (text: string): string =>
 //   남긴다. U+2028·U+2029·U+FEFF·U+0085는 유효라 지우지 않는다. 출력은 항상
 //   검증을 통과한다.
 export const normalizeKeepingTabs = (text: string): string =>
-  normalizeLineBreaks(text)
-    .split("\t")
-    .map((part) => sanitizeInlineText(part))
-    .join("\t");
+  sanitizeCodeBlockSource(normalizeLineBreaks(text));
 
 // slice 안 text 노드의 무효 문자를 지운다(Issue #302). 표 셀 안 붙여넣기의
 // transformPasted가 쓴다. PM 기본 붙여넣기는 slice의 무효 문자를 거르지 않아

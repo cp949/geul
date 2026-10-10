@@ -1,3 +1,5 @@
+import { sanitizeInlineText } from "./string-invariants.js";
+
 const KNOWN_LANGUAGE_IDS = new Map<string, string>([
   ["plain text", "text"],
   ["none", "text"],
@@ -34,6 +36,16 @@ const NO_ALLOWED_C0 = new Set<number>();
 
 export const isValidCodeBlockSource = (source: string): boolean =>
   !hasDisallowedCodePoint(source, CODE_SOURCE_ALLOWED_C0);
+
+// codeBlock 소스 정제다(Issue #352). isValidCodeBlockSource가 거부하는 문자만
+// 지운다. sanitizeInlineText는 Tab도 지우므로 Tab으로 나눠 각 조각만 정제하고
+// Tab으로 다시 잇는다. CR은 줄바꿈으로 바꾸지 않고 지운다. 출력은 항상
+// 검증을 통과하고 멱등이다.
+export const sanitizeCodeBlockSource = (source: string): string =>
+  source
+    .split("\t")
+    .map((part) => sanitizeInlineText(part))
+    .join("\t");
 
 export const isValidCodeBlockLanguage = (language: string): boolean =>
   language.length > 0 && !hasDisallowedCodePoint(language, NO_ALLOWED_C0);

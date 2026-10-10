@@ -17,6 +17,7 @@ export {
   isSafeCodeBlockLanguageClassToken,
   isValidCodeBlockLanguage,
   isValidCodeBlockSource,
+  sanitizeCodeBlockSource,
 } from "./code-block.js";
 export { createEmptyDocument } from "./create-document.js";
 export type { DocumentError, DocumentErrorCode } from "./errors.js";

@@ -5,6 +5,7 @@ import {
   isCanonicalCellAlign,
   isCanonicalCellColor,
   isValidCodeBlockLanguage,
+  sanitizeCodeBlockSource,
   tableSizeViolationMessage,
   validateTableSize,
 } from "@cp949/geul-model";
@@ -74,7 +75,6 @@ import {
   collapseHtmlWhitespace,
   normalizeCellContent,
   sanitizeCellText,
-  sanitizeCodeText,
 } from "./cell-text.js";
 import type {
   ClipboardContent,
@@ -405,7 +405,7 @@ const blockSequenceFromNodes = (
       // model 정규형으로 바꾼다. model이 거부하는 값(제어문자 등)이면 버린다.
       // wrap·caption·id는 읽지 않는다.
       if (segment.kind === "codeBlock") {
-        const text = sanitizeCodeText(textValue(segment.node.children));
+        const text = sanitizeCodeBlockSource(textValue(segment.node.children));
         if (!hasSubstantialText(text)) continue;
         const { language } = selectCodeBlockLanguage(segment.node);
         blocks.push({

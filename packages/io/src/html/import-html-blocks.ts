@@ -11,6 +11,7 @@ import {
   type IframeEmbedConfig,
   type ListItemBlock,
   MAX_NESTING_DEPTH,
+  sanitizeCodeBlockSource,
   sanitizeInlineText,
 } from "@cp949/geul-model";
 
@@ -315,7 +316,9 @@ const blocksFromSegments = (
           ? undefined
           : sanitizeInlineText(textValue(figcaptionNode.children));
 
-      const source = textValue(preNode.children);
+      // 무효 문자는 거절하지 않고 지운다(Issue #352). 경고는 raw 텍스트에서
+      // import-warnings.ts가 모은다(G-CNV-002).
+      const source = sanitizeCodeBlockSource(textValue(preNode.children));
       const id = propertyString(preNode, "dataGeulBlockId") ?? createId();
       const { language, metadataConflict } = selectCodeBlockLanguage(preNode);
       if (metadataConflict) {
