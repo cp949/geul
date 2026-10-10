@@ -11,3 +11,4 @@
 - 래퍼 `blockquote`·`li`의 `style` 색은 항목에 따라오지 않는다. 항목 안 `li`·`div` 자신의 `style`은 읽는다.
 - `span`·`b`·`a`처럼 마크가 있는 조상은 계속 항목 글자에 씌워진다.
 - `importHtml` 결과는 바뀌지 않는다.
+- 정정: 위 결과 서술은 이 changeset 시점의 서술이다. `clipboard-table-delegation` 이후 `blockquote`는 `quote` 블록이고 목록은 그 children이다. `blockquote` 안 `span`·`b`·`a`가 감싼 목록도 `quote` children의 목록 항목이다(`io-html-wrapped-block-structure`).

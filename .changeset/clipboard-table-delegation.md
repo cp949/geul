@@ -25,6 +25,8 @@
 
 - 표 읽기 규칙. 짧은 행은 빈 셀로 채운다. 셀 없는 빈 `<table>`은 무시한다. 레이아웃 표는 풀어 안쪽 데이터 표를 읽는다. `th`는 header 행을 만들지 않고 `td`의 `text-align`은 `align`이 된다. 크기 상한과 `CLIPBOARD_TABLE_INVALID` 거절도 같다.
 - TSV 경로와 `NOT_TABULAR` 판정.
+- 래퍼(`div`·`span`·`b`·`a`) 안의 `ul`·`ol`은 목록 항목이다. Google Docs 복사 모양이 이 경로다. 변환기도 같게 고쳤다(`io-html-wrapped-block-structure`).
+- 인용 안 인라인 래퍼(`span`·`b`·`a`)가 품은 표는 표다. `quote`의 children 표로 나온다.
 - 이미 `importHtml`과 같았던 입력. `p`·`span` 색, 소스 공백, h1–h3, 중첩 `ul`, `li` 안 `p`·`pre`·`hr`, `div` `style`, 표 뒤 `p`·`ul`, caption, 표 둘, `javascript:` 링크, 원시 `details`.
 - `ClipboardContentBlock` 타입. RD-004가 이미 model의 모든 비표 블록을 허용했다.
 - 저장 문서 형식.
@@ -41,8 +43,6 @@ core:
 
 - `parseClipboardTable` 결과에 `switch (block.type)`을 쓰는 소비자는 `quote`, `callout`, `checkListItem`, `toggleListItem`, 미디어, 최상위 `codeBlock`·`divider`를 처리해야 한다. 이전에는 이 type이 나오지 않았다. `codeBlock`·`divider`는 목록 항목 children에서만 나왔다.
 
-알려진 한계(`importHtml` 변환기 결함, #336 계열):
+알려진 한계:
 
-- `div`·`span`·`b`·`a`가 감싼 `ul`·`ol`이 목록 항목이 아니라 문단이 된다. Google Docs 복사 모양이 이 경로다. 이전 클립보드 순회는 보존했다. 표 없는 붙여넣기와 `importHtml`은 이미 같은 결과다.
-- 인용 안 인라인 래퍼가 품은 표가 표로 나오지 않는다. 다른 표가 없으면 `NOT_TABULAR`다. 이전 클립보드 순회는 표로 읽었다.
 - 셀 안 `details`·`figure` 경계에 줄바꿈이 생긴다. `<td>s<details>d</details></td>`는 `s`, 줄바꿈, `d`다. 이전에는 `sd`였다.

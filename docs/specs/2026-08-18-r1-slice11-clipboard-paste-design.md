@@ -221,11 +221,14 @@ core:
 - 막은 타입: `containsBlockedType`이 모든 비표 블록의 type과 children을 훑는다. 표 밖 캐럿에서 막은 타입이 있으면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 받는다. 캐럿이나 선택이 표 안이면 검사하지 않는다.
 - 최상위 표가 없고 `quote`·`callout` 등 children 안에만 표가 있는 html도 #315처럼 `TablePasteExtension`이 물러난다.
 
-알려진 한계(`importHtml` 변환기 결함, #336 계열. 영구 테스트 `it.fails` 12건이 고정한다):
+래퍼 안 목록과 인라인 래퍼가 품은 블록(Issue #336, Issue #356 RD-005 DELTA-04):
 
-- `div`·`span`·`b`·`a` 안의 `ul`·`ol`이 목록 항목이 아니라 문단이 된다(9건). Google Docs 복사 모양 `<b id="docs-internal-guid-…"><ul>…</ul></b>`가 이 경로다. 이전 클립보드 순회는 보존했다. 표 없는 일반 html 붙여넣기와 `importHtml`은 이미 같은 결과다.
-- 인용 안 인라인 래퍼(`span`·`b`·`a`)가 품은 표가 표로 나오지 않는다(3건). 다른 표가 없으면 `NOT_TABULAR`다. 이전 클립보드 순회는 표로 읽었다.
-- 변환기가 고쳐지면 `it.fails`가 실패해 알린다.
+- `div`·`span`·`b`·`a` 안의 `ul`·`ol`도 목록 항목이다. Google Docs 복사 모양 `<b id="docs-internal-guid-…"><ul>…</ul></b>`도 목록으로 남는다.
+- 마크가 있는 래퍼(`b`·`a`)는 항목 글자의 마크가 된다. `font-weight:normal` 래퍼는 굵게가 아니다.
+- 래퍼 안 연속 `ol`의 번호는 최상위 연속 `ol`과 같다.
+- 인용·목록 항목·callout 안에서 블록을 품은 인라인 래퍼(`span`·`b`·`a`)는 children 자리로 간다. 그 안의 표는 그 블록의 children 표다.
+- `importHtml`과 일반 html 붙여넣기도 같은 변환기라 같은 결과다.
+- RD-005 위임 직후(DELTA-02)에는 래퍼 안 목록이 문단, 인용 안 인라인 래퍼 표가 글자가 됐다. DELTA-04가 변환기를 고쳤다. 그 단언 12건은 일반 테스트다.
 
 소비자 영향: `ClipboardContentBlock` 타입은 RD-004와 같다. 파서가 이전에 나오지 않던 type을 낸다. `parseClipboardTable` 결과에 `switch (block.type)`을 쓰는 소비자는 새 type을 처리해야 한다.
 
