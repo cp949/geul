@@ -178,10 +178,12 @@ const countIndexReads = (
 
 // `font:` 접두를 뗀 값 수준 모양이다. 선언 수준인 "선언이 아주 많은 입력"은
 // 뺐고, 긴 글꼴 식별자 하나를 더했다. 그 모양이 있어야 `scanFamilyIdent`의
-// 루프 안 재순회가 잡힌다. 셋째 값은 입력을 끝까지 훑는지다. 쉼표만 많은
-// 입력은 `isFamilyList`가 첫 글자 `,`에서 거절하고, 앞 토큰이 아주 많은
-// 입력은 앞 슬롯 네 개를 넘기면 거절한다. 두 모양은 입력이 아무리 커도
-// 읽기 수가 상수라 `BASE_SIZE` 이상을 요구하지 않는다.
+// 루프 안 재순회가 잡힌다. 셋째 값은 입력을 끝까지 훑는지다. 참이면 읽기
+// 수가 입력 길이 이상이어야 한다. 쉼표만 많은 입력은 `isFamilyList`가 첫 글자
+// `,`에서 거절하고, 앞 토큰이 아주 많은 입력은 `normal` 슬롯 토큰이
+// `MAX_FONT_PREFIX_TOKENS`(4)개를 넘기면 거절한다. `bold`를 반복하면 두 번째
+// 토큰의 굵기 중복에서 끝나 상한 경로에 닿지 않는다. 두 모양은 입력이 아무리
+// 커도 읽기 수가 상수라 입력 길이 이상을 요구하지 않는다.
 const fontShorthandValueShapes: Array<
   [name: string, build: (size: number) => string, scansWholeInput: boolean]
 > = [
@@ -206,7 +208,7 @@ const fontShorthandValueShapes: Array<
   ["쉼표만 많은 입력", (size) => `12px ${",".repeat(size)}`, false],
   [
     "앞 토큰이 아주 많은 입력",
-    (size) => `${"bold ".repeat(size)}12px a`,
+    (size) => `${"normal ".repeat(size)}12px a`,
     false,
   ],
   [
@@ -237,7 +239,8 @@ describe("parseFontShorthand의 대괄호 읽기", () => {
   it.each(fontShorthandValueShapes)(
     "%s은 크기가 2배가 되면 대괄호 읽기가 2배 이하로 는다",
     (_name, build, scansWholeInput) => {
-      const small = countIndexReads(build(BASE_SIZE), (value) => {
+      const smallInput = build(BASE_SIZE);
+      const small = countIndexReads(smallInput, (value) => {
         parseFontShorthand(value);
       });
       const large = countIndexReads(build(BASE_SIZE * 2), (value) => {
@@ -246,7 +249,9 @@ describe("parseFontShorthand의 대괄호 읽기", () => {
 
       // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
       expect(small).toBeGreaterThan(0);
-      if (scansWholeInput) expect(small).toBeGreaterThanOrEqual(BASE_SIZE);
+      if (scansWholeInput) {
+        expect(small).toBeGreaterThanOrEqual(smallInput.length);
+      }
 
       expect(large / small, "대괄호 읽기 증가율").toBeLessThanOrEqual(2);
     },
