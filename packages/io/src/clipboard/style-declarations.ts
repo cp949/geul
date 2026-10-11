@@ -210,7 +210,6 @@ export type InlineStyleMarks = {
 const MIN_BOLD_WEIGHT = 600;
 const MIN_FONT_WEIGHT = 1;
 const MAX_FONT_WEIGHT = 1000;
-const WHITESPACE_RUN = /\s+/;
 
 const LIGHT_WEIGHT_KEYWORDS: ReadonlySet<string> = new Set([
   "lighter",
@@ -352,7 +351,7 @@ const isLineHeight = (node: CssComponentValue): boolean =>
 // 문자열 하나이거나 식별자 하나 이상이다(`a b`). 식별자 사이의 공백·주석은 보지
 // 않는다. 빈 항목(앞뒤·연속 쉼표)은 무효다. 식별자 하나뿐인 항목이 예약 낱말이면
 // 무효다. 닫히지 않은 문자열은 입력 끝에서 닫힌 문자열 토큰이다.
-const isFamilyList = (
+const isFamilyNameList = (
   parts: readonly CssComponentValue[],
   from: number,
 ): boolean => {
@@ -490,7 +489,7 @@ const readFontShorthand = (
     }
     index += 2;
   }
-  if (!isFamilyList(parts, index)) return undefined;
+  if (!isFamilyNameList(parts, index)) return undefined;
   return { weight, fontStyle: italic ? "italic" : "normal" };
 };
 
@@ -981,13 +980,27 @@ const WHITE_SPACE_RESET_KEYWORDS: ReadonlySet<string> = new Set([
   "revert-layer",
 ]);
 
-// 유효한 값이면 모드를, 아니면 undefined를 돌려준다.
-const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
-  const tokens = value.split(WHITESPACE_RUN);
-  if (tokens.length === 1) return WHITE_SPACE_KEYWORDS.get(value);
-  if (tokens.length !== 2) return undefined;
+// 값(component value 목록)의 낱말이다. 낱말은 ident 하나나 둘이고, 이스케이프를
+// 푼 이름의 ASCII 소문자다. ident가 아닌 component가 있거나 낱말이 셋 이상이면
+// undefined다. 낱말이 셋째에서 끝나므로 값이 길어도 읽기는 상수다.
+const readWhiteSpaceWords = (
+  value: readonly CssComponentValue[],
+): string[] | undefined => {
+  const words: string[] = [];
+  for (const node of value) {
+    if (node.type === "whitespace") continue;
+    if (node.type !== "ident" || words.length === 2) return undefined;
+    words.push(asciiLowerCase(node.value));
+  }
+  return words.length === 0 ? undefined : words;
+};
 
-  const [first = "", second = ""] = tokens;
+// 유효한 낱말이면 모드를, 아니면 undefined를 돌려준다.
+const readWhiteSpaceValue = (
+  words: readonly string[],
+): WhiteSpaceMode | undefined => {
+  const [first = "", second] = words;
+  if (second === undefined) return WHITE_SPACE_KEYWORDS.get(first);
   if (COLLAPSE_KEYWORDS.has(first) && WRAP_KEYWORDS.has(second)) {
     return WHITE_SPACE_KEYWORDS.get(first);
   }
@@ -1013,14 +1026,18 @@ export const readWhiteSpaceMode = (
     important: false,
   };
 
-  for (const { name, text, important } of declarations) {
+  for (const { name, value, important } of declarations) {
     if (name !== "white-space") continue;
-    const value = asciiLowerCase(text);
-    if (WHITE_SPACE_RESET_KEYWORDS.has(value)) {
+    const words = readWhiteSpaceWords(value);
+    if (words === undefined) continue;
+    if (
+      words.length === 1 &&
+      WHITE_SPACE_RESET_KEYWORDS.has(words[0] as string)
+    ) {
       applyMark(slot, undefined, important);
       continue;
     }
-    const mode = readWhiteSpaceValue(value);
+    const mode = readWhiteSpaceValue(words);
     if (mode !== undefined) applyMark(slot, mode, important);
   }
 

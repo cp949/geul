@@ -602,6 +602,70 @@ describe("parseWhiteSpaceMode", () => {
   });
 });
 
+// 아래 표는 `white-space` 값의 토큰 경계를 Chromium 153.0.8010.12로 잰 결과다
+// (Issue #368, RD-004). 값은 component value로 읽는다.
+// - 주석은 낱말을 가르지만 공백이 아니다(`preserve/**/nowrap`은 낱말 둘).
+// - 키워드는 이스케이프를 푼 이름으로 읽는다(`pre\-wrap`은 `pre-wrap`).
+// - CSS 공백은 SP·TAB·LF·CR·FF뿐이다. NBSP·U+3000은 식별자 글자라 낱말을 가르지
+//   않는다.
+// 무효 값은 앞 선언을 유지하고, 전역 키워드는 칸을 비운다.
+describe("white-space 값 토큰 경계 Chromium 대조 (Issue #368)", () => {
+  const NBSP = String.fromCharCode(0xa0);
+  const IDEOGRAPHIC_SPACE = String.fromCharCode(0x3000);
+  const DEL = String.fromCharCode(0x7f);
+
+  it.each([
+    ["preserve/**/nowrap", "preserve"],
+    ["PRESERVE/**/NOWRAP", "preserve"],
+    ["nowrap/**/preserve", "preserve"],
+    ["/**/preserve nowrap", "preserve"],
+    ["preserve/**/", "preserve"],
+    ["preserve-breaks/**/wrap", "pre-line"],
+    ["collapse/**/wrap", "normal"],
+    ["\\70reserve nowrap", "preserve"],
+    ["preserve \\6eowrap", "preserve"],
+    ["pre\\-wrap", "preserve"],
+    ["pre\\2d wrap", "preserve"],
+    ["\\70re", "preserve"],
+    ["\\70re-line", "pre-line"],
+    ["pre\\-line", "pre-line"],
+  ] as const)("white-space:%j는 %s 모드다", (value, mode) => {
+    expect(parseWhiteSpaceMode(`white-space:${value}`)).toBe(mode);
+  });
+
+  it.each([
+    `preserve${NBSP}nowrap`,
+    `preserve${IDEOGRAPHIC_SPACE}nowrap`,
+    "preserve\\ nowrap",
+    `pre${DEL}`,
+    `preserve nowrap${DEL}`,
+    "pre-line\\",
+    "pre\\",
+    "preserve nowrap nowrap",
+    "preserve preserve",
+    "wrap/**/nowrap",
+    "inherit nowrap",
+    "nowrap inherit",
+    "preserve,nowrap",
+    '"pre"',
+    "1",
+    "-pre",
+  ])("무효 선언 white-space:%j는 버리고 앞 선언을 유지한다", (value) => {
+    expect(
+      parseWhiteSpaceMode(`white-space:pre-line;white-space:${value}`),
+    ).toBe("pre-line");
+  });
+
+  it.each(["\\69nherit", "inherit/**/", "/**/inherit", "INHERIT"])(
+    "전역 키워드 white-space:%j는 앞 선언을 지우고 판정하지 않는다",
+    (value) => {
+      expect(
+        parseWhiteSpaceMode(`white-space:pre-line;white-space:${value}`),
+      ).toBeUndefined();
+    },
+  );
+});
+
 /*
  * 아래는 Issue #334 단계 A가 더한 규칙이다: font-weight 분류의 light, font
  * 줄임 속성, 색 칸의 상태(unset·clear·color). 기대값은 Chromium

@@ -35,8 +35,14 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readInlineStyleMarks } from "../src/clipboard/style-declarations.js";
-import { parseCssDeclarations } from "../src/css/declarations.js";
+import {
+  readInlineStyleMarks,
+  readWhiteSpaceMode,
+} from "../src/clipboard/style-declarations.js";
+import {
+  type CssDeclaration,
+  parseCssDeclarations,
+} from "../src/css/declarations.js";
 import {
   countIndexReads,
   MAX_READS_PER_CHAR,
@@ -575,6 +581,7 @@ describe("font 줄임 속성 값의 대괄호 읽기(parseCssDeclarations)", () 
  */
 const countComponentReads = (
   style: string,
+  read: (declarations: CssDeclaration[]) => unknown = readInlineStyleMarks,
 ): { reads: number; components: number } => {
   const declarations = parseCssDeclarations(style);
   const components = declarations.reduce(
@@ -603,7 +610,7 @@ const countComponentReads = (
       },
     }),
   }));
-  readInlineStyleMarks(wrapped);
+  read(wrapped);
   return { reads, components };
 };
 
@@ -626,6 +633,41 @@ describe("font 줄임 속성 판독기의 component 읽기", () => {
       ).toBeLessThanOrEqual(2);
     },
   );
+});
+
+// `white-space` 판독기는 낱말을 둘까지만 읽고 셋째 낱말에서 끝낸다. 값이 아무리
+// 길어도 component 읽기 수가 상수여야 한다. 값 전체를 훑는 변이(`filter` 등)는
+// 읽기 수가 component 수로 늘어 상한을 넘는다.
+const MAX_WHITE_SPACE_READS = 8;
+
+describe("white-space 판독기의 component 읽기", () => {
+  it.each([
+    ["낱말이 아주 많은 입력", (size: number) => "pre ".repeat(size)],
+    [
+      "낱말 사이 주석이 아주 많은 입력",
+      (size: number) => `pre${"/**/pre".repeat(size)}`,
+    ],
+    [
+      "첫 낱말 뒤 공백이 긴 입력",
+      (size: number) => `pre${" ".repeat(size * 16)}wrap`,
+    ],
+    [
+      "낱말이 아닌 component가 아주 많은 입력",
+      (size: number) => `pre ${"(a) ".repeat(size)}`,
+    ],
+    ["함수 안이 긴 입력", (size: number) => `pre foo(${"a ".repeat(size)})`],
+  ])("%s은 크기와 상관없이 component 읽기가 상수다", (_name, build) => {
+    for (const size of [BASE_SIZE, BASE_SIZE * 2]) {
+      const { reads } = countComponentReads(
+        `white-space:${build(size)}`,
+        readWhiteSpaceMode,
+      );
+
+      // 계측이 실제로 일을 셌는지 확인한다. 값을 읽지 않으면 0이다.
+      expect(reads).toBeGreaterThan(0);
+      expect(reads).toBeLessThanOrEqual(MAX_WHITE_SPACE_READS);
+    }
+  });
 });
 
 const declarationInputShapes: Array<[string, (size: number) => string]> = [
