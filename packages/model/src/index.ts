@@ -1,5 +1,6 @@
 export type {
   InlineContentBlockType,
+  LeafBlockType,
   ListEntryBlockType,
   ListItemBlockType,
   MediaBlockType,
@@ -7,9 +8,9 @@ export type {
 } from "./block-kind.js";
 export {
   isInlineContentBlockType,
-  isListEntryBlockType,
   isLeafBlock,
   isLeafBlockType,
+  isListEntryBlockType,
   isListItemBlockType,
   isMediaBlock,
   isMediaBlockType,

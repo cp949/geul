@@ -11,7 +11,12 @@
  * 모든 fixture 블록의 id는 "id-1"이다. 순차 id 팩토리(id-1, id-2, ...)가
  * 마운트 때 만드는 trailing paragraph id와 겹치는 문서를 만들기 위해서다.
  */
-import { parseDocument, type Block, type Document } from "@cp949/geul-model";
+import {
+  isMediaBlockType,
+  parseDocument,
+  type Block,
+  type Document,
+} from "@cp949/geul-model";
 import { exportHtml, exportMarkdown } from "@cp949/geul-io";
 import { describe, expect, it } from "vitest";
 
@@ -86,6 +91,29 @@ describe("블록 종류 교차 검사", () => {
       expect(exportMarkdown(documentFor(type), { mode: "lossy" }).ok).toBe(
         true,
       );
+    },
+  );
+
+  // 성공만 단언하면 미디어 블록이 다른 분기로 떨어져도 통과한다. 미디어
+  // 블록이 자기 종류의 마커와 url을 내는지까지 본다.
+  it.each(BLOCK_TYPES.filter(isMediaBlockType))(
+    "%s 문서가 exportHtml에서 자기 종류 마커와 url을 낸다",
+    (type) => {
+      const result = exportHtml(documentFor(type));
+
+      expect(result.ok && result.value).toContain(
+        `data-geul-media-type="${type}"`,
+      );
+      expect(result.ok && result.value).toContain(MEDIA_URL);
+    },
+  );
+
+  it.each(BLOCK_TYPES.filter(isMediaBlockType))(
+    "%s 문서가 exportMarkdown lossy에서 url을 낸다",
+    (type) => {
+      const result = exportMarkdown(documentFor(type), { mode: "lossy" });
+
+      expect(result.ok && result.value.markdown).toContain(MEDIA_URL);
     },
   );
 

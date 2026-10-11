@@ -74,9 +74,10 @@ export type BlockTypeDescriptor =
 // audio는 RD-002 DELTA-01(R3 슬라이스1)부터 반대로 divider/table과 같은
 // null 자리에 추가됐다 — spec §2.2가 이미 "media Turn into 제외"를
 // 확정했다(새 제품 결정 아님, 실측 tsc로 이 결합을 확인한 뒤 반영). iframe은
-// RD-002 DELTA-03(roadmap Issue #212)부터 같은 자리다 — spec §3은 이 함수가
-// media처럼 "자연 배제"될 것으로 예상했지만, 이 함수는 kind를 명시 리터럴로
-// 나열하는 방식이라 실측 결과 결함이었다(각 kind를 직접 추가해야 배제된다).
+// RD-002 DELTA-03(roadmap Issue #212)부터 같은 자리다. 이 함수는 한때 kind를
+// 명시 리터럴로 나열해 iframe이 빠지는 결함이 났다. 지금은 model의
+// isInlineContentBlockType 화이트리스트라 새 미디어 종류도 자동으로 배제된다
+// (Issue #371).
 export type BlockTypeSource =
   | { type: "paragraph" }
   | { type: "heading"; level: HeadingLevel }

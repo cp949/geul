@@ -1,6 +1,9 @@
 /**
  * 목록 항목·중첩 가능·콘텐츠 보유 판정이 포함 관계(목록 항목 ⊂ 중첩 가능
- * ⊂ 콘텐츠 보유)를 지키는지 모든 Block 판별자에 대해 고정한다.
+ * ⊂ 콘텐츠 보유)를 지키는지 모든 Block 판별자에 대해 고정한다. 또
+ * BLOCK_FAMILY 표와 거기서 파생한 미디어·리프 판정(isMediaBlockType,
+ * isLeafBlockType, isMediaBlock, isLeafBlock)과 isKnownBlockType 파생을
+ * 고정한다(Issue #371).
  */
 import { describe, expect, it } from "vitest";
 
@@ -27,9 +30,15 @@ const ALL_BLOCK_TYPES = [
   "numberedListItem",
   "checkListItem",
   "toggleListItem",
+  "callout",
   "codeBlock",
   "divider",
   "table",
+  "file",
+  "image",
+  "video",
+  "audio",
+  "iframe",
 ] as const;
 
 // 표 밖 문자열이다. 객체 프로퍼티 조회로 판정하면 새는 이름을 포함한다.
