@@ -786,6 +786,9 @@ describe("text-decoration 값 판정", () => {
     ["underline rgb(0,0,0)", UNDERLINE],
     ["underline rgb(0 0 0 / 50%)", UNDERLINE],
     ["underline #f00", UNDERLINE],
+    ["underline #F00", UNDERLINE],
+    // `#` 토큰의 이름은 이스케이프를 푼 값이다(Issue #368). `\66 `은 `f`다.
+    ["underline #\\66 00", UNDERLINE],
     ["underline transparent", UNDERLINE],
     ["red", NO_LINE],
     ["wavy", NO_LINE],

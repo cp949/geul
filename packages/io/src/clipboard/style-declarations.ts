@@ -778,7 +778,8 @@ const DECORATION_COLOR_IDENTIFIERS: ReadonlySet<string> = new Set([
 ]);
 
 // 색 토큰인지 본다. 함수는 이름만 보고 안쪽은 읽지 않는다. 식별자는
-// 이스케이프를 푼 소문자 낱말로, `#` 토큰은 원문으로 `readCssColor`에 묻는다.
+// 이스케이프를 푼 소문자 낱말로, `#` 토큰은 이스케이프를 푼 이름 앞에 `#`를
+// 붙여 `readCssColor`에 묻는다(`#\66 00`은 `#f00`).
 const isDecorationColor = (
   node: CssComponentValue,
   word: string | undefined,
@@ -795,7 +796,7 @@ const isDecorationColor = (
   }
   return (
     node.type === "hash" &&
-    readCssColor(asciiLowerCase(node.text)).kind !== "invalid"
+    readCssColor(asciiLowerCase(`#${node.value}`)).kind !== "invalid"
   );
 };
 
