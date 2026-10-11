@@ -36,7 +36,8 @@ export type BlockTypeBlocker =
   | "ALL_CODE_BLOCK"
   | "NOT_FOUND"
   // 텍스트 없는 블록·Code 대상 다중 변환·빈 선택·파괴된 편집기 등 위 사유가
-  // 아닌 구조적 거절이다.
+  // 아닌 구조적 거절이다. 대상 타입이 enabledBlockTypes로 막혔을 때도 이
+  // 값이다(Issue #370).
   | "NOT_APPLICABLE";
 
 export type BlockTypeDescriptor =

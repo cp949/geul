@@ -187,6 +187,7 @@ export interface SelectionQuery {
   // react 툴바·메뉴가 변환 버튼의 활성 여부와 비활성 사유에 쓴다(Issue #245).
   // clearContent는 명령의 같은 옵션과 같다 — 내용을 비우는 변환(슬래시
   // 메뉴)은 탭이 든 codeBlock도 일반 블록으로 바꿀 수 있다.
+  // 대상 타입이 enabledBlockTypes로 막혔으면 NOT_APPLICABLE이다.
   getBlockTypeBlocker(
     blockId: string,
     blockType: SetBlockTypeDescriptor,
@@ -195,7 +196,7 @@ export interface SelectionQuery {
   // `commands.setBlockTypes`의 구조적 거절 사유를 보고한다. 선택이 전부
   // codeBlock이면 ALL_CODE_BLOCK이다. codeBlock이 섞여 있으면 거절하지
   // 않는다(codeBlock은 건너뛰고 나머지를 바꾼다). 대상이 Code이면
-  // NOT_APPLICABLE이다.
+  // NOT_APPLICABLE이다. 대상 타입이 enabledBlockTypes로 막혔어도 같다.
   getBlockTypesBlocker(
     blockIds: readonly string[],
     blockType: SetBlockTypeDescriptor,

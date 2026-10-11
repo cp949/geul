@@ -39,6 +39,12 @@ export const evaluateBlockTypeChange = (
   // 대상이 아니다. 이 명령은 모델 트리 조회 시절부터 그 경우
   // BLOCK_NOT_FOUND를 돌려줬다. 그 결과를 유지한다.
   if (!isKnownBlockType(currentTypeName)) return { blocker: "NOT_FOUND" };
+  // enabledBlockTypes로 막은 대상 타입은 현재 타입 기반 사유(LIST_CODE_MISMATCH
+  // 등)보다 먼저 거절한다. 명령은 non-null blocker를 모두
+  // COMMAND_NOT_APPLICABLE로 바꾸므로 명령 결과는 변하지 않는다.
+  if (!session.isBlockTypeEnabled(blockType.type)) {
+    return { blocker: "NOT_APPLICABLE" };
+  }
   if (!isInlineContentBlockType(currentTypeName)) {
     return { blocker: "NOT_APPLICABLE" };
   }
@@ -104,6 +110,12 @@ export const evaluateBlockTypesChange = (
       return { blocker: "NOT_FOUND", missingBlockId: blockId };
     }
     targets.push(target);
+  }
+  // 막은 대상 타입은 NOT_FOUND 뒤, 변환 가능 판정 앞에서 거절한다. 명령은
+  // non-null blocker를 모두 COMMAND_NOT_APPLICABLE로 바꾸므로 명령 결과는
+  // 변하지 않는다.
+  if (!session.isBlockTypeEnabled(blockType.type)) {
+    return { blocker: "NOT_APPLICABLE" };
   }
   const hasConvertible = targets.some(
     ({ node }) =>
