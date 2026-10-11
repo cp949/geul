@@ -10,23 +10,14 @@ import {
   tableSizeViolationMessage,
   validateTableSize,
 } from "@cp949/geul-model";
-import { sanitize } from "hast-util-sanitize";
 
 import type { ClipboardParseError } from "../errors.js";
 import { clipboardSanitizeSchema } from "../html/clipboard-sanitize-schema.js";
 import {
-  collapseSourceWhitespace,
-  hasGeulIdentityAttribute,
-} from "../html/collapse-source-whitespace.js";
-import {
   cellPresentation,
   type CellPresentation,
 } from "../html/element-presentation.js";
-import {
-  childElements,
-  propertyString,
-  sanitizeLinks,
-} from "../html/hast-properties.js";
+import { childElements, propertyString } from "../html/hast-properties.js";
 import { createImportContext } from "../html/import-context.js";
 import {
   documentFromRoot,
@@ -38,13 +29,9 @@ import {
   type HtmlNode,
   type HtmlRoot,
   inlineContentFromNodes,
-  unwrapBlockBearingColorTags,
 } from "../html/inline-content.js";
-import {
-  asRoot,
-  flattenBlockBoundaryTagNames,
-  parseHtmlFragment,
-} from "../html/parse-html.js";
+import { flattenBlockBoundaryTagNames } from "../html/parse-html.js";
+import { prepareSanitizedRoot } from "../html/prepare-sanitized-root.js";
 import {
   type CellLayout,
   columnElements,
@@ -453,28 +440,16 @@ const parseHtmlTable = (
 ): HtmlTableOutcome => {
   // 깊이-캡 절단 사실(truncated)은 경고로 내지 않는다 — clipboard 경로에는 경고
   // 채널이 없다(ClipboardParseError는 NOT_TABULAR | CLIPBOARD_TABLE_INVALID
-  // 뿐). importHtml처럼 소스 공백 접기 여부에만 쓴다. 캡 너머로 절단된 표는 표로
-  // 인식되지 않아 NOT_TABULAR(기본 붙여넣기 폴백)로 떨어진다.
-  const parsed = parseHtmlFragment(html);
-  if (parsed === undefined)
+  // 뿐). 캡 너머로 절단된 표는 표로 인식되지 않아 NOT_TABULAR(기본 붙여넣기
+  // 폴백)로 떨어진다.
+  // 준비 순서는 importHtml과 같다(prepareSanitizedRoot). 소스 공백 접기도 표
+  // 판정 전에 끝난다 — 접기는 노드를 바꾸지 않지만 표 노드 집합을 확정한 뒤에는
+  // 트리를 고치지 않는다. 표 셀은 tabularDataFromTable이 자기 접기를 한 번 더
+  // 한다. 접힌 공백은 다시 접어도 같다(Issue #320, #356 Q9).
+  const prepared = prepareSanitizedRoot(html, clipboardSanitizeSchema);
+  if (prepared === undefined)
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
-  const { root: unsafeRoot, truncated } = parsed;
-
-  const safeRoot = asRoot(sanitize(unsafeRoot, clipboardSanitizeSchema));
-  if (safeRoot === undefined)
-    return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
-
-  // importHtml과 같은 링크 정책을 적용한다 — 살려두면 core의
-  // LinkPolicyExtension.filterTransaction이 붙여넣기 트랜잭션을 통째로 버린다.
-  sanitizeLinks(safeRoot.children);
-  unwrapBlockBearingColorTags(safeRoot.children);
-  // 소스 공백 접기는 importHtml과 같은 조건이다(Issue #320, #356 Q9). 표 셀은
-  // tabularDataFromTable이 자기 접기를 한 번 더 한다. 접힌 공백은 다시 접어도
-  // 같다. 표 판정 전에 접는다 — 접기는 노드를 바꾸지 않지만 표 노드 집합을
-  // 확정한 뒤에는 트리를 고치지 않는다.
-  if (!truncated && !hasGeulIdentityAttribute(safeRoot)) {
-    collapseSourceWhitespace(safeRoot);
-  }
+  const { safeRoot } = prepared;
 
   const tables = findDataTables(safeRoot);
   if (tables.length === 0)
