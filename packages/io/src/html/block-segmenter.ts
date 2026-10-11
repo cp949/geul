@@ -536,13 +536,14 @@ export const NESTED_BOUNDARY_TAG_NAMES: ReadonlySet<string> = new Set([
   "blockquote",
 ]);
 
+// ul/ol 태그 이름이다. 태그 이름 표(block-tag-names.ts)가 같은 상수를
+// 읽는다(Issue #369).
+export const LIST_TAG_NAMES: ReadonlySet<string> = new Set(["ul", "ol"]);
+
 // ul/ol 태그 판정이다(DELTA-01, Issue #143 (b)). isTransparent에 꽂으면 ul/ol을
 // 순수 wrapper로 재귀하고 li만 경계로 본다. isListTag에 꽂으면 ul/ol 자신을
 // kind: "list" 리프로 접는다. import 정책은 둘 다 꽂는다. isListTag가 먼저
 // 판정되므로 ul/ol은 목록 세그먼트가 된다(Issue #356 RD-005 DELTA-04).
-// 태그 이름 표(block-tag-names.ts)가 같은 상수를 읽는다(Issue #369).
-export const LIST_TAG_NAMES: ReadonlySet<string> = new Set(["ul", "ol"]);
-
 export const isTransparentListTag = (tagName: string): boolean =>
   LIST_TAG_NAMES.has(tagName);
 
