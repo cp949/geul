@@ -432,11 +432,12 @@ describe("미디어 블록 선택 표시 필드 무효 값", () => {
   });
 });
 
-/** 미디어 url 정책이 거절하는 src다. javascript:는 sanitize가 먼저 지워 이 경로로 오지 않는다. */
+/** 미디어 url 정책이 거절하는 src다. javascript:도 sanitize가 지우지 않고 변환기까지 온다. */
 const INVALID_SRCS = [
   ["Word 임시 파일", "file:///C:/Users/u/AppData/Local/Temp/clip_image002.png"],
   ["Outlook cid", "cid:image001.png@01DA0000.00000000"],
   ["공백 든 url", "https://e.com/a b.png"],
+  ["javascript 스킴", "javascript:alert(1)"],
 ] as const;
 
 /** 시각 태그 세 종류다. */
@@ -608,6 +609,37 @@ describe("클립보드 표 옆 무효 img (이미 같은 결과를 내는 가드
       { type: "bulletListItem", content: [{ text: "a" }] },
       TABLE_SLOT,
     ]);
+  });
+});
+
+describe("목록이 중단된 뒤 파생 시작 번호가 상한을 넘는 경우", () => {
+  // 중단 뒤 항목은 start + 항목 순번으로 번호를 이어 받는다. 이 파생 값도
+  // model 범위 안이어야 한다(IMPL-REVIEW-02 D-1).
+  const INTERRUPTED =
+    '<ol start="999999999"><li>a</li><img src="https://a.test/a.png"><li>b</li></ol>';
+
+  it("importHtml은 문서를 거절하지 않고 파생 startNumber만 버린다", () => {
+    const { document } = imported(INTERRUPTED);
+    const items = document.blocks.filter(
+      (block) => block.type === "numberedListItem",
+    );
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ startNumber: 999999999 });
+    expect(items[1]).not.toHaveProperty("startNumber");
+    expectModelAccepts(document);
+  });
+
+  it("클립보드는 표를 지키고 파생 startNumber를 model 범위 안으로 둔다", () => {
+    const blocks = clipboardBlocks(`${INTERRUPTED}${TABLE}`);
+    expect(blocks).toContainEqual(TABLE_SLOT);
+    const items = blocks.filter(
+      (block) =>
+        typeof block === "object" &&
+        block !== null &&
+        "type" in block &&
+        block.type === "numberedListItem",
+    );
+    expect(items[1]).not.toHaveProperty("startNumber");
   });
 });
 

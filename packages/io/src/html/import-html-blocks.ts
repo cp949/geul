@@ -656,6 +656,10 @@ const blocksFromListElement = (
     ) {
       context.preserved.mark(node, "start");
     }
+    // 중단 뒤 항목의 파생 번호(start + 순번)가 model 상한을 넘으면 버린다
+    // (Issue #358 리뷰). 속성 값이 아니라 계산 값이라 경고하지 않는다.
+    const derivedStartNumber =
+      (Number.isInteger(explicitStart) ? explicitStart : 1) + itemIndex;
     const startNumber =
       itemIndex === 0 && Number.isInteger(explicitStart)
         ? explicitStart
@@ -664,8 +668,10 @@ const blocksFromListElement = (
             restartDefaultOrderedList &&
             !Number.isInteger(explicitStart)
           ? 1
-          : itemIndex > 0 && flowInterruptedSinceItem
-            ? (Number.isInteger(explicitStart) ? explicitStart : 1) + itemIndex
+          : itemIndex > 0 &&
+              flowInterruptedSinceItem &&
+              isStartNumberInRange(derivedStartNumber)
+            ? derivedStartNumber
             : undefined;
     blocks.push(
       ...blocksFromListItem(
