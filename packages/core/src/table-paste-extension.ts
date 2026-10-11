@@ -2,7 +2,7 @@ import {
   type ClipboardContentBlock,
   parseClipboardTable,
 } from "@cp949/geul-io";
-import type { IdFactory } from "@cp949/geul-model";
+import type { IdFactory, IframeEmbedConfig } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { isInTable } from "@tiptap/pm/tables";
@@ -19,6 +19,9 @@ export type TablePasteOptions = {
   createId: IdFactory;
   onPasteRejected?: (reason: PasteRejectedReason) => void;
   enabledBlockTypes?: EnabledBlockTypes;
+  // 호스트의 iframe URL 허용 설정이다(Issue #359). ClipboardPasteExtension과 같은
+  // 소스를 받아 표 옆 iframe 블록의 url 판정을 표 없는 붙여넣기와 맞춘다.
+  iframeEmbed?: IframeEmbedConfig;
 };
 
 // 파싱된 시퀀스에 막은 타입이 하나라도 있는지 본다. model의 모든 비표
@@ -96,6 +99,7 @@ export const TablePasteExtension = Extension.create<TablePasteOptions>({
     const createId = this.options.createId;
     const onPasteRejected = this.options.onPasteRejected;
     const enabledBlockTypes = this.options.enabledBlockTypes;
+    const iframeEmbed = this.options.iframeEmbed;
 
     return [
       new Plugin({
@@ -109,9 +113,13 @@ export const TablePasteExtension = Extension.create<TablePasteOptions>({
 
             const html = clipboardData.getData("text/html");
             const text = clipboardData.getData("text/plain");
-            const clipboardInput: { html?: string; text?: string } = {};
+            const clipboardInput: Parameters<typeof parseClipboardTable>[0] =
+              {};
             if (html.length > 0) clipboardInput.html = html;
             if (text.length > 0) clipboardInput.text = text;
+            if (iframeEmbed !== undefined) {
+              clipboardInput.iframeEmbed = iframeEmbed;
+            }
             const parsed = parseClipboardTable(clipboardInput);
             if (!parsed.ok) {
               if (parsed.error.code === "NOT_TABULAR") return false;

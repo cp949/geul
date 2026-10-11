@@ -458,8 +458,8 @@ export const createProductionEditor = (options: {
   // 4필드(providers 등)는 이 함수가 직접 구조분해하지 않는다 —
   // setIframeSrc 커맨드(block-attribute-commands.ts)가
   // session.getIframeEmbedConfig()로 별도 readback하고, ClipboardPasteExtension
-  // (Issue #215 RD-002)은 이 옵션을 통째로 전달받아 io.importHtml에
-  // 그대로 넘긴다.
+  // (Issue #215 RD-002)은 이 옵션을 통째로 전달받아 io.importHtml에,
+  // TablePasteExtension(Issue #359)은 io.parseClipboardTable에 그대로 넘긴다.
   iframeEmbed?: IframeEmbedConfig;
 }): Editor => {
   // BlockIdExtension의 occupiedIds 수집(Issue #170 RD-001 DELTA-01)에도
@@ -748,6 +748,11 @@ export const createProductionEditor = (options: {
         ...(options.onPasteRejected === undefined
           ? {}
           : { onPasteRejected: options.onPasteRejected }),
+        // Issue #359 — 표 옆 iframe 블록도 ClipboardPasteExtension과 같은 host
+        // 설정(options.iframeEmbed)으로 url 정책을 판정한다.
+        ...(options.iframeEmbed === undefined
+          ? {}
+          : { iframeEmbed: options.iframeEmbed }),
         // Issue #328 — 막은 타입이 든 클립보드는 표 확장이 물러나게 한다.
         // 위 스키마 gate와 같은 소스다.
         ...(options.enabledBlockTypes === undefined

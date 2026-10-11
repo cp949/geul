@@ -2,6 +2,7 @@ import {
   type Block,
   canonicalizeCodeBlockLanguage,
   type IdFactory,
+  type IframeEmbedConfig,
   type InlineContent,
   type InlineContentItem,
   isCanonicalCellAlign,
@@ -443,7 +444,10 @@ const clipboardBlocksFrom = (
     ];
   });
 
-const parseHtmlTable = (html: string): HtmlTableOutcome => {
+const parseHtmlTable = (
+  html: string,
+  iframeEmbed: IframeEmbedConfig,
+): HtmlTableOutcome => {
   // 깊이-캡 절단 사실(truncated)은 경고로 내지 않는다 — clipboard 경로에는 경고
   // 채널이 없다(ClipboardParseError는 NOT_TABULAR | CLIPBOARD_TABLE_INVALID
   // 뿐). importHtml처럼 소스 공백 접기 여부에만 쓴다. 캡 너머로 절단된 표는 표로
@@ -474,15 +478,17 @@ const parseHtmlTable = (html: string): HtmlTableOutcome => {
     return { ok: false, error: { code: "NOT_TABULAR" }, sawTable: false };
 
   // 경고는 버린다(Issue #356 Q14). 경고 수집기와 보존 속성 감사는 부르지
-  // 않는다. iframe 설정은 빈 값이다 — importHtml의 options 생략과 같은 가장
-  // 보수적인 판정이다. 공개 API를 늘리지 않는다.
+  // 않는다. iframe 설정은 호출자가 준 호스트 설정이다(Issue #359). 일반 html
+  // 붙여넣기가 importHtml에 넘기는 설정과 같은 소스라 두 경로의 iframe 판정이
+  // 같다. 호출자가 주지 않으면 빈 값이다 — importHtml의 options 생략과 같은 가장
+  // 보수적인 판정이다.
   const reads = new Map<Block, TableRead>();
   const createId = createClipboardIdFactory(safeRoot);
   const document = documentFromRoot(
     safeRoot,
     createId,
     createImportContext(safeRoot, []),
-    {},
+    iframeEmbed,
     clipboardTableSeam(tables, reads),
   );
 
@@ -560,6 +566,15 @@ const parseTsv = (text: string): Result<TabularData, ClipboardParseError> => {
   return validated.ok ? { ok: true, value: data } : validated;
 };
 
+// iframeEmbed는 호스트의 iframe URL 허용 설정이다(Issue #359). 표 옆 iframe
+// 블록의 url 판정에만 쓰고 표 읽기에는 영향이 없다. 생략하면 설정 없는
+// importHtml과 같다. TSV 경로는 읽지 않는다.
+type ClipboardTableInput = {
+  html?: string;
+  text?: string;
+  iframeEmbed?: IframeEmbedConfig;
+};
+
 const TABLE_TAG_PATTERN = /<table[\s>]/i;
 
 // 의도된 최후 방어선(Issue #130, 결정 5) — clipboard 경로는 DOM paste
@@ -570,10 +585,9 @@ const TABLE_TAG_PATTERN = /<table[\s>]/i;
 // 우연히 걸리는 범용 예외 처리가 아니라 이 목적으로 설계된 경계다 —
 // 정상 거절 경로는 전부 위의 구조화된 Result로 이미 표현되므로 이 catch에
 // 도달하는 것은 버그성 예외뿐이고, 그때 잃는 것은 표 파싱 시도 하나다.
-export const parseClipboardTable = (input: {
-  html?: string;
-  text?: string;
-}): Result<ClipboardContent, ClipboardParseError> => {
+export const parseClipboardTable = (
+  input: ClipboardTableInput,
+): Result<ClipboardContent, ClipboardParseError> => {
   try {
     return parseClipboardTableUnguarded(input);
   } catch {
@@ -581,10 +595,9 @@ export const parseClipboardTable = (input: {
   }
 };
 
-const parseClipboardTableUnguarded = (input: {
-  html?: string;
-  text?: string;
-}): Result<ClipboardContent, ClipboardParseError> => {
+const parseClipboardTableUnguarded = (
+  input: ClipboardTableInput,
+): Result<ClipboardContent, ClipboardParseError> => {
   // <table>이 없는 HTML은 파싱조차 하지 않는다. 표 없는 붙여넣기도 rehype
   // 파싱 + sanitize를 전부 돌린 뒤 NOT_TABULAR를 내고, 그다음 ProseMirror가
   // 같은 HTML을 다시 파싱했다 — 긴 웹 문서 붙여넣기가 파싱 비용을 두 번 낸다.
@@ -593,7 +606,7 @@ const parseClipboardTableUnguarded = (input: {
     input.html.length > 0 &&
     TABLE_TAG_PATTERN.test(input.html)
   ) {
-    const htmlResult = parseHtmlTable(input.html);
+    const htmlResult = parseHtmlTable(input.html, input.iframeEmbed ?? {});
     if (htmlResult.ok) return { ok: true, value: htmlResult.value };
     if (htmlResult.sawTable) {
       // 표를 찾았지만 거절했다(CLIPBOARD_TABLE_INVALID) — text/plain 짝이

@@ -5,12 +5,14 @@
  * - 표 거절(`CLIPBOARD_TABLE_INVALID`)은 표 옆 블록이 있어도 그대로 거절한다.
  * - 같은 입력은 id까지 같은 결과를 낸다. 깊은 중첩도 예외 없이 읽는다.
  * - `title` strip과 `table[role]`은 클립보드 sanitize 스키마가 계속 지킨다.
+ * - `iframeEmbed` 입력이 있으면 표 옆 iframe 블록 url 판정에 쓴다. 없으면 url이 붙지 않는다(Issue #359).
  */
-import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
+import { type IframeEmbedConfig, MAX_NESTING_DEPTH } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import type { ClipboardContentBlock } from "../src/clipboard/clipboard-content.js";
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
+import { importHtml } from "../src/index.js";
 import {
   clipboardBlocks,
   importedBlocks,
@@ -348,19 +350,91 @@ describe("셀 안 details·figure 경계 (Issue #356 RD-005)", () => {
   });
 });
 
-// 표 경로는 변환기에 iframe 설정 {}를 넘긴다. 호스트의 iframeEmbed를 받지 않아
-// importHtml을 설정 없이 부른 결과와 같다. 일반 html 붙여넣기와 다른 점이다.
-describe("iframe 설정 (Issue #356 RD-005)", () => {
+// 표 경로는 입력의 iframeEmbed를 변환기에 넘긴다(Issue #359). 일반 html 붙여넣기의
+// deps.iframeEmbed와 같은 호스트 설정이다. 생략하면 importHtml을 설정 없이 부른
+// 결과와 같다.
+describe("iframe 설정 (Issue #356 RD-005, #359)", () => {
+  const SRC = "https://www.youtube.com/embed/x";
+  const iframe = (src: string): string =>
+    `<div data-geul-block-id="j" data-geul-media-type="iframe" data-geul-src="${src}"></div>`;
+  const YOUTUBE: IframeEmbedConfig = {
+    providers: [
+      {
+        name: "youtube",
+        match: { type: "wildcard", pattern: "*.youtube.com" },
+      },
+    ],
+  };
+
+  /** 입력으로 parseClipboardTable을 부른다. 블록에서 id는 뺀다. */
+  const parseWith = (
+    input: Parameters<typeof parseClipboardTable>[0],
+  ): unknown[] => {
+    const result = parseClipboardTable(input);
+    if (!result.ok) throw new Error("parseClipboardTable이 실패했다");
+    return withoutIds(result.value) as unknown[];
+  };
+
   it("own-export iframe wrapper는 url 없는 iframe 블록으로 붙고 importHtml 기본 결과와 같다", () => {
-    const iframe =
-      '<div data-geul-block-id="j" data-geul-media-type="iframe" data-geul-src="https://example.com/x"></div>';
-    const imported = importedBlocks(iframe);
+    const html = iframe("https://example.com/x");
+    const imported = importedBlocks(html);
 
     expect(imported).toEqual([{ id: "j", type: "iframe" }]);
-    expect(clipboardBlocks(`${iframe}${TABLE}`)).toEqual([
+    expect(clipboardBlocks(`${html}${TABLE}`)).toEqual([
       ...(withoutIds(imported) as unknown[]),
       { type: "table", data: expect.any(Object) },
     ]);
+  });
+
+  it("iframeEmbed가 그 url을 허용하면 표 옆 iframe 블록에 url이 붙는다", () => {
+    expect(
+      parseWith({ html: `${iframe(SRC)}${TABLE}`, iframeEmbed: YOUTUBE }),
+    ).toEqual([
+      { type: "iframe", url: SRC },
+      { type: "table", data: expect.any(Object) },
+    ]);
+  });
+
+  it("iframeEmbed를 주지 않으면 허용 설정과 무관하게 url 없는 iframe 블록이다", () => {
+    expect(parseWith({ html: `${iframe(SRC)}${TABLE}` })).toEqual([
+      { type: "iframe" },
+      { type: "table", data: expect.any(Object) },
+    ]);
+  });
+
+  it("iframeEmbed가 그 url을 허용하지 않으면 url 없는 iframe 블록이다", () => {
+    expect(
+      parseWith({
+        html: `${iframe("https://evil.example.com/x")}${TABLE}`,
+        iframeEmbed: YOUTUBE,
+      }),
+    ).toEqual([
+      { type: "iframe" },
+      { type: "table", data: expect.any(Object) },
+    ]);
+  });
+
+  it("providers 밖 url도 allowCustomUrl이면 붙는다 — 설정 전체가 변환기에 닿는다", () => {
+    // providers만 넘기는 변이를 잡는다(IMPL-REVIEW-01 F1).
+    const custom = "https://example.org/custom/x";
+    expect(
+      parseWith({
+        html: `${iframe(custom)}${TABLE}`,
+        iframeEmbed: { allowCustomUrl: true },
+      }),
+    ).toEqual([
+      { type: "iframe", url: custom },
+      { type: "table", data: expect.any(Object) },
+    ]);
+  });
+
+  it("허용된 url이 든 표 옆 iframe은 표 없는 importHtml 결과와 같다", () => {
+    const imported = importHtml(iframe(SRC), { iframeEmbed: YOUTUBE });
+    if (!imported.ok) throw new Error("importHtml이 실패했다");
+
+    expect(
+      parseWith({ html: `${iframe(SRC)}${TABLE}`, iframeEmbed: YOUTUBE })[0],
+    ).toEqual(withoutIds(imported.value.document.blocks[0]));
   });
 });
 
