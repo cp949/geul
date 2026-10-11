@@ -15,7 +15,7 @@
  * 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력, 공백·토큰이 긴
  * 입력과 font 줄임, 선언 분리(닫히지 않은 따옴표·괄호, 개행이 끝내는
  * 따옴표, `[`·`{` 블록 스택), text-decoration·font-style 값 판정(토큰이
- * 많거나 긴 값)이 만드는 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
+ * 많거나 긴 값, 치환 함수·함수 토큰)이 만드는 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
  * `parseInlineStyleMarks`와 `parseWhiteSpaceMode`(Issue #361)는
  * `parseStyleDeclarations`와 같은 흐름이다.
@@ -33,6 +33,8 @@
  * - 선언 분할기(`splitDeclarations`)의 대괄호 읽기는 시간 상한 테스트만 덮는다.
  *   `parseStyleDeclarations`·`parseInlineStyleMarks`·`parseWhiteSpaceMode`
  *   각각에 둔다.
+ * - 치환 함수 탐색(`hasSubstitutionFunction`)의 대괄호 읽기도
+ *   `parseInlineStyleMarks` 시간 상한 테스트만 덮는다(Issue #363).
  * `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳 run에서 이차
  * 시간이었지만 `matchAll` 호출 1회라 이 계측의 증가율이 2로 보였다. 그래서
  * `parseStyleDeclarations`에는 이 작업량 테스트에 더해 시간 상한 테스트를 하나
@@ -169,6 +171,31 @@ const inputShapes: Array<[string, (size: number) => string]> = [
     "text-decoration 괄호 안 공백이 긴 토큰 하나인 입력",
     (size) => `text-decoration:underline calc(${"1px + ".repeat(size)}1px)`,
   ],
+  // 아래는 치환 함수 탐색과 함수 토큰 분류(Issue #363)가 만든 입력 모양이다.
+  // 치환 함수 탐색은 무효를 만났을 때 값마다 한 번 글자를 대괄호로 읽어서
+  // 이 계측에 보이지 않는다. 토큰마다 값 처음부터 다시 훑는 변이는 아래 시간
+  // 상한이 잡는다. 이 모양들은 토큰 분류와 함수 이름 판독이 String 메서드를
+  // 반복해 부르지 않는지 센다.
+  [
+    "text-decoration 치환 토큰이 아주 많은 입력",
+    (size) => `text-decoration:underline ${"var(--x) ".repeat(size)}`,
+  ],
+  [
+    "text-decoration 긴 치환 토큰 하나인 입력",
+    (size) => `text-decoration:underline var(--${"a".repeat(size * 16)})`,
+  ],
+  [
+    "text-decoration 긴 색 함수 토큰 하나인 입력",
+    (size) => `text-decoration:underline lab(${"1 ".repeat(size)}1)`,
+  ],
+  [
+    "text-decoration 무효 뒤 긴 꼬리와 치환 함수가 있는 입력",
+    (size) => `text-decoration:underline foo ${"x ".repeat(size)}var(--x)`,
+  ],
+  [
+    "text-decoration 치환 함수 이름과 비슷한 글자가 많은 입력",
+    (size) => `text-decoration:underline ${"avar(".repeat(size)}`,
+  ],
   [
     "font-style 긴 각도 토큰 하나인 입력",
     (size) => `font-style:oblique ${"1".repeat(size * 16)}deg`,
@@ -266,6 +293,24 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
   // 전체를 훑는 변이는 깊은 `[` 스택 행이 28.0초로 잡는다. 정상 구현은 단독
   // 실행 테스트 시간 19ms다. 상한 1초는 그보다 약 50배 크고 변이보다 작아
   // 둘이 겹치지 않는다. 위 작업량 모양은 이 변이를 잡지 못한다.
+  // 아래 치환 함수 두 행은 Issue #363이 더했다. 치환 함수 탐색
+  // (`hasSubstitutionFunction`)은 무효를 만났을 때 값마다 한 번 글자를 대괄호로
+  // 읽어서 위 String 메서드 계측에 보이지 않는다.
+  // 변이로 확인한 RED다(Issue #363, 실측 Node, 2026-10-11, 80,000개).
+  // - 치환 토큰마다 탐색을 값 처음부터 끝까지 다시 하는 변이는 "치환 토큰이
+  //   아주 많고 끝이 무효" 행이 438.3초로 잡는다. 같은 변이를 위 "치환 토큰이
+  //   아주 많은 입력" 모양이 5초 제한 초과로 잡는다(끝나기까지 117초).
+  // - 이름 글자 run마다 값 앞부분을 처음부터 다시 읽는 변이는 "무효 토큰 뒤
+  //   치환 함수 이름과 비슷한 글자" 행이 39.1초로 잡는다. `foo var(…`처럼 앞쪽에
+  //   호출이 있는 입력은 탐색이 일찍 끝나 이 변이를 잡지 못해서, 이 행은 호출이
+  //   없는 `avar(`를 쓴다.
+  // - 치환 토큰을 `value.slice`로 잘라 보는 변이는 위 "치환 토큰이 아주 많은
+  //   입력" 모양이 처리 문자 수 증가율 3.999로 잡는다. 계측이 호출마다 긴 값
+  //   전체를 수신 문자열로 세기 때문이다. 그래서 치환 토큰은 자르지 않고
+  //   대괄호로 읽어 판정한다.
+  // 정상 구현은 단독 실행 테스트 시간 18–19ms와 41–42ms다. 상한 1초는 그보다
+  // 약 24배 이상 크고 변이보다 작아 둘이 겹치지 않는다. 변이 RED는 오래 걸리므로
+  // 이 두 행이 깨지면 실행이 수 분 걸릴 수 있다.
   it.each([
     [
       "괄호 안 세미콜론",
@@ -278,6 +323,14 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
     [
       "깊은 `[` 스택 뒤 짝 안 맞는 닫는 괄호",
       `font-weight:bold;font-family:${"[".repeat(80_000)}${");".repeat(80_000)}`,
+    ],
+    [
+      "무효 토큰 뒤 치환 함수 이름과 비슷한 글자",
+      `text-decoration:underline foo ${"avar(".repeat(80_000)}`,
+    ],
+    [
+      "치환 토큰이 아주 많고 끝이 무효",
+      `text-decoration:underline ${"var(--x) ".repeat(80_000)}foo`,
     ],
   ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
     const started = performance.now();

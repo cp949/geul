@@ -946,6 +946,172 @@ const isThicknessToken = (token: string): boolean => {
   return numeric.unit === "%" || isCssLengthUnit(numeric.unit);
 };
 
+// 장식 값이 이름만 보고 받는 토큰의 이름 목록이다(Chromium 153 실측). 함수
+// 안쪽 인자는 검증하지 않는다. `MATH_FUNCTIONS`는 font 경로가 써서 건드리지
+// 않고 장식 전용 목록을 따로 둔다.
+const DECORATION_COLOR_FUNCTIONS: ReadonlySet<string> = new Set([
+  "rgb",
+  "rgba",
+  "hsl",
+  "hsla",
+  "hwb",
+  "lab",
+  "lch",
+  "oklab",
+  "oklch",
+  "color",
+  "color-mix",
+  "light-dark",
+  "contrast-color",
+  "alpha",
+]);
+
+const DECORATION_THICKNESS_FUNCTIONS: ReadonlySet<string> = new Set([
+  "calc",
+  "min",
+  "max",
+  "clamp",
+  "round",
+  "mod",
+  "rem",
+  "abs",
+  "hypot",
+  "-webkit-calc",
+]);
+
+// 색 식별자다. CSS Color 4 시스템 색 19개, 폐기된 시스템 색 23개와 WebKit
+// 색 3개다. `currentcolor`·`transparent`·이름 색은 `readCssColor`가 읽는다.
+const DECORATION_COLOR_IDENTIFIERS: ReadonlySet<string> = new Set([
+  "accentcolor",
+  "accentcolortext",
+  "activetext",
+  "buttonborder",
+  "buttonface",
+  "buttontext",
+  "canvas",
+  "canvastext",
+  "field",
+  "fieldtext",
+  "graytext",
+  "highlight",
+  "highlighttext",
+  "linktext",
+  "mark",
+  "marktext",
+  "selecteditem",
+  "selecteditemtext",
+  "visitedtext",
+  "activeborder",
+  "activecaption",
+  "appworkspace",
+  "background",
+  "buttonhighlight",
+  "buttonshadow",
+  "captiontext",
+  "inactiveborder",
+  "inactivecaption",
+  "inactivecaptiontext",
+  "infobackground",
+  "infotext",
+  "menu",
+  "menutext",
+  "scrollbar",
+  "threeddarkshadow",
+  "threedface",
+  "threedhighlight",
+  "threedlightshadow",
+  "threedshadow",
+  "window",
+  "windowframe",
+  "windowtext",
+  "-webkit-link",
+  "-webkit-activelink",
+  "-webkit-focus-ring-color",
+]);
+
+// 치환 함수다. 값 어디에 있든 Chromium은 선언을 파싱 단계에서 버리지 않고,
+// 치환 결과로 계산 시점에 장식 여부를 정한다.
+const SUBSTITUTION_FUNCTIONS: readonly string[] = ["var", "env", "attr", "if"];
+
+// 함수 토큰의 이름이다. 토큰이 `)`로 끝나고 첫 `(`가 맨 앞이 아니면 함수
+// 토큰이다. 안쪽은 읽지 않는다. 함수 토큰이 아니면 undefined다.
+const functionTokenName = (token: string): string | undefined => {
+  if (!token.endsWith(")")) return undefined;
+  const open = token.indexOf("(");
+  return open > 0 ? token.slice(0, open) : undefined;
+};
+
+const isNameCharacter = (character: string): boolean =>
+  (character >= "a" && character <= "z") ||
+  (character >= "0" && character <= "9") ||
+  character === "-" ||
+  character === "_";
+
+// `from`부터 이어지는 이름 글자 run의 끝 위치다.
+const nameRunEnd = (value: string, from: number): number => {
+  let index = from;
+  while (index < value.length && isNameCharacter(value[index] as string)) {
+    index += 1;
+  }
+  return index;
+};
+
+// 이름 글자 run `[from, runEnd)`가 치환 함수 이름이고 바로 뒤가 `(`인지 본다.
+// 글자를 대괄호로 비교한다. 긴 값에 String 메서드를 부르지 않는다.
+const isSubstitutionCallAt = (
+  value: string,
+  from: number,
+  runEnd: number,
+): boolean => {
+  if (value[runEnd] !== "(") return false;
+  const length = runEnd - from;
+  for (const name of SUBSTITUTION_FUNCTIONS) {
+    if (name.length !== length) continue;
+    let offset = 0;
+    while (offset < length && value[from + offset] === name[offset]) {
+      offset += 1;
+    }
+    if (offset === length) return true;
+  }
+  return false;
+};
+
+// `[start, end)` 토큰이 `var(…)`처럼 치환 함수 호출 하나인지 본다. 이름 앞에
+// 다른 글자가 없고 토큰이 `)`로 끝나야 한다. 토큰을 자르지 않고 대괄호로
+// 읽는다. 치환 토큰은 개수 제한이 없어, 토큰마다 긴 값에 `slice`를 부르면
+// 처리 문자 수가 입력 길이의 제곱으로 뛴다.
+const isSubstitutionToken = (
+  value: string,
+  start: number,
+  end: number,
+): boolean => {
+  const runEnd = nameRunEnd(value, start);
+  return (
+    runEnd < end &&
+    value[end - 1] === ")" &&
+    isSubstitutionCallAt(value, start, runEnd)
+  );
+};
+
+// 값 어디에든(괄호 안 중첩 포함) 치환 함수 호출이 있는지 값마다 한 번 훑는다.
+// 호출은 이름 글자 run 바로 뒤가 `(`이고 run이 치환 함수 이름과 같은 경우다.
+// run은 가장 긴 구간이라 run 바로 앞 글자는 이름 글자가 아니다. 글자를
+// 대괄호로 읽는다. 따옴표 안은 구분하지 않는다. 따옴표 안의 `var(`도 호출로
+// 본다. 그런 토큰은 어차피 무효라 결과가 "무효" 대신 "꺼짐"이 되는 차이뿐이다.
+const hasSubstitutionFunction = (value: string): boolean => {
+  let index = 0;
+  while (index < value.length) {
+    if (!isNameCharacter(value[index] as string)) {
+      index += 1;
+      continue;
+    }
+    const runEnd = nameRunEnd(value, index);
+    if (isSubstitutionCallAt(value, index, runEnd)) return true;
+    index = runEnd;
+  }
+  return false;
+};
+
 // text-decoration 줄임 또는 text-decoration-line 값 하나(소문자)를 읽는다.
 // 무효면 undefined다. 문법(Chromium 실측)은 이렇다.
 // - 전역 키워드는 값 하나로만 쓴다.
@@ -954,7 +1120,19 @@ const isThicknessToken = (token: string): boolean => {
 //   섞인다.
 // - 줄임은 style 낱말·thickness·색을 종류마다 한 번 더 받는다. 순서는 자유다.
 //   line 값이 없으면 line이 none이라 장식을 끈다.
-// 무효를 찾는 즉시 끝낸다. 토큰마다 일정한 일만 하므로 값 길이에 선형이다.
+// - thickness는 auto·from-font·길이·백분율과 수식 함수(calc·min·max·clamp·
+//   round·mod·rem·abs·hypot·-webkit-calc)다. 색은 css-color.ts가 읽는 색,
+//   색 함수 14개와 색 식별자 45개(시스템 색 등)다. 함수 토큰은 이름만 보고
+//   안쪽은 검증하지 않는다. Chromium은 `calc(1)`·`lab(foo)`를 무효로 보지만
+//   여기서는 받는다.
+// - 치환 함수(var·env·attr·if) 토큰은 칸을 차지하지 않고 건너뛴다. line 낱말
+//   연속을 끊는다. Chromium은 값 어디에든 인자가 정상인 치환 함수가 있으면
+//   선언을 버리지 않고 항상 앞 선언을 덮는다. 인자가 비었거나 잘못된 호출은
+//   Chromium이 버리지만 여기서는 이름만 본다. 치환 결과를 알 수 없으므로 무효를 만났을 때
+//   값에 치환 함수가 있으면 장식을 끈다. 끝까지 유효해도 line 낱말도 단독
+//   낱말도 못 봤다면 line 값을 알 수 없어 선언을 버린다.
+// 무효를 찾는 즉시 끝낸다. 치환 함수 탐색은 무효를 찾았을 때 값마다 한 번이다.
+// 토큰마다 일정한 일만 하므로 값 길이에 선형이다.
 const readDecoration = (
   value: string,
   lineOnly: boolean,
@@ -967,25 +1145,40 @@ const readDecoration = (
   let sawStyle = false;
   let sawThickness = false;
   let sawColor = false;
+  let sawSubstitution = false;
   let tokenCount = 0;
   let index = skipCssSpace(value, 0);
 
+  // 무효를 만났을 때의 결과다. 치환 함수가 있으면 치환 결과를 알 수 없어 꺼짐이다.
+  const invalid = (): LineMarks | undefined =>
+    hasSubstitutionFunction(value) ? NO_LINE_MARKS : undefined;
+
   while (index < value.length) {
     const end = valueTokenEnd(value, index);
-    const token = value.slice(index, end);
+    const tokenStart = index;
     tokenCount += 1;
     index = skipCssSpace(value, end);
 
+    // 치환 토큰은 칸을 차지하지 않는다. 전역 키워드와 겹치지 않아 먼저 본다.
+    if (isSubstitutionToken(value, tokenStart, end)) {
+      sawSubstitution = true;
+      if (lineState === 1) lineState = 2;
+      continue;
+    }
+
+    const token = value.slice(tokenStart, end);
     if (CSS_WIDE_KEYWORDS.has(token)) {
       return tokenCount === 1 && index >= value.length
         ? NO_LINE_MARKS
-        : undefined;
+        : invalid();
     }
+
+    const functionName = functionTokenName(token);
 
     const wordBit = LINE_WORD_BITS.get(token);
     if (wordBit !== undefined) {
       if (lineState === 2 || sawAlone || (seenWords & wordBit) !== 0) {
-        return undefined;
+        return invalid();
       }
       seenWords |= wordBit;
       lineState = 1;
@@ -994,25 +1187,35 @@ const readDecoration = (
     if (lineState === 1) lineState = 2;
 
     if (LINE_ALONE_KEYWORDS.has(token)) {
-      if (lineState !== 0 || sawAlone) return undefined;
+      if (lineState !== 0 || sawAlone) return invalid();
       sawAlone = true;
     } else if (lineOnly) {
-      return undefined;
+      return invalid();
     } else if (DECORATION_STYLES.has(token)) {
-      if (sawStyle) return undefined;
+      if (sawStyle) return invalid();
       sawStyle = true;
-    } else if (isThicknessToken(token)) {
-      if (sawThickness) return undefined;
+    } else if (
+      isThicknessToken(token) ||
+      (functionName !== undefined &&
+        DECORATION_THICKNESS_FUNCTIONS.has(functionName))
+    ) {
+      if (sawThickness) return invalid();
       sawThickness = true;
-    } else if (readCssColor(token).kind !== "invalid") {
-      if (sawColor) return undefined;
+    } else if (
+      functionName !== undefined
+        ? DECORATION_COLOR_FUNCTIONS.has(functionName)
+        : DECORATION_COLOR_IDENTIFIERS.has(token) ||
+          readCssColor(token).kind !== "invalid"
+    ) {
+      if (sawColor) return invalid();
       sawColor = true;
     } else {
-      return undefined;
+      return invalid();
     }
   }
 
   if (tokenCount === 0) return undefined;
+  if (sawSubstitution && seenWords === 0 && !sawAlone) return undefined;
   return {
     underline: (seenWords & UNDERLINE_BIT) !== 0,
     strike: (seenWords & LINE_THROUGH_BIT) !== 0,
@@ -1046,10 +1249,13 @@ const applyMark = <T>(
 //   뒤가 이긴다.
 // - 문법에 맞지 않는 선언은 통째로 버린다. 칸을 건드리지 않는다(`!important`가
 //   붙어도 같다). revert·revert-layer는 유효 값이라 칸을 비운다.
-// - font-style과 text-decoration(-line)은 값 전체를 문법대로 읽는다. 각도
-//   범위, `calc()` 같은 수식과 `var()`, css-color.ts가 못 읽는 색(`color-mix()`
-//   ·`lab()`·`color()`·`windowtext` 같은 시스템 색)은 읽지 않아 무효로 본다.
-//   그 값이 든 `text-decoration`은 밑줄·취소선도 켜지 못한다.
+// - font-style과 text-decoration(-line)은 값 전체를 문법대로 읽는다.
+//   text-decoration(-line)은 색 함수·수식 함수·시스템 색을 이름만 보고 받고
+//   치환 함수(`var()` 등)는 건너뛴다(`readDecoration`). 남은 한계가 있다.
+//   - 함수 안쪽 인자를 검증하지 않는다(Chromium은 `calc(1)`을 무효로 본다).
+//   - 치환 결과를 추적하지 않는다. `<style>`과 조상의 `--x` 정의를 읽지 않는다.
+//   - font 경로의 수식 함수는 `calc`·`min`·`max`·`clamp` 넷뿐이다.
+//   - `oblique` 각도 범위를 검사하지 않는다.
 // - 속성 이름 앞의 쓰레기 글자는 무시한다(`readDeclaration`의 규칙).
 // 값이 꺼짐(normal, none)이어도 이 함수는 그 선언만 반영한다 — 바깥 요소가
 // 만든 마크를 지우는 일은 없다. 끄는 값은 normal로 돌려주고 겹치기는 호출부가

@@ -17,6 +17,9 @@
  * - Issue #339: 선언을 색 경로와 같은 흐름(선언 분리, 속성 읽기, `!important`,
  *   칸)으로 읽는다. 이슈 여섯 입력, 우선순위 칸, 값 판정 경계, 선언 분리를
  *   고정한다. 경계 표의 판정은 Chromium 153.0.8010.12 실측이다.
+ * - Issue #363: `text-decoration`·`text-decoration-line`이 함수 토큰(색 함수,
+ *   thickness 함수)과 색 식별자를 이름으로 읽는다. `var()` 같은 치환 함수는
+ *   칸을 차지하지 않고, 무효를 만났을 때 값에 있으면 장식을 끈다.
  */
 import type { InlineContent, TextMark } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -891,6 +894,308 @@ describe("text-decoration 값 판정", () => {
     expect(afterUnderlineStrike).toEqual(UNDERLINE_STRIKE);
     expect(afterBlink).toEqual(NO_LINE);
   });
+});
+
+// Issue #363: `text-decoration`·`text-decoration-line`이 읽지 못하던 함수·
+// 식별자 토큰이다. 판정은 Chromium 153.0.8010.12 실측이다.
+// - 색 함수 14개, thickness 함수 10개, 색 식별자 45개는 이름만 보고 칸에 넣는다.
+//   함수 안쪽은 검증하지 않는다.
+// - `var()`·`env()`·`attr()`·`if()`는 값 어디에 있든 인자가 정상이면 Chromium이
+//   선언을 파싱 단계에서 버리지 않고 앞 선언을 덮는다. 치환 결과를 알 수 없으므로 그 토큰은
+//   칸을 차지하지 않고 건너뛴다. 무효를 만났을 때 값에 치환 함수가 있으면 꺼짐이다.
+const COLOR_IDENTIFIERS = [
+  // CSS Color 4 시스템 색
+  "accentcolor",
+  "accentcolortext",
+  "activetext",
+  "buttonborder",
+  "buttonface",
+  "buttontext",
+  "canvas",
+  "canvastext",
+  "field",
+  "fieldtext",
+  "graytext",
+  "highlight",
+  "highlighttext",
+  "linktext",
+  "mark",
+  "marktext",
+  "selecteditem",
+  "selecteditemtext",
+  "visitedtext",
+  // 폐기된 시스템 색
+  "activeborder",
+  "activecaption",
+  "appworkspace",
+  "background",
+  "buttonhighlight",
+  "buttonshadow",
+  "captiontext",
+  "inactiveborder",
+  "inactivecaption",
+  "inactivecaptiontext",
+  "infobackground",
+  "infotext",
+  "menu",
+  "menutext",
+  "scrollbar",
+  "threeddarkshadow",
+  "threedface",
+  "threedhighlight",
+  "threedlightshadow",
+  "threedshadow",
+  "window",
+  "windowframe",
+  "windowtext",
+  // WebKit 색
+  "-webkit-link",
+  "-webkit-activelink",
+  "-webkit-focus-ring-color",
+];
+
+describe("text-decoration이 읽는 함수·식별자 토큰 (Issue #363)", () => {
+  const expectBothPriors = (
+    property: string,
+    value: string,
+    expected: Decoration,
+  ) => {
+    for (const result of decorationAfterPriors(property, value)) {
+      expect(result).toEqual(expected);
+    }
+  };
+
+  const expectInvalid = (property: string, value: string) => {
+    const [afterUnderlineStrike, afterBlink] = decorationAfterPriors(
+      property,
+      value,
+    );
+    expect(afterUnderlineStrike).toEqual(UNDERLINE_STRIKE);
+    expect(afterBlink).toEqual(NO_LINE);
+  };
+
+  // 이슈 다섯 입력이다. 모두 #339 이후 무효로 버려져 밑줄·취소선이 꺼졌다.
+  it.each<[string, Decoration, "underline" | "strike"]>([
+    ["underline windowtext", UNDERLINE, "underline"],
+    ["underline lab(50 20 20)", UNDERLINE, "underline"],
+    ["underline color-mix(in srgb, red, blue)", UNDERLINE, "underline"],
+    ["underline calc(1px + 2px)", UNDERLINE, "underline"],
+    ["line-through oklch(0.5 0.2 30)", STRIKE, "strike"],
+  ])(
+    "이슈 입력 text-decoration:%s는 유효하고 importHtml이 마크로 읽는다",
+    (value, expected, markType) => {
+      expectBothPriors("text-decoration", value, expected);
+      expect(spanContent(`text-decoration:${value}`)).toEqual(
+        markedText([{ type: markType }]),
+      );
+    },
+  );
+
+  it.each([
+    "underline rgb(1 2 3)",
+    "underline rgba(1, 2, 3, 0.5)",
+    "underline hsl(10 20% 30%)",
+    "underline hsla(10, 20%, 30%, 1)",
+    "underline hwb(10 20% 30%)",
+    "underline lab(50 20 20)",
+    "underline lch(50 20 20)",
+    "underline oklab(0.5 0.1 0.1)",
+    "underline oklch(0.5 0.2 30)",
+    "underline color(srgb 1 0 0)",
+    "underline color-mix(in srgb, red, blue)",
+    "underline light-dark(red, blue)",
+    "underline contrast-color(red)",
+    "underline alpha(from red / 0.5)",
+    "underline rgb(calc(1) 2 3)",
+    "underline rgb(from red r g b)",
+    "underline LAB(50 20 20)",
+    "underline Color-Mix(in srgb, red, blue)",
+  ])("색 함수 text-decoration:%s는 밑줄이다", (value) => {
+    expectBothPriors("text-decoration", value, UNDERLINE);
+  });
+
+  it.each([
+    "underline calc(1px + 2px)",
+    "underline min(1px, 2px)",
+    "underline max(1px, 2px)",
+    "underline clamp(1px, 2px, 3px)",
+    "underline round(2.5px, 1px)",
+    "underline mod(7px, 3px)",
+    "underline rem(7px, 3px)",
+    "underline abs(-2px)",
+    "underline hypot(3px, 4px)",
+    "underline -webkit-calc(1px + 2px)",
+    "underline CALC(1px)",
+    // 서로 다른 칸이라 함께 쓴다.
+    "underline calc(1px) lab(50 20 20) wavy",
+    "underline wavy lab(50 20 20) calc(1px)",
+  ])("thickness 함수 text-decoration:%s는 밑줄이다", (value) => {
+    expectBothPriors("text-decoration", value, UNDERLINE);
+  });
+
+  it("색 식별자 목록은 45개다", () => {
+    expect(COLOR_IDENTIFIERS).toHaveLength(45);
+    expect(new Set(COLOR_IDENTIFIERS).size).toBe(45);
+  });
+
+  it.each(COLOR_IDENTIFIERS)("색 식별자 underline %s는 밑줄이다", (name) => {
+    expectBothPriors("text-decoration", `underline ${name}`, UNDERLINE);
+  });
+
+  it("색 식별자는 대소문자를 가리지 않는다", () => {
+    expectBothPriors("text-decoration", "underline WindowText", UNDERLINE);
+    expectBothPriors("text-decoration", "underline -WebKit-Link", UNDERLINE);
+  });
+
+  // 같은 칸을 두 번 쓰거나 모르는 이름이면 Chromium도 무효다.
+  // `-webkit-focus-ring-color`는 Chromium 153이 색으로 받아 유효 목록에 있다.
+  it.each([
+    "underline lab(1 2 3) red",
+    "underline lab(1 2 3) oklch(0.5 0.2 30)",
+    "underline windowtext red",
+    "underline windowtext windowtext",
+    "underline calc(1px) 2px",
+    "underline calc(1px) min(1px, 2px)",
+    "underline sin(1rad)",
+    "underline sign(1px)",
+    "underline device-cmyk(0 0 0 1)",
+    "underline linear-gradient(red, blue)",
+    "underline calc-size(auto, size)",
+    "underline -webkit-text",
+    "underline foo(1px)",
+    "underline windowtext(1px)",
+    "underline calc",
+    "underline lab",
+    "underline (1px)",
+  ])("text-decoration:%s는 무효라 앞의 값을 지킨다", (value) => {
+    expectInvalid("text-decoration", value);
+  });
+
+  it.each([
+    "underline lab(1 2 3)",
+    "underline calc(1px)",
+    "underline windowtext",
+  ])("text-decoration-line:%s는 무효라 앞의 값을 지킨다", (value) => {
+    expectInvalid("text-decoration-line", value);
+  });
+
+  // line 낱말이 없으면 line이 none이라 유효하고 장식을 끈다.
+  it.each([
+    "lab(1 2 3)",
+    "calc(1px + 2px)",
+    "windowtext wavy",
+    "windowtext",
+    "color-mix(in srgb, red, blue) 2px",
+  ])("text-decoration:%s는 line 낱말이 없어 앞의 밑줄도 끈다", (value) => {
+    expectBothPriors("text-decoration", value, NO_LINE);
+  });
+
+  // 치환 함수가 든 값이다. Chromium은 값 어디에 있든 선언을 파싱 단계에서
+  // 버리지 않고 항상 앞 선언을 덮는다. 장식 여부는 치환 결과로 정해진다.
+  // 우리는 `<style>`과 조상의 `--x` 정의를 추적하지 않아 결과를 알 수 없다.
+  it.each<[string, Decoration]>([
+    // 치환 토큰은 칸을 차지하지 않고 건너뛴다.
+    ["underline var(--x)", UNDERLINE],
+    ["underline var(--x, red)", UNDERLINE],
+    ["underline VAR(--x)", UNDERLINE],
+    ["var(--x) underline", UNDERLINE],
+    ["underline env(foo, red)", UNDERLINE],
+    ["underline attr(data-c type(<color>), red)", UNDERLINE],
+    ["underline if(media(print): red; else: blue)", UNDERLINE],
+    ["underline rgb(var(--r) 0 0)", UNDERLINE],
+    ["underline var(--a) var(--b)", UNDERLINE],
+    ["underline var(--x) red", UNDERLINE],
+    ["var(--x) underline line-through", UNDERLINE_STRIKE],
+    ["line-through var(--x)", STRIKE],
+    ["none var(--x)", NO_LINE],
+    // 치환 토큰이 line 낱말 연속을 끊는다.
+    ["underline var(--x) line-through", NO_LINE],
+    ["underline var(--x) underline", NO_LINE],
+    // 분류가 무효인데 값에 치환 함수가 있으면 꺼짐이다.
+    ["underline foo var(--x)", NO_LINE],
+    ["underline red red var(--x)", NO_LINE],
+    ["underline 1px 2px var(--x)", NO_LINE],
+    ["underline wavy wavy var(--x)", NO_LINE],
+    ["underline none var(--x)", NO_LINE],
+    ["underline var(--x)foo", NO_LINE],
+    ["inherit var(--x)", NO_LINE],
+    ["var(--x) inherit", NO_LINE],
+    ["underline var(--x) foo", NO_LINE],
+    ["underline foo(var(--x))", NO_LINE],
+    ["underline foo((var(--x)))", NO_LINE],
+    ["underline foo(env(x))", NO_LINE],
+    ["underline foo(attr(x))", NO_LINE],
+    ["underline foo(if(x))", NO_LINE],
+    ["underline foo(1 var(--x))", NO_LINE],
+  ])("치환 함수 text-decoration:%s", (value, expected) => {
+    expectBothPriors("text-decoration", value, expected);
+  });
+
+  // 치환 함수 이름과 비슷하지만 호출이 아니면 치환 함수로 보지 않는다.
+  // 이름 글자(`a`–`z`, `0`–`9`, `-`, `_`) run이 이름과 정확히 같고 바로 뒤가 `(`여야 한다.
+  it.each([
+    "underline foo(avar(--x))",
+    "underline foo(-var(--x))",
+    "underline foo(x_var(1))",
+    "underline foo(3var(1))",
+    "underline foo(var (--x))",
+    "underline foo(var-x(1))",
+    "underline foo(vars(1))",
+    "underline foo(var)",
+    "underline foo(ifx(1))",
+  ])("치환 함수가 아닌 text-decoration:%s는 무효다", (value) => {
+    expectInvalid("text-decoration", value);
+  });
+
+  // 건너뛴 치환 토큰만 있고 line 낱말도 단독 낱말도 없으면 선언을 버린다.
+  it.each(["var(--d)", "red var(--x)", "wavy var(--x)", "lab(1 2 3) var(--x)"])(
+    "text-decoration:%s는 line 값을 알 수 없어 앞의 값을 지킨다",
+    (value) => {
+      expectInvalid("text-decoration", value);
+    },
+  );
+
+  it.each<[string, Decoration]>([
+    ["underline var(--x)", UNDERLINE],
+    ["line-through var(--x)", STRIKE],
+    ["var(--x) underline", UNDERLINE],
+    ["none var(--x)", NO_LINE],
+    ["underline var(--x) line-through", NO_LINE],
+    ["underline red var(--x)", NO_LINE],
+    ["underline foo(var(--x))", NO_LINE],
+  ])("치환 함수 text-decoration-line:%s", (value, expected) => {
+    expectBothPriors("text-decoration-line", value, expected);
+  });
+
+  it("text-decoration-line:var(--x)는 line 값을 알 수 없어 앞의 값을 지킨다", () => {
+    expectInvalid("text-decoration-line", "var(--x)");
+  });
+
+  it("importHtml이 underline var(--x)를 밑줄 마크로 읽는다", () => {
+    expect(spanContent("text-decoration:underline var(--x)")).toEqual(
+      markedText([{ type: "underline" }]),
+    );
+    expect(spanContent("text-decoration-line:underline var(--x)")).toEqual(
+      markedText([{ type: "underline" }]),
+    );
+  });
+
+  // 의도한 차이다. Chromium은 함수 안쪽 인자와 결과 타입까지 검증해 아래 값을
+  // 모두 무효로 버린다. 우리는 함수 이름만 보므로 밑줄이다. 안쪽을 읽으려면
+  // 수식·색 문법 전체가 필요해 범위 밖이다(Issue #363 그릴링 Q4).
+  it.each([
+    "underline lab(foo)",
+    "underline calc(1)",
+    "underline calc(red)",
+    "underline calc()",
+    "underline rgb(1,2)",
+    "underline color-mix(in srgb, red)",
+  ])(
+    "text-decoration:%s는 Chromium은 무효지만 함수 안쪽을 검증하지 않아 밑줄이다",
+    (value) => {
+      expectBothPriors("text-decoration", value, UNDERLINE);
+    },
+  );
 });
 
 // Chromium 153.0.8010.12 실측이다. 값 전체가 문법이다: 한 낱말(`normal`·
