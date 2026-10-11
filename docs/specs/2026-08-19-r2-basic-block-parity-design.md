@@ -639,7 +639,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
 
 HTML CodeBlock의 language 후보 문자 위반은 거절하지 않는다. 그 후보를 없는 것으로 보고 빠진 후보마다 `UNSAFE_ATTRIBUTE_REMOVED` warning을 반환한다(7.1, Issue #353). source 문자 위반은 무효 문자를 지우고 `UNSAFE_CODE_POINT_REMOVED` warning을 반환한다(7.1, Issue #352).
 
-HTML import는 무효 미디어 url과 무효 `data-geul-*` 선택 표시 값으로 문서를 거절하지 않는다(7.3, Issue #358). `image`·`video`·`audio`의 `src`가 미디어 url 정책을 통과하지 못하면 그 블록을 버리고 `UNSAFE_URL_REMOVED`(`element`는 `img`·`video`·`audio`, `attribute`는 `src`)를 반환한다. 색·정렬·`icon`·시작 번호·미디어 폭·`aspectRatio`·표 셀 색·정렬·열 폭의 무효 값은 그 필드만 버리고 `UNSAFE_ATTRIBUTE_REMOVED`를 반환한다. 판정은 model 검증 함수가 소유한다. 중복 id, 중첩 깊이 초과, 표 격자 위반 같은 구조 위반은 계속 `HTML_DOCUMENT_INVALID`다.
+HTML import는 무효 미디어 url과 무효 `data-geul-*` 선택 표시 값으로 문서를 거절하지 않는다(7.3, Issue #358). `image`·`video`·`audio`의 `src`가 미디어 url 정책을 통과하지 못하면 그 블록을 버리고 `UNSAFE_URL_REMOVED`(`element`는 `img`·`video`·`audio`, `attribute`는 `src`)를 반환한다. 색·정렬·`icon`·시작 번호·미디어 폭·`aspectRatio`·표 셀 색·정렬·열 폭의 무효 값은 그 필드만 버리고 `UNSAFE_ATTRIBUTE_REMOVED`를 반환한다. iframe `data-geul-src`가 `iframeEmbed` 정책(custom URL 허용, provider 허용 등)을 통과하고도 `isSupportedLinkHref`를 통과하지 못하면(공백·제어문자 등) 정책 불허와 같이 url 없는 빈 `iframe` 블록을 남기고 `UNSAFE_URL_REMOVED`(`element`는 wrapper 태그, `attribute`는 `data-geul-src`)를 반환한다(Issue #360). 정책 불허는 이전처럼 경고가 없다. 판정은 model 검증 함수가 소유한다. 중복 id, 중첩 깊이 초과, 표 격자 위반 같은 구조 위반은 계속 `HTML_DOCUMENT_INVALID`다.
 
 ## 9. 검증 전략
 
