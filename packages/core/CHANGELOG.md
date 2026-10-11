@@ -1,5 +1,15 @@
 # @cp949/geul-core
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [9ffbd67]
+- Updated dependencies [a606898]
+- Updated dependencies [dd703fd]
+  - @cp949/geul-io@0.2.1
+  - @cp949/geul-model@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

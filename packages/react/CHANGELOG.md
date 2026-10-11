@@ -1,5 +1,11 @@
 # @cp949/geul-react
 
+## 0.2.1
+
+### Patch Changes
+
+- @cp949/geul-core@0.2.1
+
 ## 0.2.0
 
 ### Patch Changes
