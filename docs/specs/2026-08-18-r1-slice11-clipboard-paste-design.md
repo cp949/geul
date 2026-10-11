@@ -142,7 +142,7 @@ export const parseClipboardTable = (input: {
 - `language` 선택 규칙을 함수 `selectCodeBlockLanguage`로 추출해 `importHtml`과 클립보드가 공유한다. `importHtml`의 결과와 경고는 바뀌지 않는다. 클립보드는 고른 값을 model 정규형으로 바꾼다. model이 거부하는 값이면 버린다. `wrap`·`caption`·`id`·경고는 읽지 않는다. `figure` 안 `pre`의 `figcaption` 글자는 `codeBlock.caption`이 아니라 별도 자식 문단으로 남는다. (Issue #356 RD-005 이후 `wrap`·`caption`·`data-geul-block-id`를 `importHtml`처럼 읽고, `figcaption` 글자는 `codeBlock.caption`이 된다. 경고는 여전히 내지 않는다.)
 - core: `listChildToTiptapJson`이 `divider`(컨테이너 없이 `blockId`만)와 `codeBlock`(`blockContainer` 안 `codeBlock` 노드)을 만든다. `validateOutOfTableContent`가 `codeBlock` 글자와 `language`를 model 계약으로 검사하고 최상위의 두 타입을 `CLIPBOARD_CONTENT_INVALID`로 거절한다. 문서는 바뀌지 않는다. (Issue #356 RD-005 이후 `listChildToTiptapJson`은 없고, 최상위 `codeBlock`·`divider`를 거절하지 않는다. 최상위 블록 앞에 그대로 붙는다.)
 - 셀 안 캐럿: `codeBlock`은 글자의 줄마다 셀 줄이고 `divider`는 줄이 없다. `countTables`는 `children`이 없는 타입을 건너뛴다.
-- 막은 타입: `containsBlockedType`가 타입 이름으로 `codeBlock`·`divider`를 판정한다. 막았고 캐럿이 표 밖이면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 처리한다. 캐럿이나 선택이 표 안이면 막은 타입을 검사하지 않아 셀 줄로 붙는다.
+- 막은 타입: `findDisabledBlock`(`enabled-block-types.ts`)이 타입 이름으로 `codeBlock`·`divider`를 판정한다. 막았고 캐럿이 표 밖이면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 처리한다. 캐럿이나 선택이 표 안이면 막은 타입을 검사하지 않아 셀 줄로 붙는다.
 - 차이: `importHtml`은 빈 `pre`를 빈 `codeBlock`으로 만들 수 있고 클립보드는 만들지 않는다. `blockquote`는 클립보드에서 `quote`가 되지 않는다(Issue #350). (Issue #356 RD-005 이후 두 차이 모두 없다. 빈 `pre`는 빈 `codeBlock`이고 `blockquote`는 `quote`다. `blockquote`가 감싼 목록은 `quote`의 자식 목록 항목이다.)
 - 읽지 않는 것: `li` 안 `img` 등 미디어. 클립보드에 미디어 블록 타입이 없어 사라진다. (Issue #356 RD-005 이후 `li` 안 `img`는 자식 `image` 블록이다. url이 model 검증을 통과할 때만이다. `file:`·`cid:` url은 블록이 빠진다.)
 
@@ -219,7 +219,7 @@ core:
 - children을 가질 수 있는 블록은 model `isNestableBlockType`(문단, 제목, `quote`, `callout`, 목록 4종)뿐이다. 리프 블록(`codeBlock`, `divider`, 미디어 4종, `iframe`)의 비어 있지 않은 children은 `Clipboard <type> block cannot have children`으로 거절한다. 문서는 바뀌지 않는다.
 - id: 최상위 문단·제목은 이전처럼 `BlockIdExtension`이 배정한다. 그 밖의 최상위 블록과 모든 children은 `createId`다. 부모가 자식보다 먼저다. 목록 항목 children은 이전에 자식 먼저였다.
 - 표 안 캐럿: 셀 줄 정책이 셀 안 html 붙여넣기의 `collectLines`와 같다. `content`를 가진 블록(문단, 제목, `quote`, `callout`, 목록 4종)은 줄 하나이고 children이 부모 다음에 깊이 우선으로 이어진다. `codeBlock`은 줄마다 셀 줄이다(Issue #351 정책). `content`가 없는 블록(`divider`, 미디어 4종, `iframe`)은 줄이 없다. 블록 색은 텍스트 색 마크가 된다(Issue #343). 표 개수 검사는 모든 블록의 children 안 표를 센다.
-- 막은 타입: `containsBlockedType`이 모든 비표 블록의 type과 children을 훑는다. 표 밖 캐럿에서 막은 타입이 있으면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 받는다. 캐럿이나 선택이 표 안이면 검사하지 않는다.
+- 막은 타입: `findDisabledBlock`(`enabled-block-types.ts`)이 모든 비표 블록의 type과 children을 훑는다. 표 밖 캐럿에서 막은 타입이 있으면 `TablePasteExtension`이 물러나고 #318 평문 폴백이 받는다. 캐럿이나 선택이 표 안이면 검사하지 않는다.
 - 최상위 표가 없고 `quote`·`callout` 등 children 안에만 표가 있는 html도 #315처럼 `TablePasteExtension`이 물러난다.
 
 래퍼 안 목록과 인라인 래퍼가 품은 블록(Issue #336, Issue #356 RD-005 DELTA-04):
