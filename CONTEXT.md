@@ -50,6 +50,10 @@ _Avoid_: best-effort export, 경고 없는 변환
 외부 HTML 요소의 style, 옛 표현 속성(`color`·`bgcolor`), 태그 기본값이 정하는 글자색·배경색·굵기·기울임·밑줄·취소선이다. 가져오기는 이것을 마크·블록 속성·셀 색으로 옮긴다. 자기 export의 `data-geul-*` 속성은 요소 표현이 아니라 저장 원본의 에코다.
 _Avoid_: 스타일 읽기, 인라인 스타일, 계산 스타일
 
+**CSS 선언 읽기**:
+외부 HTML 요소의 `style` 속성 문자열을 CSS Syntax 3 규칙으로 토큰, component value, 선언 목록으로 바꾸는 단계다. 기준은 Chromium의 `style` 속성 해석이다. 값의 뜻은 모른다. 값 문법(색, 굵기, 장식, `white-space`)은 그 위에서 읽는다. 요소 표현과 공백 접기가 그 결과를 쓴다.
+_Avoid_: 분할기, style 파서, 스캐너
+
 ## 편집 입력
 
 **붙여넣기 계획**:
