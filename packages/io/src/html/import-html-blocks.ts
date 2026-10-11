@@ -118,24 +118,31 @@ export const defaultHtmlTableSeam: HtmlTableSeam = {
   },
 };
 
+// 재귀가 그대로 넘기는 변환 환경이다. 깊이와 직전 형제 블록은 호출마다 달라서
+// 인자로 남긴다. 새 설정은 여기에 필드를 더하면 재귀 호출부를 지나지 않는다.
+type ImportEnv = {
+  createId: IdFactory;
+  context: HtmlImportContext;
+  iframeEmbedConfig: IframeEmbedConfig;
+  tableSeam: HtmlTableSeam;
+};
+
 // segmentBlocks의 경계 판정을 실제 Block으로 옮기는 변환 하나만 한다(재귀
 // unwrap은 다루지 않는다 — blocksFromNodes가 감싼다). documentFromRoot의
 // 기존 루프 그대로이고, DELTA-04는 이 함수를 두 자리에서 재사용한다: (1)
 // 최상위 nodes 중 children wrapper가 아닌 나머지("평면" 구간), (2) wrapper
-// 안의 <p>/<hN> 자기 콘텐츠 하나(blocksFromNodes 참고). depth·context는
+// 안의 <p>/<hN> 자기 콘텐츠 하나(blocksFromNodes 참고). depth·env는
 // blockquote 세그먼트의 children 재귀(blocksFromNodes로 되돌아감)가 wrapper
 // 재귀와 같은 깊이 가드를 받기 위해서만 받는다(DELTA-06a).
 // precedingBlock은 이 구간 바로 앞 형제 블록이다. 래퍼 안 연속 ol의 번호
 // 재시작을 최상위 연속 ol과 같게 판정하려고 받는다.
 const blocksFromSegments = (
   nodes: readonly HtmlNode[],
-  createId: IdFactory,
+  env: ImportEnv,
   depth: number,
-  context: HtmlImportContext,
-  iframeEmbedConfig: IframeEmbedConfig,
-  tableSeam: HtmlTableSeam,
   precedingBlock?: Block,
 ): Block[] => {
+  const { createId, context, iframeEmbedConfig, tableSeam } = env;
   const blocks: Block[] = [];
 
   const segmentPolicy = importBlockSegmentPolicyWith(tableSeam.isTableNode);
@@ -270,14 +277,7 @@ const blocksFromSegments = (
         promoted,
       });
       if (depth >= MAX_NESTING_DEPTH) {
-        const flattened = blocksFromNodes(
-          childrenNodes,
-          createId,
-          depth,
-          context,
-          iframeEmbedConfig,
-          tableSeam,
-        );
+        const flattened = blocksFromNodes(childrenNodes, env, depth);
         if (flattened.length > 0)
           context.warnings.push(nestedChildrenFlattenedWarning());
         blocks.push(
@@ -286,14 +286,7 @@ const blocksFromSegments = (
         );
         continue;
       }
-      const children = blocksFromNodes(
-        childrenNodes,
-        createId,
-        depth + 1,
-        context,
-        iframeEmbedConfig,
-        tableSeam,
-      );
+      const children = blocksFromNodes(childrenNodes, env, depth + 1);
       blocks.push(
         children.length > 0
           ? { id, type: "quote", content, ...quoteProps, children }
@@ -330,14 +323,7 @@ const blocksFromSegments = (
         isValidInlineText,
       );
       if (depth >= MAX_NESTING_DEPTH) {
-        const flattened = blocksFromNodes(
-          childrenNodes,
-          createId,
-          depth,
-          context,
-          iframeEmbedConfig,
-          tableSeam,
-        );
+        const flattened = blocksFromNodes(childrenNodes, env, depth);
         if (flattened.length > 0)
           context.warnings.push(nestedChildrenFlattenedWarning());
         blocks.push(
@@ -352,14 +338,7 @@ const blocksFromSegments = (
         );
         continue;
       }
-      const children = blocksFromNodes(
-        childrenNodes,
-        createId,
-        depth + 1,
-        context,
-        iframeEmbedConfig,
-        tableSeam,
-      );
+      const children = blocksFromNodes(childrenNodes, env, depth + 1);
       blocks.push(
         children.length > 0
           ? {
@@ -393,11 +372,8 @@ const blocksFromSegments = (
       blocks.push(
         ...blocksFromListElement(
           listNode,
-          createId,
+          env,
           depth,
-          context,
-          iframeEmbedConfig,
-          tableSeam,
           listNode.tagName === "ol" &&
             previousBlock?.type === "numberedListItem",
         ),
@@ -493,14 +469,7 @@ const blocksFromSegments = (
         createId,
         context,
         blocksFromNodes: (innerNodes) =>
-          blocksFromNodes(
-            innerNodes,
-            createId,
-            depth,
-            context,
-            iframeEmbedConfig,
-            tableSeam,
-          ),
+          blocksFromNodes(innerNodes, env, depth),
       }),
     );
   }
@@ -515,12 +484,10 @@ const blocksFromListItem = (
   node: HtmlElementNode,
   listType: ListItemBlock["type"],
   startNumber: number | undefined,
-  createId: IdFactory,
+  env: ImportEnv,
   depth: number,
-  context: HtmlImportContext,
-  iframeEmbedConfig: IframeEmbedConfig,
-  tableSeam: HtmlTableSeam,
 ): Block[] => {
+  const { createId, context, tableSeam } = env;
   const id = propertyString(node, "dataGeulBlockId") ?? createId();
   const { contentNodes, childrenNodes, promoted } = splitListItemChildren(
     node,
@@ -554,28 +521,14 @@ const blocksFromListItem = (
         : { id, type: "bulletListItem", content, ...listItemProps };
 
   if (depth >= MAX_NESTING_DEPTH) {
-    const flattened = blocksFromNodes(
-      childrenNodes,
-      createId,
-      depth,
-      context,
-      iframeEmbedConfig,
-      tableSeam,
-    );
+    const flattened = blocksFromNodes(childrenNodes, env, depth);
     if (flattened.length > 0) {
       context.warnings.push(nestedChildrenFlattenedWarning());
     }
     return [ownBlock, ...flattened];
   }
 
-  const children = blocksFromNodes(
-    childrenNodes,
-    createId,
-    depth + 1,
-    context,
-    iframeEmbedConfig,
-    tableSeam,
-  );
+  const children = blocksFromNodes(childrenNodes, env, depth + 1);
   return children.length > 0 ? [{ ...ownBlock, children }] : [ownBlock];
 };
 
@@ -591,13 +544,11 @@ const blocksFromListItem = (
 // list-paste-fallback-extension.ts가 이미 같은 접이식 정책을 썼다).
 const blocksFromListElement = (
   node: HtmlElementNode & { tagName: "ul" | "ol" },
-  createId: IdFactory,
+  env: ImportEnv,
   depth: number,
-  context: HtmlImportContext,
-  iframeEmbedConfig: IframeEmbedConfig,
-  tableSeam: HtmlTableSeam,
   restartDefaultOrderedList: boolean,
 ): Block[] => {
+  const { context } = env;
   const blocks: Block[] = [];
   let nonItemRun: HtmlNode[] = [];
   let itemIndex = 0;
@@ -612,16 +563,7 @@ const blocksFromListElement = (
   const flushNonItemRun = (): void => {
     if (nonItemRun.length === 0) return;
     const previousLength = blocks.length;
-    blocks.push(
-      ...blocksFromNodes(
-        nonItemRun,
-        createId,
-        depth,
-        context,
-        iframeEmbedConfig,
-        tableSeam,
-      ),
-    );
+    blocks.push(...blocksFromNodes(nonItemRun, env, depth));
     if (itemIndex > 0 && blocks.length > previousLength) {
       flowInterruptedSinceItem = true;
     }
@@ -682,11 +624,8 @@ const blocksFromListElement = (
             ? "bulletListItem"
             : "numberedListItem",
         startNumber,
-        createId,
+        env,
         depth,
-        context,
-        iframeEmbedConfig,
-        tableSeam,
       ),
     );
     itemIndex += 1;
@@ -722,13 +661,11 @@ const blocksFromListElement = (
 // 블록이 따로 만들어졌을 때만 넘긴다(Issue #357 wrapper 이음매).
 const blocksFromNodes = (
   nodes: readonly HtmlNode[],
-  createId: IdFactory,
+  env: ImportEnv,
   depth: number,
-  context: HtmlImportContext,
-  iframeEmbedConfig: IframeEmbedConfig,
-  tableSeam: HtmlTableSeam,
   precedingBlock?: Block,
 ): Block[] => {
+  const { createId, context } = env;
   const blocks: Block[] = [];
   let plainRun: HtmlNode[] = [];
 
@@ -737,11 +674,8 @@ const blocksFromNodes = (
     blocks.push(
       ...blocksFromSegments(
         plainRun,
-        createId,
+        env,
         depth,
-        context,
-        iframeEmbedConfig,
-        tableSeam,
         blocks[blocks.length - 1] ?? precedingBlock,
       ),
     );
@@ -755,11 +689,8 @@ const blocksFromNodes = (
       blocks.push(
         ...blocksFromListElement(
           node,
-          createId,
+          env,
           depth,
-          context,
-          iframeEmbedConfig,
-          tableSeam,
           node.tagName === "ol" && previousBlock?.type === "numberedListItem",
         ),
       );
@@ -787,14 +718,7 @@ const blocksFromNodes = (
         "dataGeulCollapsed",
         "open",
       );
-      const children = blocksFromNodes(
-        details.childrenNodes,
-        createId,
-        depth + 1,
-        context,
-        iframeEmbedConfig,
-        tableSeam,
-      );
+      const children = blocksFromNodes(details.childrenNodes, env, depth + 1);
 
       // summary에서 읽는 속성을 표시한다. style의 "제거됨" 판정은
       // import-warnings.ts의 isOwnEchoStyle이 raw 노드 단위로 한다(Issue #179).
@@ -850,14 +774,7 @@ const blocksFromNodes = (
     const rawOwnBlock =
       listItemType === undefined
         ? (() => {
-            const ownBlocks = blocksFromSegments(
-              [wrapper.ownNode],
-              createId,
-              depth,
-              context,
-              iframeEmbedConfig,
-              tableSeam,
-            );
+            const ownBlocks = blocksFromSegments([wrapper.ownNode], env, depth);
             const candidate = ownBlocks[0];
             return ownBlocks.length === 1 &&
               candidate !== undefined &&
@@ -917,11 +834,8 @@ const blocksFromNodes = (
       ownBlock.type === "codeBlock" ? undefined : ownBlock.children;
     const wrapperChildren = blocksFromNodes(
       wrapper.childrenNodes,
-      createId,
+      env,
       depth + 1,
-      context,
-      iframeEmbedConfig,
-      tableSeam,
       ownChildren?.[ownChildren.length - 1],
     );
     // own 블록이 자기 children을 가질 수 있다 — 현재 quote뿐이다(D6 분할이
@@ -955,11 +869,8 @@ export const documentFromRoot = (
 ): Document => {
   const blocks = blocksFromNodes(
     root.children,
-    createId,
+    { createId, context, iframeEmbedConfig, tableSeam },
     1,
-    context,
-    iframeEmbedConfig,
-    tableSeam,
   );
   return { formatVersion: 1, revision: 0, blocks };
 };
