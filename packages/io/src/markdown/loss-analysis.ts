@@ -1,6 +1,7 @@
 import {
   isKnownBlockType,
   isListItemBlockType,
+  isMediaBlock,
   isTextRunItem,
   type Block,
   type Document,
@@ -272,13 +273,7 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
   // 원래 타입으로 복원되지 않는다, spec §7.3). previewWidth/textAlignment는
   // image/video만, showPreview는 image/video/audio만 갖는다(model
   // MediaBlockCommon 확장 shape, file은 넷 다 없음).
-  if (
-    block.type === "file" ||
-    block.type === "image" ||
-    block.type === "video" ||
-    block.type === "audio" ||
-    block.type === "iframe"
-  ) {
+  if (isMediaBlock(block)) {
     if (block.backgroundColor !== undefined) {
       losses.push({
         kind: "BLOCK_COLOR",

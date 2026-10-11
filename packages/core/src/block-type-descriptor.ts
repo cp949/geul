@@ -1,4 +1,8 @@
-import type { HeadingBlock } from "@cp949/geul-model";
+import {
+  type HeadingBlock,
+  type InlineContentBlockType,
+  isInlineContentBlockType,
+} from "@cp949/geul-model";
 
 // spec §4.1 — heading level 1-6. 모델 HeadingBlock.level 범위를 그대로 파생해
 // 두 곳에 리터럴을 복제하지 않는다. 공개 export가 아닌 module-local 별칭이다.
@@ -91,15 +95,15 @@ export type BlockTypeSource =
   | { type: "audio" }
   | { type: "iframe" };
 
+// type 문자열 predicate는 source 유니온을 좁히지 못한다. 콘텐츠를 가진
+// 종류(= BlockTypeDescriptor 멤버)만 남기는 판정은 model의
+// isInlineContentBlockType 한 곳이 소유하고, 여기서는 그 결과를 source 타입에
+// 연결만 한다. divider·table·미디어 5종은 이 판정에서 자연히 빠진다.
+const hasDescriptor = (
+  source: BlockTypeSource,
+): source is Extract<BlockTypeSource, { type: InlineContentBlockType }> =>
+  isInlineContentBlockType(source.type);
+
 export const blockTypeDescriptorFromBlock = (
   source: BlockTypeSource,
-): BlockTypeDescriptor | null =>
-  source.type === "divider" ||
-  source.type === "table" ||
-  source.type === "file" ||
-  source.type === "image" ||
-  source.type === "video" ||
-  source.type === "audio" ||
-  source.type === "iframe"
-    ? null
-    : source;
+): BlockTypeDescriptor | null => (hasDescriptor(source) ? source : null);

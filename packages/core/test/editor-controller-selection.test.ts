@@ -16,7 +16,7 @@ import {
 } from "./editor-controller-support.js";
 
 // iframe은 RD-002 DELTA-03(roadmap Issue #212)부터 포함한다 —
-// isMediaBlockKind가 이미 iframe을 포함해 getSelectionMediaBlock()이
+// isMediaBlockType이 이미 iframe을 포함해 getSelectionMediaBlock()이
 // 수정 없이 동작함을 이 배열 확장만으로 고정한다.
 const MEDIA_KINDS = ["file", "image", "video", "audio", "iframe"] as const;
 

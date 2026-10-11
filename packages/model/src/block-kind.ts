@@ -4,6 +4,8 @@
 // (아키텍처 리뷰 6차 L1, ADR-0002가 정한 "동일 불변식을 여러 패키지가
 // 다시 구현하지 않는다"를 model 자신에게도 적용한다.)
 
+import type { Block } from "./types.js";
+
 /** bulletListItem·numberedListItem·checkListItem — 목록 항목 블록 종류. */
 export type ListItemBlockType =
   "bulletListItem" | "numberedListItem" | "checkListItem";
@@ -65,3 +67,79 @@ export const isInlineContentBlockType = (
   type: string,
 ): type is InlineContentBlockType =>
   isNestableBlockType(type) || type === "codeBlock";
+
+// 블록 종류 분류의 정본 표다(Issue #371). Block["type"] 전 종류에 가족을
+// 하나씩 배정한다.
+// - Record<Block["type"], ...> 제약이라 Block에 종류가 늘면 이 표가 비어
+//   tsc가 실패한다.
+// - 미디어 블록·리프 블록 판정은 이 표에서만 파생한다.
+// - 위 세 겹 predicate는 이 표에서 파생하지 않는다. 목록·중첩 판정은 가족이
+//   아니라 포함 관계 축이다.
+export type BlockFamily = "text" | "table" | "divider" | "code" | "media";
+
+export const BLOCK_FAMILY = {
+  paragraph: "text",
+  heading: "text",
+  quote: "text",
+  bulletListItem: "text",
+  numberedListItem: "text",
+  checkListItem: "text",
+  toggleListItem: "text",
+  callout: "text",
+  table: "table",
+  divider: "divider",
+  codeBlock: "code",
+  file: "media",
+  image: "media",
+  video: "media",
+  audio: "media",
+  iframe: "media",
+} as const satisfies Record<Block["type"], BlockFamily>;
+
+type BlockTypeOfFamily<F extends BlockFamily> = {
+  [K in keyof typeof BLOCK_FAMILY]: (typeof BLOCK_FAMILY)[K] extends F
+    ? K
+    : never;
+}[keyof typeof BLOCK_FAMILY];
+
+/** file·image·video·audio·iframe — 표에서 파생한 미디어 블록 종류. */
+export type MediaBlockType = BlockTypeOfFamily<"media">;
+
+/** divider·codeBlock·미디어 5종 — children 필드가 없는 블록 종류. */
+export type LeafBlockType = BlockTypeOfFamily<"divider" | "code" | "media">;
+
+// Set은 모듈 로드 시 표에서 만든다. 객체 프로퍼티 조회로 판정하면
+// "constructor"·"toString"·"__proto__" 같은 문자열이 새므로 Set.has만 쓴다.
+// (Object.hasOwn은 check:escompat이 금지한다.)
+const blockTypesOfFamilies = (
+  families: readonly BlockFamily[],
+): ReadonlySet<string> =>
+  new Set(
+    Object.entries(BLOCK_FAMILY)
+      .filter(([, family]) => families.includes(family))
+      .map(([type]) => type),
+  );
+
+const MEDIA_BLOCK_TYPES = blockTypesOfFamilies(["media"]);
+const LEAF_BLOCK_TYPES = blockTypesOfFamilies(["divider", "code", "media"]);
+
+export const isMediaBlockType = (type: string): type is MediaBlockType =>
+  MEDIA_BLOCK_TYPES.has(type);
+
+export const isLeafBlockType = (type: string): type is LeafBlockType =>
+  LEAF_BLOCK_TYPES.has(type);
+
+// block 자체를 좁힌다. Block과 Block | CustomBlock 양쪽에서 쓰도록 제네릭으로
+// 둔다. CustomBlock(type: string)은 Extract에서 빠지므로 좁혀진 결과에 들지 않는다.
+export const isMediaBlock = <B extends { type: string }>(
+  block: B,
+): block is Extract<B, { type: MediaBlockType }> =>
+  MEDIA_BLOCK_TYPES.has(block.type);
+
+// isMediaBlock과 같은 방식으로 block 자체를 리프 블록으로 좁힌다. type 문자열만
+// 받는 isLeafBlockType은 block 유니온을 좁히지 못해, 남은 분기에서 children을
+// 읽는 호출부가 이 함수를 쓴다.
+export const isLeafBlock = <B extends { type: string }>(
+  block: B,
+): block is Extract<B, { type: LeafBlockType }> =>
+  LEAF_BLOCK_TYPES.has(block.type);

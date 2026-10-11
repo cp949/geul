@@ -10,6 +10,7 @@ import {
   type InlineContent,
   type InlineContentItem,
   isKnownTextMarkType,
+  isMediaBlockType,
   isTextRunItem,
   parseDocument,
   type Result,
@@ -636,13 +637,7 @@ const decodeBlock = (
       value: { id: resolveBlockId(node, createId), type: "divider" },
     };
   }
-  if (
-    node.type === "file" ||
-    node.type === "image" ||
-    node.type === "video" ||
-    node.type === "audio" ||
-    node.type === "iframe"
-  ) {
+  if (node.type !== undefined && isMediaBlockType(node.type)) {
     return {
       ok: true,
       value: mediaBlockFromTiptapJson(node, resolveBlockId(node, createId)),

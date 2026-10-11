@@ -2,12 +2,17 @@ export type {
   InlineContentBlockType,
   ListEntryBlockType,
   ListItemBlockType,
+  MediaBlockType,
   NestableBlockType,
 } from "./block-kind.js";
 export {
   isInlineContentBlockType,
   isListEntryBlockType,
+  isLeafBlock,
+  isLeafBlockType,
   isListItemBlockType,
+  isMediaBlock,
+  isMediaBlockType,
   isNestableBlockType,
 } from "./block-kind.js";
 export { isCanonicalCellAlign } from "./cell-align.js";

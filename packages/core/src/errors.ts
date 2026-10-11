@@ -25,7 +25,7 @@ export type EditorError =
   | { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" }
   | { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" }
   // uploadMediaFile/replaceMediaBlockFile(production-editor-media-upload.ts)
-  // 전용 — 대상이 isMediaBlockKind는 통과하지만(media 계열) iframe이면 이
+  // 전용 — 대상이 isMediaBlockType은 통과하지만(media 계열) iframe이면 이
   // 코드로 거절한다. 업로드 콜백이 돌려준 url을 그대로 커밋하는 경로라
   // iframe URL 정책(화이트리스트·protocol·private-network,
   // resolveIframeEmbedDecision)을 재검증 없이 우회할 수 있어(#216) 업로드

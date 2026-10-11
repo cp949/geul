@@ -16,6 +16,8 @@ import {
   isCanonicalTextMarks,
   isKnownBlockType,
   isKnownTextMarkType,
+  isLeafBlock,
+  isMediaBlock,
   isSupportedLinkHref,
   isTextRunItem,
   isValidInlineText,
@@ -214,24 +216,13 @@ const validateEditableContent = (
   },
 ): Result<void, EditorError> => {
   for (const block of blocks) {
-    // divider는 content·children이 없어 검사 대상이 없다(DividerBlock 리프).
-    if (block.type === "divider") continue;
-
-    // CodeBlock source는 일반 inline text와 달리 literal Tab을 허용한다.
-    // source·language 판정과 canonicalization은 model parseDocument만 소유하고,
-    // core는 여기서 일반 inline validator를 중복 적용하지 않는다(G-CNV-001).
-    if (block.type === "codeBlock") continue;
-
-    // 5종 미디어 블록(iframe 포함, CUS-001~004)도 divider와 같은 leaf라
-    // content·children이 없어 검사 대상이 없다(spec §3.1).
-    if (
-      block.type === "file" ||
-      block.type === "image" ||
-      block.type === "video" ||
-      block.type === "audio" ||
-      block.type === "iframe"
-    )
-      continue;
+    // 리프 블록(divider·codeBlock·미디어 5종)은 검사 대상이 없다.
+    // - divider·미디어는 content·children이 없다(spec §3.1).
+    // - CodeBlock source는 일반 inline text와 달리 literal Tab을 허용한다.
+    //   source·language 판정과 canonicalization은 model parseDocument만
+    //   소유하고, core는 여기서 일반 inline validator를 중복 적용하지
+    //   않는다(G-CNV-001).
+    if (isLeafBlock(block)) continue;
 
     if (block.type === "table") {
       for (const row of block.rows) {
@@ -517,13 +508,7 @@ export const blockToTiptapJson = (block: Block): TiptapJsonNode => {
   if (block.type === "divider") {
     return { type: "divider", attrs: { blockId: block.id } };
   }
-  if (
-    block.type === "file" ||
-    block.type === "image" ||
-    block.type === "video" ||
-    block.type === "audio" ||
-    block.type === "iframe"
-  ) {
+  if (isMediaBlock(block)) {
     return mediaBlockToTiptapJson(block);
   }
 

@@ -8,8 +8,10 @@ import {
   type InlineContentItem,
   isKnownBlockType,
   isListItemBlockType,
+  isMediaBlock,
   isSafeCodeBlockLanguageClassToken,
   type ListItemBlock,
+  type MediaBlockType,
   parseDocument,
   resolveIframeEmbedDecision,
   type SyntaxHighlighter,
@@ -120,10 +122,7 @@ const textBlockPropsAttributes = (
 // url/name/caption/backgroundColor는 5종 공통, showPreview는 image/video/
 // audio만, previewWidth/textAlignment는 image/video/iframe만 갖는다(model
 // MediaBlockCommon과 동형).
-type MediaBlock = Extract<
-  Document["blocks"][number],
-  { type: "file" | "image" | "video" | "audio" | "iframe" }
->;
+type MediaBlock = Extract<Document["blocks"][number], { type: MediaBlockType }>;
 
 // outer 요소(figure 있으면 figure, 없으면 bare 시각 태그/빈 div)가 항상 싣는
 // data-geul-*(RD-001-DELTA-01.md "설계" 키 순서 고정). dataGeulMediaType은
@@ -694,13 +693,7 @@ const blockNode = (
   }
   // 5종 미디어 블록(file/image/video/audio/iframe, spec §7.1) —
   // RD-001-DELTA-01, iframe은 CUS-001~004.
-  if (
-    block.type === "file" ||
-    block.type === "image" ||
-    block.type === "video" ||
-    block.type === "audio" ||
-    block.type === "iframe"
-  ) {
+  if (isMediaBlock(block)) {
     return mediaBlockNode(block, iframeEmbed);
   }
   // quote → <blockquote data-geul-block-id><p>content</p>[<div

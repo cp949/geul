@@ -1,4 +1,6 @@
-// 4종 미디어 블록 kind 판별 유니온 — media-commands.ts(insertMediaBlock 내부
+import type { MediaBlockType } from "@cp949/geul-model";
+
+// 5종 미디어 블록 kind 판별 유니온 — media-commands.ts(insertMediaBlock 내부
 // 구현)와 editor-controller.ts(EditorController.commands.insertMediaBlock
 // 공개 시그니처)가 공유한다.
 //
@@ -14,16 +16,9 @@
 // 5번째 kind다 — resize/align/toolbar/오버레이 인프라를 media 4종과 공유한다
 // (spec §1 "MediaBlockKind 확장" 결정). "Media"라는 이름이 iframe엔 다소
 // 부정확하지만 전면 rename은 범위 밖이다(spec §8).
-export type MediaBlockKind = "file" | "image" | "video" | "audio" | "iframe";
-
-// editor-controller.ts::getSelectionMediaBlock(RD-003 DELTA-01)이 PM
-// NodeSelection의 node.type.name(런타임엔 평범한 string)을 MediaBlockKind로
-// 좁히는 데 쓴다. `string`에 대한 `!==` 리터럴 비교 연쇄는 TS가 좁히지
-// 않으므로(넓은 원시 타입에서 유한 리터럴을 뺀 나머지를 계산하지 않는다)
-// 이 파일처럼 명시적 타입가드가 필요하다.
-export const isMediaBlockKind = (value: string): value is MediaBlockKind =>
-  value === "file" ||
-  value === "image" ||
-  value === "video" ||
-  value === "audio" ||
-  value === "iframe";
+//
+// 5종 유니온과 판정은 model의 BLOCK_FAMILY 표가 소유한다(Issue #371).
+// 여기서는 공개 이름 MediaBlockKind를 MediaBlockType 별칭으로 유지한다.
+// model import는 type 전용이라 이 파일에 Tiptap 의존이 생기지 않는다.
+// string을 MediaBlockKind로 좁히는 판정은 model의 isMediaBlockType을 쓴다.
+export type MediaBlockKind = MediaBlockType;

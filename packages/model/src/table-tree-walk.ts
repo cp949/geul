@@ -1,3 +1,4 @@
+import { isLeafBlock } from "./block-kind.js";
 import { isKnownBlockType } from "./block-schema.js";
 import type { DocumentPath } from "./document-validation-helpers.js";
 import type { DocumentError } from "./errors.js";
@@ -29,19 +30,9 @@ export const visitTableBlocks = (
       if (!result.ok) return result;
       continue;
     }
-    // divider·codeBlock·5종 미디어 블록(iframe 포함, CUS-001~004)은 children
-    // 필드가 없는 리프다 — 나머지(paragraph/heading/quote/목록 항목)만
-    // children으로 내려간다.
-    if (
-      known.type === "divider" ||
-      known.type === "codeBlock" ||
-      known.type === "file" ||
-      known.type === "image" ||
-      known.type === "video" ||
-      known.type === "audio" ||
-      known.type === "iframe"
-    )
-      continue;
+    // 리프 블록(divider·codeBlock·미디어 5종)은 children 필드가 없다 —
+    // 나머지(paragraph/heading/quote/목록 항목)만 children으로 내려간다.
+    if (isLeafBlock(known)) continue;
     if (known.children !== undefined) {
       const children = visitTableBlocks(
         known.children,

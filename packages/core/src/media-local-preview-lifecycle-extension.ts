@@ -1,10 +1,10 @@
+import { isMediaBlockType } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { undoDepth } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
-import { isMediaBlockKind } from "./media-block-kind.js";
 import { isLocalPreviewReachableViaUndo } from "./media-local-preview-reachability.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 
@@ -46,7 +46,7 @@ export const collectLocalPreviewBlocks = (
   const found = new Map<string, LocalPreviewAttrs>();
   doc.descendants((node) => {
     if (
-      isMediaBlockKind(node.type.name) &&
+      isMediaBlockType(node.type.name) &&
       typeof node.attrs.blockId === "string" &&
       node.attrs.blockId.length > 0 &&
       typeof node.attrs.localPreviewUrl === "string"

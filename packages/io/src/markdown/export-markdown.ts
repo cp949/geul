@@ -4,6 +4,8 @@ import {
   type Document,
   type InlineContent,
   isKnownBlockType,
+  isLeafBlock,
+  isMediaBlock,
   type ListItemBlock,
   parseDocument,
   type TableBlock,
@@ -214,21 +216,12 @@ const flattenBlocks = (
       return customBlockToMarkdown?.[block.type] !== undefined ? [block] : [];
     }
     if (block.type === "table") return [block];
-    // divider·CodeBlock·5종 미디어 블록(iframe 포함, CUS-001~004)은 children
-    // 필드 자체가 없어(옵셔널이 아니라 부재, leaf 블록) 아래 block.children
-    // 접근 전에 좁힌다 — 이 early return 자체는 RD-002(GFM 계약 구현)가
-    // 와도 바뀌지 않는다, 애초에 flatten할 children이 없다. quote는
-    // children이 옵셔널이라 아래 범용 분기로 자연스럽게 통과한다(07a).
-    if (
-      block.type === "divider" ||
-      block.type === "codeBlock" ||
-      block.type === "file" ||
-      block.type === "image" ||
-      block.type === "video" ||
-      block.type === "audio" ||
-      block.type === "iframe"
-    )
-      return [block];
+    // 리프 블록(divider·CodeBlock·미디어 5종)은 children 필드 자체가
+    // 없어(옵셔널이 아니라 부재) 아래 block.children 접근 전에 좁힌다 —
+    // 이 early return 자체는 RD-002(GFM 계약 구현)가 와도 바뀌지 않는다,
+    // 애초에 flatten할 children이 없다. quote는 children이 옵셔널이라 아래
+    // 범용 분기로 자연스럽게 통과한다(07a).
+    if (isLeafBlock(block)) return [block];
     if (block.children === undefined || block.children.length === 0) {
       return [block];
     }
@@ -355,13 +348,7 @@ const blockNode = (block: Block): MarkdownOutputNode => {
   // 값이 있어도(lossy) 안전하게 폐기할 수 있다(폐기 자체는 경고로 이미
   // 보고됨, G-CNV-002). name이 없으면 url을 텍스트로 쓴다(mediaAnchorNode,
   // export-html.ts 전례와 동일 공식).
-  if (
-    block.type === "file" ||
-    block.type === "image" ||
-    block.type === "video" ||
-    block.type === "audio" ||
-    block.type === "iframe"
-  ) {
+  if (isMediaBlock(block)) {
     const url = block.url ?? "";
     const text = block.name ?? url;
     // Image는 showPreview:false일 때만 링크로 강등한다(html export의

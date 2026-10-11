@@ -2,6 +2,7 @@ import {
   type Block,
   type InlineContent,
   isKnownBlockType,
+  isLeafBlock,
   isKnownTextMarkType,
   isTextRunItem,
 } from "@cp949/geul-model";
@@ -46,15 +47,7 @@ export const blocksInlineContentViolation = (
 ): { blockId: string; cellId?: string; reason: string } | null => {
   for (const block of blocks) {
     if (!isKnownBlockType(block.type)) continue;
-    if (block.type === "divider" || block.type === "codeBlock") continue;
-    if (
-      block.type === "file" ||
-      block.type === "image" ||
-      block.type === "video" ||
-      block.type === "audio" ||
-      block.type === "iframe"
-    )
-      continue;
+    if (isLeafBlock(block)) continue;
 
     if (block.type === "table") {
       for (const row of block.rows) {

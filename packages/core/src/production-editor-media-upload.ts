@@ -1,11 +1,14 @@
-import { isSupportedMediaUrl, type Result } from "@cp949/geul-model";
+import {
+  isMediaBlockType,
+  isSupportedMediaUrl,
+  type Result,
+} from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { findBlockPosition } from "./block-position.js";
 import type { EditorError } from "./errors.js";
-import { isMediaBlockKind } from "./media-block-kind.js";
 import {
   createLocalPreviewAttrs,
   type LocalPreviewAttrs,
@@ -130,7 +133,7 @@ export class MediaUploadTracker {
     if (
       position === null ||
       node === null ||
-      !isMediaBlockKind(node.type.name)
+      !isMediaBlockType(node.type.name)
     ) {
       return false;
     }
@@ -220,7 +223,7 @@ export class MediaUploadTracker {
     if (position === null || node === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
-    if (!isMediaBlockKind(node.type.name)) {
+    if (!isMediaBlockType(node.type.name)) {
       return commandNotApplicable(command);
     }
     // Issue #216 — 이 메서드는 아래 success 분기에서 업로드 콜백이 돌려준

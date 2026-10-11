@@ -1,4 +1,8 @@
-import { isNestableBlockType, type NestableBlockType } from "./block-kind.js";
+import {
+  isMediaBlock,
+  isNestableBlockType,
+  type NestableBlockType,
+} from "./block-kind.js";
 import { isKnownBlockType } from "./block-schema.js";
 import { isCanonicalCellAlign } from "./cell-align.js";
 import { isCanonicalCellColor } from "./cell-color.js";
@@ -199,13 +203,7 @@ const validateBlocksAt = (
     // parse 시점에는 적용할 수 없다. 저장된 문서는 host 정책이 바뀌어도
     // 계속 load돼야 한다 — 여기서는 isSupportedLinkHref가 이미 막는
     // javascript:/제어문자 같은 정적·설정 무관 불변식만 확인한다.
-    if (
-      known.type === "file" ||
-      known.type === "image" ||
-      known.type === "video" ||
-      known.type === "audio" ||
-      known.type === "iframe"
-    ) {
+    if (isMediaBlock(known)) {
       const urlValidator =
         known.type === "iframe" ? isSupportedLinkHref : isSupportedMediaUrl;
       if (known.url !== undefined && !urlValidator(known.url)) {

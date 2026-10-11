@@ -1,6 +1,7 @@
 import {
   createRandomDocumentId,
   type IdFactory,
+  isMediaBlockType,
   isValidDocumentId,
   type TableColumn,
 } from "@cp949/geul-model";
@@ -90,16 +91,12 @@ export const BlockIdExtension = Extension.create<BlockIdOptions>({
               addNonBlockContainerIdentity(node.attrs.cellId);
             } else if (node.type.name === "divider") {
               addNonBlockContainerIdentity(node.attrs.blockId);
-            } else if (
-              node.type.name === "file" ||
-              node.type.name === "image" ||
-              node.type.name === "video" ||
-              node.type.name === "audio"
-            ) {
-              // 4종 미디어 블록(RD-002 DELTA-01)도 divider·table과 같은
+            } else if (isMediaBlockType(node.type.name)) {
+              // 5종 미디어 블록(iframe 포함)도 divider·table과 같은
               // 비포장 자체-identity 노드다 — blockContainer 자동 id
               // 발급이 이미 존재하는 미디어 블록 id와 충돌하지 않도록
-              // 점유 id로 등록한다(spec §3.1, G-EDT-003).
+              // 점유 id로 등록한다(spec §3.1, G-EDT-003). iframe이 빠져
+              // 순차 id에서 "Duplicate id"가 났다(Issue #371).
               addNonBlockContainerIdentity(node.attrs.blockId);
             } else if (customBlockTypes.has(node.type.name)) {
               // top-level CustomBlock도 divider·미디어와 같은 비포장

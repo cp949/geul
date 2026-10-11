@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { BLOCK_FAMILY } from "./block-kind.js";
 import { inlineContentSchema } from "./inline-content-schema.js";
 import { jsonPrimitivePropSchema } from "./json-primitive-prop-schema.js";
 import type { Block, CustomBlock } from "./types.js";
@@ -420,28 +421,14 @@ const customBlockSchema = z
   })
   .strict();
 
-// 알려진 16종 block 판별자다. blockOrCustomBlockSchema가 원시 type 값을
-// 이 목록과 대조해 blockSchema/customBlockSchema로 라우팅한다(spec §4.3).
-// Block 유니온에 17번째 타입이 추가되면 이 목록도 함께 갱신한다 — 이미
-// blockSchema 배열 자체도 수동 갱신 대상이라 같은 지점에 한 줄이 늘 뿐이다.
-const KNOWN_BLOCK_TYPES: ReadonlySet<string> = new Set<Block["type"]>([
-  "paragraph",
-  "heading",
-  "table",
-  "quote",
-  "bulletListItem",
-  "numberedListItem",
-  "checkListItem",
-  "toggleListItem",
-  "callout",
-  "divider",
-  "codeBlock",
-  "file",
-  "image",
-  "video",
-  "audio",
-  "iframe",
-]);
+// 알려진 block 판별자다. blockOrCustomBlockSchema가 원시 type 값을 이
+// 집합과 대조해 blockSchema/customBlockSchema로 라우팅한다(spec §4.3).
+// block-kind.ts의 BLOCK_FAMILY 표 키에서 파생한다 — Block 유니온에 종류가
+// 늘면 그 표가 컴파일 시점에 먼저 걸린다. blockSchema 배열 자체는 여전히
+// 수동 갱신 대상이다.
+const KNOWN_BLOCK_TYPES: ReadonlySet<string> = new Set(
+  Object.keys(BLOCK_FAMILY),
+);
 
 // core/io(RD-002 DELTA-02~04)가 document.blocks 원소를 알려진 Block과
 // CustomBlock으로 구분할 때 재사용하는 predicate다 — KNOWN_BLOCK_TYPES를

@@ -1,4 +1,4 @@
-import type { Result } from "@cp949/geul-model";
+import { isMediaBlockType, type Result } from "@cp949/geul-model";
 import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 
@@ -29,7 +29,6 @@ import { createGenericBlockCommands } from "./generic-block-commands.js";
 import { getBlockNestingActionState } from "./indent-commands.js";
 import { createInlineMarkCommands } from "./inline-mark-commands.js";
 import { createInsertBlockCommands } from "./insert-block-commands.js";
-import { isMediaBlockKind } from "./media-block-kind.js";
 import type { EnabledBlockTypes } from "./model-to-tiptap.js";
 import {
   commandNotApplicable,
@@ -220,7 +219,7 @@ export const createEditor = (
       const { selection } = session.editor.state;
       if (!(selection instanceof NodeSelection)) return null;
       const { node } = selection;
-      if (!isMediaBlockKind(node.type.name)) return null;
+      if (!isMediaBlockType(node.type.name)) return null;
       const blockId = node.attrs.blockId;
       if (typeof blockId !== "string" || blockId.length === 0) return null;
       return {
@@ -342,7 +341,7 @@ export const createEditor = (
       const pending: { blockId: string; file: File }[] = [];
       session.editor.state.doc.descendants((node) => {
         if (
-          isMediaBlockKind(node.type.name) &&
+          isMediaBlockType(node.type.name) &&
           typeof node.attrs.blockId === "string" &&
           node.attrs.blockId.length > 0 &&
           typeof node.attrs.localPreviewUrl === "string"

@@ -540,7 +540,7 @@ describe("uploadMediaFile — 사전 조건", () => {
     expect(editorState(editor, tiptap)).toEqual(before);
   });
 
-  // Issue #216 — iframe은 isMediaBlockKind를 통과하는 media 계열이지만
+  // Issue #216 — iframe은 isMediaBlockType을 통과하는 media 계열이지만
   // uploadMediaFile로 얻은 url을 재검증 없이 커밋하면 iframe URL 정책
   // (화이트리스트·protocol·private-network)을 우회하는 경로가 된다.
   // 콜백 등록 여부와 무관하게 즉시 거절해야 한다.
