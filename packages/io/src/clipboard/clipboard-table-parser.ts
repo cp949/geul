@@ -6,7 +6,6 @@ import {
   type InlineContentItem,
   isCanonicalCellAlign,
   isCanonicalCellColor,
-  parseDocument,
   tableSizeViolationMessage,
   validateTableSize,
 } from "@cp949/geul-model";
@@ -395,67 +394,13 @@ const createClipboardIdFactory = (root: HtmlRoot): IdFactory => {
   };
 };
 
-// model 검증에 실패하면 빼고 다시 판정할 선택 필드다. 표시·메타 속성이라
-// 빠져도 블록의 글자와 구조는 남는다. 미디어 url과 필수 필드(content, checked,
-// level 등)는 여기 없다 — 그 필드가 무효면 블록을 버린다.
-const DROPPABLE_FIELDS: ReadonlySet<string> = new Set([
-  "textColor",
-  "backgroundColor",
-  "textAlignment",
-  "icon",
-  "collapsed",
-  "startNumber",
-  "language",
-  "wrap",
-  "caption",
-  "name",
-  "showPreview",
-  "previewWidth",
-  "aspectRatio",
-]);
-
-// 프로브 블록의 id다. html의 id 값과 무관하게 판정하려고 고정값을 쓴다.
-const PROBE_ID = "clipboard-model-probe";
-
-// 비표 블록 하나를 model 검증을 통과하는 모양으로 줄인다(Issue #356 RD-005
-// 결정 Q1). importHtml은 끝의 parseDocument가 무효 값을 문서 전체 거절로
-// 막지만 클립보드는 그 거절을 따르지 않는다. 무효 값을 그대로 내면 core가
-// 시퀀스 전체를 CLIPBOARD_CONTENT_INVALID로 거절해 표까지 붙지 않는다
-// (Word의 file:/// img, Outlook의 cid: img가 대표다).
-// - children을 뗀 블록을 parseDocument로 프로브한다(core 검증과 같은 방식).
-//   판정 규칙을 io에 복제하지 않는다(G-CNV-001).
-// - 실패한 필드가 선택 필드면 그 필드만 빼고 다시 판정한다. 유효한 다른
-//   필드는 남는다.
-// - 그 밖의 필드가 실패하면 undefined다. 호출자가 블록을 버린다.
-const modelSafeBlock = (block: Block): Block | undefined => {
-  const own: Record<string, unknown> = { ...block };
-  for (let attempt = 0; attempt <= DROPPABLE_FIELDS.size; attempt += 1) {
-    const probe: Record<string, unknown> = { ...own, id: PROBE_ID };
-    delete probe.children;
-    const parsed = parseDocument({
-      formatVersion: 1,
-      revision: 0,
-      blocks: [probe],
-    });
-    if (parsed.ok) return own as Block;
-    // path는 ["blocks", 0, 필드, ...]다.
-    const field = parsed.error.path[2];
-    if (typeof field !== "string" || !DROPPABLE_FIELDS.has(field)) {
-      return undefined;
-    }
-    if (!(field in own)) return undefined;
-    delete own[field];
-  }
-  return undefined;
-};
-
 // 변환기 출력을 클립보드 블록으로 바꾼다. 자리표시는 표 variant로 되돌린다.
 // 나머지 블록은 model 모양 그대로다(RD-004).
 // - codeBlock language는 model 정규형으로 바꾼다. importHtml은 끝의
 //   parseDocument가 바꾸는데 클립보드 경로는 parseDocument를 거치지 않는다.
-// - 블록마다 model 검증을 통과하는 모양으로 줄인다(modelSafeBlock). 버린
-//   블록의 children은 같은 자리 형제로 올려 글자와 표를 잃지 않는다. 미디어·
-//   codeBlock 같은 리프는 children이 없다.
+// - model 검증은 변환기가 이미 마쳤다. 무효 미디어 url은 블록째, 무효 선택
+//   필드는 그 필드만 변환기가 버린다(Issue #358). 클립보드가 같은 블록을 다시
+//   프로브하지 않는다(Issue #356 RD-005의 modelSafeBlock은 #358로 대체).
 // - id가 비었거나 이미 나왔으면 새로 발급한다. html이 같은 data-geul-block-id를
 //   두 번 써도 호출 안 유일성(RD-004)을 지킨다. 남는 블록에만 발급한다. 문서
 //   순서(부모 먼저)로 돈다.
@@ -480,14 +425,12 @@ const clipboardBlocksFrom = (
     }
     const children =
       "children" in block && block.children !== undefined ? block.children : [];
-    const own = modelSafeBlock(
+    const own =
       block.type === "codeBlock" && block.language !== undefined
         ? { ...block, language: canonicalizeCodeBlockLanguage(block.language) }
-        : block,
-    );
+        : block;
     const childBlocks = (): ClipboardContentBlock[] =>
       clipboardBlocksFrom(children, reads, createId, seenIds, usedSlots);
-    if (own === undefined) return childBlocks();
     const id = own.id.length === 0 || seenIds.has(own.id) ? createId() : own.id;
     seenIds.add(id);
     const shallow: Record<string, unknown> = { ...own, id };
