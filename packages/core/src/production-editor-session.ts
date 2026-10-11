@@ -444,7 +444,7 @@ export class ProductionEditorSession {
 
   // spec §4.4(EXT-004), RD-001-DELTA-01(Issue #189) — construction-time
   // enabledBlockTypes readback, getDictionary()와 동일 자리·근거.
-  // model-to-tiptap.ts가 정의한 동명 순수 함수(모듈 스코프 import, 이
+  // enabled-block-types.ts가 정의한 동명 순수 함수(모듈 스코프 import, 이
   // 메서드와는 별개 바인딩이다)를 그대로 위임 호출해 판정 로직을
   // 중복하지 않는다.
   isBlockTypeEnabled(type: Block["type"]): boolean {

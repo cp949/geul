@@ -1,7 +1,4 @@
-import {
-  type ClipboardContentBlock,
-  parseClipboardTable,
-} from "@cp949/geul-io";
+import { parseClipboardTable } from "@cp949/geul-io";
 import type { IdFactory, IframeEmbedConfig } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
@@ -10,8 +7,9 @@ import { isInTable } from "@tiptap/pm/tables";
 import { selectionStartsInCodeBlock } from "./code-block-mark-guard-extension.js";
 import {
   type EnabledBlockTypes,
+  findDisabledBlock,
   isBlockTypeEnabled,
-} from "./model-to-tiptap.js";
+} from "./enabled-block-types.js";
 import type { PasteRejectedReason } from "./table-command-error.js";
 import { pasteClipboardContent } from "./table-paste-commands.js";
 
@@ -23,21 +21,6 @@ export type TablePasteOptions = {
   // 소스를 받아 표 옆 iframe 블록의 url 판정을 표 없는 붙여넣기와 맞춘다.
   iframeEmbed?: IframeEmbedConfig;
 };
-
-// 파싱된 시퀀스에 막은 타입이 하나라도 있는지 본다. model의 모든 비표
-// 블록(quote·callout·미디어 등, Issue #356 RD-005)을 보고 children이 있는 블록은
-// 재귀로 훑는다. 표 data 안은 셀 내용뿐이라 훑지 않는다.
-const containsBlockedType = (
-  blocks: readonly ClipboardContentBlock[],
-  enabledBlockTypes: EnabledBlockTypes,
-): boolean =>
-  blocks.some(
-    (block) =>
-      !isBlockTypeEnabled(block.type, enabledBlockTypes) ||
-      ("children" in block &&
-        block.children !== undefined &&
-        containsBlockedType(block.children, enabledBlockTypes)),
-  );
 
 // 실제 ClipboardEvent를 가로채 표/TSV/혼합 시퀀스로 파싱되면
 // pasteClipboardContent로 처리하고 이벤트를 소비한다. 파싱 대상이
@@ -133,7 +116,9 @@ export const TablePasteExtension = Extension.create<TablePasteOptions>({
             if (
               enabledBlockTypes !== undefined &&
               !isInTable(view.state) &&
-              containsBlockedType(parsed.value, enabledBlockTypes)
+              findDisabledBlock(parsed.value, (type) =>
+                isBlockTypeEnabled(type, enabledBlockTypes),
+              ) !== undefined
             ) {
               return false;
             }

@@ -74,7 +74,7 @@ export const insertMediaBlock = (
   const mediaType = editor.schema.nodes[kind];
   // enabledBlockTypes로 kind가 deny되면 스키마에 이 노드가 없다 — 도달
   // 가능한 경로다(위 InsertMediaBlockError 주석). 문서 로드 거절
-  // (model-to-tiptap.ts findDisabledBlock)과 동일한 EDITOR_FEATURE_
+  // (enabled-block-types.ts findDisabledBlock)과 동일한 EDITOR_FEATURE_
   // UNAVAILABLE 코드로 명령 결과 거절한다.
   if (mediaType === undefined) {
     return {
