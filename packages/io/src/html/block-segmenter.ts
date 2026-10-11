@@ -530,14 +530,24 @@ export function segmentBlocks<Level extends number = number>(
 // 정책에서는 위 walk가 isNestedBoundary보다 먼저 세그먼트로 승격해 이
 // 집합의 blockquote 항목에 도달하지 않고, 넘기지 않는 정책에서는 문단
 // 경계다. import 정책과 경고 수집기(import-warnings.ts)가 이 집합을 쓴다.
-export const NESTED_BOUNDARY_TAG_NAMES = new Set(["div", "li", "blockquote"]);
+export const NESTED_BOUNDARY_TAG_NAMES: ReadonlySet<string> = new Set([
+  "div",
+  "li",
+  "blockquote",
+]);
 
 // ul/ol 태그 판정이다(DELTA-01, Issue #143 (b)). isTransparent에 꽂으면 ul/ol을
 // 순수 wrapper로 재귀하고 li만 경계로 본다. isListTag에 꽂으면 ul/ol 자신을
 // kind: "list" 리프로 접는다. import 정책은 둘 다 꽂는다. isListTag가 먼저
 // 판정되므로 ul/ol은 목록 세그먼트가 된다(Issue #356 RD-005 DELTA-04).
+// 태그 이름 표(block-tag-names.ts)가 같은 상수를 읽는다(Issue #369).
+export const LIST_TAG_NAMES: ReadonlySet<string> = new Set(["ul", "ol"]);
+
 export const isTransparentListTag = (tagName: string): boolean =>
-  tagName === "ul" || tagName === "ol";
+  LIST_TAG_NAMES.has(tagName);
 
 // p는 "경계지만 재귀하지 않는" 태그다.
-export const isParagraphTag = (tagName: string): boolean => tagName === "p";
+export const PARAGRAPH_TAG_NAME = "p";
+
+export const isParagraphTag = (tagName: string): boolean =>
+  tagName === PARAGRAPH_TAG_NAME;

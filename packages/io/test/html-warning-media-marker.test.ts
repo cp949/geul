@@ -76,6 +76,18 @@ describe("미디어 마커 앵커의 블록 강등 경고(Issue #369)", () => {
       expect(result.elements).toEqual(["a"]);
     });
 
+    it("마커가 있어도 앵커가 아닌 span은 SAFE_BLOCK_DOWNGRADED:span 경고를 낸다", () => {
+      const result = importOk('<span data-geul-media-type="file">x</span>');
+
+      expect(result.elements).toEqual(["span"]);
+    });
+
+    it("details 밖의 단독 summary는 SAFE_BLOCK_DOWNGRADED:summary 경고를 낸다", () => {
+      const result = importOk("<summary>x</summary>");
+
+      expect(result.elements).toEqual(["summary"]);
+    });
+
     it("마커가 iframe인 div는 경고 없이 iframe 블록이 된다", () => {
       const result = importOk(
         '<div data-geul-media-type="iframe" data-geul-src="https://example.com/x">x</div>',

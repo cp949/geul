@@ -1,7 +1,8 @@
 // document-import 경로가 block-segmenter.ts에 넘기는 BlockSegmentPolicy를
-// 담당한다: heading 태그명 → level 매핑(headingLevelByTagName)과, 문단/
-// 헤딩/구분선/표/인용/코드블록/미디어 경계를 판정하는 importBlockSegmentPolicy
-// 정책 객체(RD-001~RD-005의 판정 태그 집합을 한곳에 모은다).
+// 담당한다: 문단/헤딩/구분선/표/인용/코드블록/미디어 경계를 판정하는
+// importBlockSegmentPolicy 정책 객체(RD-001~RD-005의 판정을 한곳에 모은다).
+// 판정이 읽는 태그 이름 표(headingLevelByTagName 등)는 block-tag-names.ts가
+// 소유한다(Issue #369).
 import type { HeadingBlock } from "@cp949/geul-model";
 
 import {
@@ -10,28 +11,22 @@ import {
   isTransparentListTag,
   NESTED_BOUNDARY_TAG_NAMES,
 } from "./block-segmenter.js";
+import {
+  CAPTION_WRAPPER_TAG_NAME,
+  CODE_BLOCK_TAG_NAME,
+  DIVIDER_TAG_NAME,
+  headingLevelByTagName,
+  MEDIA_WRAPPER_TAG_NAME,
+  TABLE_TAG_NAME,
+  TOGGLE_TAG_NAME,
+} from "./block-tag-names.js";
 import { propertyString } from "./hast-properties.js";
 import { isElementNode } from "./import-html-helpers.js";
 import { isMediaNode } from "./import-html-media.js";
 import type { HtmlElementNode } from "./inline-content.js";
 
-// heading 태그명 → model HeadingBlock["level"]. h1~h6 전부가 heading이다
-// (DELTA-06, Issue #38 — model이 level 1~6을 허용하고 sanitize도 h4~h6를
-// 살린다). 정규식 + Number() + 캐스트 대신 표를 쓰는 이유: 표의 값 타입이
-// 곧 model 계약이라 세그먼트의 level이 캐스트 없이 HeadingBlock["level"]로
-// 좁혀지고(segmentBlocks<Level>), 범위 검증을 io에 중복하지 않는다
-// (G-CNV-001 — 최종 검증은 parseDocument). Record 대신 Map인 이유는
-// "constructor" 같은 프로토타입 키가 태그명으로 들어와도 값을 돌려주지
-// 않게 하기 위해서다. findChildrenWrapper의 자기 콘텐츠 판정도 이 표를
-// 공유해 두 자리의 heading 태그 집합이 어긋나지 않는다.
-export const headingLevelByTagName = new Map<string, HeadingBlock["level"]>([
-  ["h1", 1],
-  ["h2", 2],
-  ["h3", 3],
-  ["h4", 4],
-  ["h5", 5],
-  ["h6", 6],
-]);
+// 소비처(import-html-wrappers.ts 등)가 이 module에서 읽도록 다시 export한다.
+export { headingLevelByTagName };
 
 // 코드블록 caption(RD-002-DELTA-03)의 <figure><pre>…</pre>
 // <figcaption>…</figcaption></figure> 래핑 판별. isMediaNode(import-html-
@@ -45,13 +40,13 @@ export const headingLevelByTagName = new Map<string, HeadingBlock["level"]>([
 // 경고 없이 사라진다. 승격하지 않으면 figure는 div처럼 문단 경계가 되어
 // 자식 글자가 문서 순서대로 형제 블록에 남는다.
 const isCodeBlockFigureNode = (node: HtmlElementNode): boolean => {
-  if (node.tagName !== "figure") return false;
+  if (node.tagName !== MEDIA_WRAPPER_TAG_NAME) return false;
   let preCount = 0;
   let figcaptionCount = 0;
   for (const child of node.children) {
     if (isElementNode(child)) {
-      if (child.tagName === "pre") preCount += 1;
-      else if (child.tagName === "figcaption") figcaptionCount += 1;
+      if (child.tagName === CODE_BLOCK_TAG_NAME) preCount += 1;
+      else if (child.tagName === CAPTION_WRAPPER_TAG_NAME) figcaptionCount += 1;
       else return false;
     } else if (child.type === "text" && child.value.trim() !== "") {
       return false;
@@ -74,9 +69,9 @@ const isCalloutNode = (node: HtmlElementNode): boolean =>
 // 경계가 아니면 바깥 문단에 구분자 없이 이어 붙고, 소스 공백 접기가 경계의
 // 공백을 지워 단어가 붙는다(Issue #323).
 const importOnlyNestedBoundaryTagNames = new Set([
-  "details",
-  "figcaption",
-  "figure",
+  TOGGLE_TAG_NAME,
+  CAPTION_WRAPPER_TAG_NAME,
+  MEDIA_WRAPPER_TAG_NAME,
   "summary",
 ]);
 
@@ -105,10 +100,10 @@ export const importBlockSegmentPolicy: BlockSegmentPolicy<
   // 읽어 이 판정에 오지 않는다. isTransparent보다 먼저 판정된다.
   isListTag: isTransparentListTag,
   omitStructuralAncestors: true,
-  isTableNode: (node) => node.tagName === "table",
-  isDividerTag: (tagName) => tagName === "hr",
+  isTableNode: (node) => node.tagName === TABLE_TAG_NAME,
+  isDividerTag: (tagName) => tagName === DIVIDER_TAG_NAME,
   isQuoteTag: (tagName) => tagName === "blockquote",
-  isCodeBlockTag: (tagName) => tagName === "pre",
+  isCodeBlockTag: (tagName) => tagName === CODE_BLOCK_TAG_NAME,
   isCodeBlockFigureNode,
   isMediaNode,
   isCalloutNode,

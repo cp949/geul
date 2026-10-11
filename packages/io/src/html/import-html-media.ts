@@ -16,6 +16,7 @@ import {
   sanitizeInlineText,
 } from "@cp949/geul-model";
 
+import { MEDIA_VISUAL_TAG_NAMES } from "./block-tag-names.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
 import {
@@ -67,13 +68,7 @@ const hasPreChild = (node: HtmlElementNode): boolean =>
 // mediaTypeFromNode가 유효값을 돌려줄 때만 media로 승격한다 — 그 외(마커
 // 없는 임의 <a>, children wrapper div 등)는 기존 처리 경로에 그대로 남는다.
 export const isMediaNode = (node: HtmlElementNode): boolean => {
-  if (
-    node.tagName === "img" ||
-    node.tagName === "video" ||
-    node.tagName === "audio"
-  ) {
-    return true;
-  }
+  if (MEDIA_VISUAL_TAG_NAMES.has(node.tagName)) return true;
   if (
     node.tagName === "a" ||
     node.tagName === "div" ||

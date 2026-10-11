@@ -38,10 +38,11 @@ describe("HTML 보안", () => {
 
   // DELTA-06(Issue #38): model HeadingBlock.level이 1~6으로 넓어지면서
   // h4~h6가 문서 import 공유 목록(htmlAllowedTagNames/htmlSanitizeSchema)과
-  // supportedBlockNames(import-warnings.ts)에 함께 들어왔다 — importHtml은
-  // h4를 더 이상 문단으로 강등하지 않고 heading 4로 들여오며, 강등이
-  // 없으므로 SAFE_BLOCK_DOWNGRADED도 내지 않는다(G-CNV-002: 경고 목록은
-  // 실제 지원과 일치). 위 aside 사례(여전히 미지원)와 대비되는 계약이다.
+  // 블록 태그 표(IMPORT_BLOCK_TAG_NAMES, block-tag-names.ts)에 함께
+  // 들어왔다 — importHtml은 h4를 더 이상 문단으로 강등하지 않고 heading 4로
+  // 들여오며, 강등이 없으므로 SAFE_BLOCK_DOWNGRADED도 내지 않는다
+  // (G-CNV-002: 경고 목록은 실제 지원과 일치). 위 aside 사례(여전히 미지원)와
+  // 대비되는 계약이다.
   it("importHtml은 h4를 heading 4로 들여오고 SAFE_BLOCK_DOWNGRADED를 내지 않는다", () => {
     const result = importHtml("<h4>x</h4>");
     expect(result.ok).toBe(true);
@@ -60,7 +61,7 @@ describe("HTML 보안", () => {
 
   // div는 block-segmenter.ts의 재귀 경계라 그 안의 h4도 최상위 h4와 같은
   // 블록 위치다 — import-warnings.ts의 topLevel 판정이 div를 통과해
-  // 내려가도(isBlockBoundaryTag) h4가 이제 supportedBlockNames에 있으므로
+  // 내려가도(isBlockBoundaryTag) h4가 이제 IMPORT_BLOCK_TAG_NAMES에 있으므로
   // 경고가 없고, segmentBlocks가 div 안 h4를 heading 세그먼트로 인식한다.
   // (div를 통과한 topLevel 판정 자체가 살아 있는지는 바로 아래 span 사례가
   // 계속 고정한다.)
@@ -465,8 +466,8 @@ describe("HTML 보안", () => {
   // 않아 남아 있었다 — sanitize가 이 다섯 태그를 unwrap해 인접 텍스트가
   // 구분자 없이 병합됐다(아키텍처 리뷰 2차 후보 G). documentFromRoot가
   // clipboard-table-parser.ts와 같은 재귀 경계 인식(block-segmenter.ts)을
-  // 쓰도록 바꿔 더 이상 병합되지 않고, supportedBlockNames
-  // (import-warnings.ts)도 함께 갱신해 SAFE_BLOCK_DOWNGRADED가 나지 않는다.
+  // 쓰도록 바꿔 더 이상 병합되지 않고, IMPORT_BLOCK_TAG_NAMES
+  // (block-tag-names.ts)도 함께 갱신해 SAFE_BLOCK_DOWNGRADED가 나지 않는다.
   it("div 두 개는 강등 경고 없이 각각 별도 문단이 된다", () => {
     const result = importHtml("<div>one</div><div>two</div>");
     expect(result.ok).toBe(true);

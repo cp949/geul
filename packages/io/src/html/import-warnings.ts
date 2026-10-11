@@ -4,6 +4,7 @@ import {
   isTransparentListTag,
   NESTED_BOUNDARY_TAG_NAMES,
 } from "./block-segmenter.js";
+import { IMPORT_BLOCK_TAG_NAMES } from "./block-tag-names.js";
 import {
   findBlockBearingColorTags,
   type HtmlElementNode,
@@ -180,48 +181,17 @@ const unsafeElementNames = new Set([
   "select",
   "textarea",
 ]);
-// div/li/blockquote/ul/ol은 htmlAllowedTagNames가 이제 문단 경계로 허용하고
-// (아키텍처 리뷰 2차 후보 G), h4~h6·hr은 DELTA-06(Issue #38)이 heading 4~6·
-// divider 매핑으로 승격했다 — sanitize가 더 이상 이 태그를 unwrap하지
-// 않으므로 SAFE_BLOCK_DOWNGRADED로 강등됐다고 보고하면 사실과 어긋난다
-// (G-CNV-002: 경고 목록은 실제 지원과 일치해야 한다).
-// 이 집합은 raw HAST(sanitize 이전)를 검사하므로 sanitize 허용 목록과
-// 별개로 직접 갱신해야 한다 — 둘을 하나로 합치면 이 파일이 sanitize-schema
-// 구현 디테일에 결합된다.
-const supportedBlockNames = new Set([
-  "p",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "hr",
-  "pre",
-  "div",
-  "li",
-  "blockquote",
-  "ul",
-  "ol",
-  "table",
-  // details는 toggleListItem의 HTML 표현이다(RD-005-DELTA-01, 로드맵 D4).
-  // table과 같은 이유로 자식(summary/children
-  // div/내부 hN)은 별도 등록이 필요 없다 — details는 isBlockBoundaryTag에
-  // 없어 자식으로 내려가면 topLevel이 자동으로 꺼진다(150행 부근 주석).
-  "details",
-  // 4종 미디어 블록(file/image/video/audio, spec §7.1)의 bare 시각
-  // 태그·wrapper다(RD-001-DELTA-02). figure와 같은 이유로 자식(img/a/
-  // figcaption)은 별도 등록이 필요 없다 — figure/img/video/audio 모두
-  // isBlockBoundaryTag에 없어 자식으로 내려가면 topLevel이 꺼진다. own-format
-  // File <a>(마커 있는 <a>)는 태그명 집합이 아니라 isOwnMediaAnchorElement
-  // 노드 판정으로 별도 처리한다(아래) — <a>는 일반 링크의 보편적 캐리어라 이
-  // 집합에 통째로 넣으면 마커 없는 임의 링크까지 downgrade 경고가 사라진다.
-  "img",
-  "video",
-  "audio",
-  "figure",
-  "figcaption",
-]);
+// 변환기가 블록으로 읽는 태그는 변환기와 같은 표를 읽는다
+// (block-tag-names.ts의 IMPORT_BLOCK_TAG_NAMES, Issue #369). 이 파일이 목록을
+// 따로 두면 변환기에 블록 태그가 늘 때 거짓 강등 경고가 난다(G-CNV-002).
+// 이 집합은 raw HAST(sanitize 이전)를 검사한다. sanitize 허용 목록에서
+// 파생하지 않는다 — 합치면 이 파일이 sanitize-schema 구현 디테일에
+// 결합된다(ADR-0003).
+// 표에 없는 태그는 계속 강등 경고 대상이다. 단독 summary가 그 예다.
+// own-format <a>는 표가 아니라 아래 isOwnMediaAnchorElement 노드 판정으로
+// 처리한다. <a>는 일반 링크의 보편적 캐리어라 표에 넣으면 마커 없는 임의
+// 링크의 경고까지 사라진다.
+const supportedBlockNames = IMPORT_BLOCK_TAG_NAMES;
 
 // 마커가 있는 <a>는 변환기가 media 블록으로 읽는다. 마커 값 표는 변환기와
 // 공유한다(media-type-marker.ts, Issue #369). 값을 여기서 따로 알면 변환기에만
