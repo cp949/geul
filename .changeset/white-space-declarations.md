@@ -9,4 +9,4 @@
 - 상속 키워드(`inherit` 등)에 붙은 `!important`도 칸을 차지한다. `white-space:inherit !important;white-space:pre`는 부모 모드를 따른다.
 - 값 안 `/* */` 주석은 값을 끊지 않는다. `white-space:/*c*/pre`는 공백을 보존한다.
 - 한계: 속성 이름 앞 쓰레기 글자는 무시한다. `x white-space:pre`와 `_white-space:pre`는 공백을 보존한다. `white-space:pre;_white-space:normal`은 공백을 접는다. Chromium은 이런 선언을 버린다. 이전에는 Chromium과 같았다.
-- 한계: 닫히지 않은 따옴표가 개행을 넘고(`font-family:"a⏎;white-space:pre`), 따옴표 없는 `url(` 안의 `'`를 따옴표로 읽는다(`background:url(it's.png);white-space:pre`). 둘 다 뒤 `white-space` 선언을 삼켜 부모 모드를 따른다. 이전에는 Chromium처럼 보존했다.
+- 한계: 따옴표 없는 `url(` 안의 `'`를 따옴표로 읽는다(`background:url(it's.png);white-space:pre`). 뒤 `white-space` 선언을 삼켜 부모 모드를 따른다. 이전에는 Chromium처럼 보존했다.
