@@ -96,6 +96,7 @@ const allowedDependencies = {
       unified: "11.0.5",
     },
     devDependencies: {
+      "@csstools/css-tokenizer": "4.0.0",
       "@types/node": "22.20.1",
       "hast-util-select": "6.0.4",
     },
