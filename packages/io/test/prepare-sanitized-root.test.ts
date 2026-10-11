@@ -2,7 +2,8 @@
  * `prepareSanitizedRoot`가 문서 import와 클립보드 표 파서의 공통 준비 순서를
  * 고정한다(arch-review 05 후보 02, 이슈 없음).
  *
- * - `\0`는 U+0001로 치환해 parse5가 지우지 못하게 한다. 두 schema 모두 같다.
+ * - U+0000은 치환하지 않는다. parse5가 지우는 결과 그대로 읽는다. 원문 위반
+ *   보존(U+0001 치환)은 importHtml 호출부의 몫이다.
  * - 깊이-캡으로 절단된 입력은 소스 공백을 접지 않는다.
  * - `data-geul-block-id`·`data-geul-cell-id`가 있으면 소스 공백을 접지 않는다.
  * - 블록을 품은 font·mark는 벗기고 벗긴 요소를 순서대로 돌려준다.
@@ -57,9 +58,9 @@ const prepared = (html: string, schema: Schema = htmlImportSanitizeSchema) => {
 };
 
 describe.each(schemas)("%s schema 공통 준비", (_name, schema) => {
-  it("\\0를 U+0001로 치환해 글자 수를 지킨다", () => {
+  it("U+0000은 치환하지 않고 parse5가 지운 채로 읽는다", () => {
     const { safeRoot } = prepared("<pre>a\0b</pre>", schema);
-    expect(textValues(safeRoot.children)).toEqual(["a\u0001b"]);
+    expect(textValues(safeRoot.children)).toEqual(["ab"]);
   });
 
   it("소스 공백 run을 접는다", () => {

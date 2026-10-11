@@ -46,7 +46,12 @@ export const importHtml = (
   ImportError
 > => {
   try {
-    const prepared = prepareSanitizedRoot(source, htmlImportSanitizeSchema);
+    // parse5는 U+0000을 AST 생성 전에 제거한다. 같은 길이의 다른 금지 C0로
+    // 치환해 raw warning과 CodeBlock strict validation이 원문 위반을 본다.
+    const prepared = prepareSanitizedRoot(
+      source.replace(/\0/g, "\u0001"),
+      htmlImportSanitizeSchema,
+    );
     if (prepared === undefined) {
       return {
         ok: false,

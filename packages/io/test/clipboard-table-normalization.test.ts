@@ -350,3 +350,40 @@ describe("이슈 116: rowSpan이 걸린 셀의 정당한 colspan을 자기 혼�
     });
   });
 });
+
+describe("클립보드 표 파서의 U+0000 입력", () => {
+  // 클립보드 경로에는 경고 채널이 없다. parse5가 U+0000을 지우는 결과 그대로
+  // 읽어야 한다. importHtml만 원문 위반을 보려고 U+0001로 치환한다.
+  const cellTable = "<table><tbody><tr><td>a</td></tr></tbody></table>";
+
+  it("표 밖 문단의 U+0000은 지워진 채로 공백이 접힌다", () => {
+    const result = parseClipboardTable({
+      html: `<p>x \u0000 y</p>${cellTable}`,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: [{ type: "paragraph", content: [{ text: "x y" }] }, {}],
+    });
+  });
+
+  it("U+0000과 공백뿐인 표 밖 요소는 빈 문단을 만들지 않는다", () => {
+    const result = parseClipboardTable({
+      html: `<div>\u0000 </div>${cellTable}`,
+    });
+
+    expect(result).toMatchObject({ ok: true, value: [{ type: "table" }] });
+    expect(result.ok && result.value).toHaveLength(1);
+  });
+
+  it("href 속에 든 U+0000은 지워진 채로 링크를 남긴다", () => {
+    const html =
+      '<table><tbody><tr><td><a href="http://a\u0000b">l</a></td></tr></tbody></table>';
+
+    const result = parseClipboardTable({ html });
+    const table = getTableFromResult(result);
+    expect(table?.rows[0]?.cells[0]?.content).toMatchObject([
+      { text: "l", marks: [{ type: "link" }] },
+    ]);
+  });
+});

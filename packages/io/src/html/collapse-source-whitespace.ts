@@ -61,8 +61,8 @@ const isNonEmptyString = (value: unknown): boolean =>
 
 // 우리 export가 낸 조각인지 보는 표식이다. 블록은 `data-geul-block-id`, 표
 // 셀은 `data-geul-cell-id`를 갖는다. 하나라도 있으면 입력 전체가 우리 형식
-// 이다. export는 공백을 그대로 내므로 접으면 왕복이 깨진다. 호출부(import-
-// html.ts)가 접기 호출 여부를 정한다.
+// 이다. export는 공백을 그대로 내므로 접으면 왕복이 깨진다. 호출부(prepare-
+// sanitized-root.ts)가 접기 호출 여부를 정한다.
 export const hasGeulIdentityAttribute = (root: HtmlRoot): boolean => {
   const stack: HtmlNode[] = [...root.children];
   for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
