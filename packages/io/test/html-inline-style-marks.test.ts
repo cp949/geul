@@ -1305,7 +1305,6 @@ describe("text-decoration 함수 토큰의 괄호 짝 (Issue #366)", () => {
   // 무효이고 값에 치환 함수가 있으므로 꺼짐이다.
   it.each([
     "underline var(--x)foo(1)",
-    "underline var(--x)var(--y)",
     "underline var(--x)(",
     "underline foo var(--x",
     "underline attr(x",
@@ -1354,19 +1353,27 @@ describe("text-decoration 함수 토큰의 괄호 짝 (Issue #366)", () => {
     },
   );
 
-  // 의도한 차이다. `)` 바로 뒤에 공백 없이 붙은 유효 토큰을 Chromium은 새
-  // 토큰으로 받아 밑줄로 읽는다. 우리는 토큰을 공백과 깊이 0에서만 끊어
-  // `)` 뒤 글자가 남은 토큰을 무효로 본다. `valueTokenEnd`를 바꿔야 해서 범위
-  // 밖이다. #363 구현도 같았다.
+  // `)` 바로 뒤에 공백 없이 붙은 토큰은 새 component value다. Chromium과 같이
+  // 유효 토큰이면 받는다(Issue #368).
+  // 치환 함수 뒤에 붙은 토큰도 새 component value다. 닫힌 치환 함수는 칸을
+  // 차지하지 않고 건너뛴다. 공백이 있는 `var(--x) var(--y)`와 같다. Chromium은
+  // `--x`·`--y`가 정의돼 있으면 밑줄이고 없으면 꺼짐이다(Issue #368).
+  it.each(["underline var(--x)var(--y)", "underline var(--x)red"])(
+    "text-decoration:%s는 닫힌 치환 함수를 건너뛰고 밑줄이다",
+    (value) => {
+      expectBothPriors("text-decoration", value, UNDERLINE);
+    },
+  );
+
   it.each([
     "underline calc(1px)red",
     "underline calc(1px)solid",
     "underline rgb(0,0,0)2px",
     "calc(1px)underline",
   ])(
-    "text-decoration:%s는 Chromium은 밑줄이지만 ) 뒤 글자가 붙어 무효라 앞의 값을 지킨다",
+    "text-decoration:%s는 ) 뒤에 붙은 유효 토큰을 새 토큰으로 읽어 밑줄이다",
     (value) => {
-      expectInvalid("text-decoration", value);
+      expectBothPriors("text-decoration", value, UNDERLINE);
     },
   );
 
@@ -1540,34 +1547,68 @@ describe("text-decoration이 사용자 정의 함수 호출을 꺼짐으로 읽�
     expectInvalid("text-decoration-line", "underline --f(1px))");
   });
 
-  // 의도한 차이다. 이름은 ASCII 글자만 읽는다. Chromium은 비ASCII 글자와 `\`
-  // 이스케이프도 이름 글자로 읽어 아래 값을 호출로 보고 꺼짐으로 읽는다. 우리는
-  // 호출로 보지 않고 모르는 함수 토큰이라 무효다. `isNameCharacter`를 넓히면
-  // 치환 함수 판정(`évar(`)도 바뀌어 범위 밖이다.
+  // 이름은 이스케이프를 푼 함수 이름이다. 비ASCII 글자와 `\` 이스케이프도 이름
+  // 글자라 Chromium처럼 호출이고 꺼짐이다(Issue #368 재현 10행).
   it.each(["underline --é(1px)", "underline --\\66(1px)"])(
-    "text-decoration:%s는 Chromium은 꺼짐이지만 ASCII 이름만 읽어 무효라 앞의 값을 지킨다",
+    "text-decoration:%s는 비ASCII·이스케이프 이름도 호출이라 꺼짐이다",
+    (value) => {
+      expectBothPriors("text-decoration", value, NO_LINE);
+    },
+  );
+
+  // 따옴표 안 낱말은 문자열 토큰이다. 문자열은 호출도 치환도 아니라 Chromium처럼
+  // 무효다(Issue #368 재현 11행). 최상위 `{}` 블록은 안쪽에 호출·치환 함수가 있어도
+  // 값을 무효로 만든다.
+  it.each([
+    'underline "a --f(1px)"',
+    "underline 'a --f(1px)'",
+    'underline "var(--x)"',
+    'underline foo "var(--x)"',
+    "underline {a --f(1px)}",
+    "underline {a var(--x)}",
+    "underline {a} var(--x)",
+    "underline var(--x) {a}",
+    "underline x {var(--x)}",
+  ])(
+    "text-decoration:%s는 문자열이거나 최상위 {} 블록이라 무효라 앞의 값을 지킨다",
     (value) => {
       expectInvalid("text-decoration", value);
     },
   );
 
-  // 의도한 차이다. Chromium은 아래 값을 무효로 버린다. 따옴표 안 문자열이거나
-  // `{}` 블록 안이라서다. 우리는 호출 탐색이 따옴표·블록을 구분하지 않아
-  // 꺼짐이다. 치환 함수 탐색(`hasSubstitutionFunction`)과
-  // 같은 한계다. `env(`·`attr(` 인자의 호출은 Chromium이 무효로 보지만 우리는
-  // 꺼짐이다. 이전에는 치환 토큰으로 읽어 밑줄만 남았다.
+  // 소괄호·함수·대괄호 안에서는 `{}` 블록도 안쪽 호출·치환 함수를 찾는다.
   it.each([
-    'underline "a --f(1px)"',
-    "underline 'a --f(1px)'",
-    "underline {a --f(1px)}",
-    "underline env(--f(1))",
-    "underline attr(--f(1))",
-  ])(
-    "text-decoration:%s는 Chromium은 무효지만 따옴표·블록·url 인자를 구분하지 않아 꺼짐이다",
+    "underline ({a --f(1)})",
+    "underline foo({a --f(1)})",
+    "underline ({a var(--x)})",
+    "underline [a --f(1px)]",
+    "underline x[--f(1px)]",
+    "underline [var(--x)]",
+    "underline --f({a})",
+  ])("text-decoration:%s는 안쪽에 호출·치환 함수가 있어 꺼짐이다", (value) => {
+    expectBothPriors("text-decoration", value, NO_LINE);
+  });
+
+  // 의도한 차이다. Chromium은 아래 값을 무효로 버린다. 우리는 `env(`·`attr(` 인자의
+  // 호출을 구분하지 않고 꺼짐으로 읽는다(값 문법). 이전에는 치환 토큰으로 읽어
+  // 밑줄만 남았다.
+  it.each(["underline env(--f(1))", "underline attr(--f(1))"])(
+    "text-decoration:%s는 Chromium은 무효지만 치환 함수 인자를 구분하지 않아 꺼짐이다",
     (value) => {
       expectBothPriors("text-decoration", value, NO_LINE);
     },
   );
+
+  // 주석은 토큰을 끊는다. `underline/**/overline`은 두 낱말이다.
+  it("text-decoration:underline/**/overline은 두 line 낱말이다", () => {
+    expect(decorationOf("text-decoration:underline/**/overline")).toEqual(
+      UNDERLINE,
+    );
+  });
+
+  it("text-decoration:under/**/line은 낱말 둘이라 무효다", () => {
+    expectInvalid("text-decoration", "under/**/line");
+  });
 
   // 따옴표 없는 url 안의 `(`·공백은 bad url이다. 선언 단계가 그 선언을
   // 버리므로 Chromium처럼 무효다(Issue #368).
@@ -1578,10 +1619,9 @@ describe("text-decoration이 사용자 정의 함수 호출을 꺼짐으로 읽�
     },
   );
 
-  // 의도한 차이다. Chromium은 따옴표 안 `)`를 문자열로 보아 호출이 닫히고 꺼짐이다.
-  // 우리는 따옴표를 구분하지 않아 그 `)`를 바깥 `)`로 세어 무효다(#366 한계).
-  it('text-decoration:underline --f("a)")는 Chromium은 꺼짐이지만 따옴표 안 )를 바깥 )로 세어 무효라 앞의 값을 지킨다', () => {
-    expectInvalid("text-decoration", 'underline --f("a)")');
+  // 따옴표 안 `)`는 문자열 안이라 호출을 닫지 않는다. Chromium처럼 꺼짐이다.
+  it('text-decoration:underline --f("a)")는 따옴표 안 )를 문자열로 읽어 꺼짐이다', () => {
+    expectBothPriors("text-decoration", 'underline --f("a)")', NO_LINE);
   });
 
   // 의도한 차이다. Chromium은 `var(--x(1))`을 파싱 단계에서 버려 무효다. 우리는
@@ -1634,6 +1674,10 @@ describe("font-style 값 판정", () => {
     ["oblique 1rad", "italic"],
     ["oblique 1turn", "italic"],
     ["oblique -1grad", "italic"],
+    // 주석은 토큰을 끊고, 이스케이프는 푼 낱말로 읽는다(Issue #368).
+    ["oblique/**/10deg", "italic"],
+    ["italic/**/", "italic"],
+    ["it\\61 lic", "italic"],
     ["normal", "normal"],
     ["initial", "normal"],
     ["inherit", "inherit"],
@@ -1656,6 +1700,8 @@ describe("font-style 값 판정", () => {
     "oblique 5.deg",
     "oblique 10deg 20deg",
     "oblique 10deg foo",
+    "ob/**/lique",
+    'italic"a"',
     "oblique italic",
     "oblique inherit",
     "italic foo",
@@ -1727,7 +1773,7 @@ describe("인라인 서식 선언 분리", () => {
   });
 });
 
-// Issue #368 재현 3·4·9행의 importHtml 결과다. 기대값은 Chromium 153.0.8010.12
+// Issue #368 재현 3·4·9·10·11행의 importHtml 결과다. 기대값은 Chromium 153.0.8010.12
 // 실측(2026-10-11)이다.
 describe("span style의 선언 단계 Chromium 동등성 (Issue #368)", () => {
   it("재현 3행: 이름에 이스케이프가 든 url 함수의 bad url 선언만 버리고 뒤 color를 읽는다", () => {
@@ -1750,5 +1796,21 @@ describe("span style의 선언 단계 Chromium 동등성 (Issue #368)", () => {
     expect(
       paragraphContent(`<span style="_white-space:pre">a  b</span>`),
     ).toEqual([{ text: "a b" }]);
+  });
+
+  it("재현 10행: 이름이 비ASCII 글자인 사용자 정의 함수 호출은 장식을 끈다", () => {
+    expect(
+      paragraphContent(
+        `<span style="text-decoration:underline;text-decoration:underline --é(x)">a</span>`,
+      ),
+    ).toEqual([{ text: "a" }]);
+  });
+
+  it("재현 11행: 따옴표 안 사용자 정의 함수 모양은 호출이 아니라 무효 선언이라 앞의 밑줄을 지킨다", () => {
+    expect(
+      paragraphContent(
+        `<span style="text-decoration:underline;text-decoration:line-through &quot;a --f(1px)&quot;">a</span>`,
+      ),
+    ).toEqual([{ text: "a", marks: [{ type: "underline" }] }]);
   });
 });

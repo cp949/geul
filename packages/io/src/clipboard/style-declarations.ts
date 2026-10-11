@@ -1,5 +1,6 @@
 import { isCanonicalCellAlign, isCanonicalCellColor } from "@cp949/geul-model";
 
+import type { CssComponentValue } from "../css/component-values.js";
 import type { CssDeclaration } from "../css/declarations.js";
 import { asciiLowerCase } from "../css/tokens.js";
 import {
@@ -610,50 +611,31 @@ const CSS_WIDE_KEYWORDS: ReadonlySet<string> = new Set([
   "revert-layer",
 ]);
 
-// 한 값 안에서 괄호 밖 공백까지가 토큰이다. 괄호 안은 공백이 있어도 한
-// 토큰이다(`rgb(0, 0, 0)`). `from`은 공백이 아닌 글자를 가리켜야 하고, 토큰은
-// 글자를 하나 이상 먹는다. `fontTokenEnd`와 달리 `/`에서 끊지 않는다.
-const valueTokenEnd = (value: string, from: number): number => {
-  let depth = 0;
-  let index = from;
-  while (index < value.length) {
-    const character = value[index] as string;
-    if (character === "(") {
-      depth += 1;
-    } else if (character === ")") {
-      if (depth > 0) depth -= 1;
-    } else if (depth === 0 && isCssSpace(character)) {
-      break;
-    }
-    index += 1;
-  }
-  return index;
-};
-
-// font-style 값 하나(소문자·양끝 공백 걷음)를 읽는다. 값 전체가 문법이다:
-// 한 낱말(normal·italic·oblique·전역 키워드)이거나 `oblique <angle>`이다.
-// 각도는 deg·grad·rad·turn 단위가 있어야 하고 범위는 검사하지 않는다.
-// 무효면 undefined다. 유효하면 분류를 담아 돌려준다. revert·revert-layer는
-// 유효하지만 기울임을 정하지 않아 분류가 undefined다.
+// font-style 값(component value 목록)을 읽는다. 값 전체가 문법이다: 한 낱말
+// (normal·italic·oblique·전역 키워드)이거나 `oblique <angle>`이다. 각도는
+// deg·grad·rad·turn 단위가 있어야 하고 범위는 검사하지 않는다. 무효면
+// undefined다. 유효하면 분류를 담아 돌려준다. revert·revert-layer는 유효하지만
+// 기울임을 정하지 않아 분류가 undefined다.
 type FontStyleRead = { fontStyle: InlineFontStyle | undefined };
 
-const readFontStyle = (value: string): FontStyleRead | undefined => {
-  let index = skipCssSpace(value, 0);
-  if (index >= value.length) return undefined;
-  let end = valueTokenEnd(value, index);
-  const keyword = value.slice(index, end);
-  index = skipCssSpace(value, end);
+const readFontStyle = (
+  value: readonly CssComponentValue[],
+): FontStyleRead | undefined => {
+  const parts = value.filter((node) => node.type !== "whitespace");
+  const first = parts[0];
+  if (first?.type !== "ident") return undefined;
+  const keyword = asciiLowerCase(first.value);
 
   if (keyword === "oblique") {
-    if (index < value.length) {
-      end = valueTokenEnd(value, index);
-      const angle = readNumeric(value.slice(index, end));
-      if (angle === undefined || !ANGLE_UNITS.has(angle.unit)) return undefined;
-      index = skipCssSpace(value, end);
-    }
-    return index >= value.length ? { fontStyle: "italic" } : undefined;
+    if (parts.length === 1) return { fontStyle: "italic" };
+    const angle = parts[1];
+    return parts.length === 2 &&
+      angle?.type === "dimension" &&
+      ANGLE_UNITS.has(asciiLowerCase(angle.unit))
+      ? { fontStyle: "italic" }
+      : undefined;
   }
-  if (index < value.length) return undefined;
+  if (parts.length !== 1) return undefined;
 
   if (keyword === "italic") return { fontStyle: "italic" };
   if (keyword === "normal" || keyword === "initial") {
@@ -699,13 +681,17 @@ const DECORATION_STYLES: ReadonlySet<string> = new Set([
 ]);
 
 // thickness 토큰이다: auto·from-font·길이·백분율. 음수도 받는다. 단위 없는
-// 숫자는 0만 길이다.
-const isThicknessToken = (token: string): boolean => {
-  if (token === "auto" || token === "from-font") return true;
-  const numeric = readNumeric(token);
-  if (numeric === undefined) return false;
-  if (numeric.unit === "") return numeric.value === 0;
-  return numeric.unit === "%" || isCssLengthUnit(numeric.unit);
+// 숫자는 0만 길이다. 수식 함수는 호출부가 이름으로 본다.
+const isThicknessToken = (node: CssComponentValue): boolean => {
+  if (node.type === "ident") {
+    const word = asciiLowerCase(node.value);
+    return word === "auto" || word === "from-font";
+  }
+  if (node.type === "number") return node.value === 0;
+  if (node.type === "percentage") return true;
+  return (
+    node.type === "dimension" && isCssLengthUnit(asciiLowerCase(node.unit))
+  );
 };
 
 // 장식 값이 이름만 보고 받는 토큰의 이름 목록이다(Chromium 153 실측). 함수
@@ -791,192 +777,68 @@ const DECORATION_COLOR_IDENTIFIERS: ReadonlySet<string> = new Set([
   "-webkit-focus-ring-color",
 ]);
 
-// 치환 함수다. 값 어디에 있든 Chromium은 선언을 파싱 단계에서 버리지 않고,
-// 치환 결과로 계산 시점에 장식 여부를 정한다.
-const SUBSTITUTION_FUNCTIONS: readonly string[] = ["var", "env", "attr", "if"];
-
-// 첫 `(`가 `text[open]`인 토큰 `[open, end)`의 괄호 짝 상태다. `open`부터
-// `valueTokenEnd`와 같은 규칙으로 깊이를 센다(따옴표·이스케이프 안의 괄호도
-// 센다). 깊이가 0으로 돌아오는 첫 `)`를 보고 가른다.
-// - closed: 그 `)`가 토큰의 마지막 글자다.
-// - extra: 그 `)` 뒤에 글자가 남는다.
-// - open: 깊이가 0으로 돌아오지 못한다. 값 끝에서 닫은 것으로 읽는다. 열린
-//   괄호는 값 끝까지 한 토큰이라 이 토큰이 값의 마지막 토큰이다.
-// 글자를 대괄호로 읽고 토큰 구간 밖은 읽지 않는다. 함수 토큰 판정과 치환 토큰
-// 판정이 이 함수 하나를 쓴다.
-type ParenPairing = "closed" | "extra" | "open";
-
-const pairParens = (text: string, open: number, end: number): ParenPairing => {
-  let depth = 0;
-  for (let index = open; index < end; index += 1) {
-    const character = text[index];
-    if (character === "(") {
-      depth += 1;
-    } else if (character === ")") {
-      depth -= 1;
-      if (depth === 0) return index === end - 1 ? "closed" : "extra";
-    }
-  }
-  return "open";
-};
-
-// 값에 깊이 0의 `)`가 있는지 본다. 깊이는 `valueTokenEnd`와 같은 규칙으로
-// 센다. 값마다 한 번 훑는다.
-const hasStrayCloseParen = (value: string): boolean => {
-  let depth = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-    if (character === "(") {
-      depth += 1;
-    } else if (character === ")") {
-      if (depth === 0) return true;
-      depth -= 1;
-    }
-  }
-  return false;
-};
-
-// 함수 토큰의 이름이다. 첫 `(`가 맨 앞이 아니고 괄호 짝이 닫힘이거나 열림이면
-// 함수 토큰이다. `)` 뒤에 글자가 남으면 함수 토큰이 아니다. 그 글자가 유효
-// 토큰(`calc(1px)red`)이어도 같다. Chromium은 받지만 토큰을 `)`에서 끊으려면
-// `valueTokenEnd`를 바꿔야 해서 범위 밖이다. 안쪽은 읽지 않는다. 함수 토큰이
-// 아니면 undefined다.
-const functionTokenName = (token: string): string | undefined => {
-  const open = token.indexOf("(");
-  if (open <= 0) return undefined;
-  return pairParens(token, open, token.length) === "extra"
-    ? undefined
-    : token.slice(0, open);
-};
-
-const isNameCharacter = (character: string): boolean =>
-  (character >= "a" && character <= "z") ||
-  (character >= "0" && character <= "9") ||
-  character === "-" ||
-  character === "_";
-
-// `from`부터 이어지는 이름 글자 run의 끝 위치다.
-const nameRunEnd = (value: string, from: number): number => {
-  let index = from;
-  while (index < value.length && isNameCharacter(value[index] as string)) {
-    index += 1;
-  }
-  return index;
-};
-
-// 이름 글자 run `[from, runEnd)`가 치환 함수 이름이고 바로 뒤가 `(`인지 본다.
-// 글자를 대괄호로 비교한다. 긴 값에 String 메서드를 부르지 않는다.
-const isSubstitutionCallAt = (
-  value: string,
-  from: number,
-  runEnd: number,
+// 색 토큰인지 본다. 함수는 이름만 보고 안쪽은 읽지 않는다. 식별자는
+// 이스케이프를 푼 소문자 낱말로, `#` 토큰은 원문으로 `readCssColor`에 묻는다.
+const isDecorationColor = (
+  node: CssComponentValue,
+  word: string | undefined,
+  functionName: string | undefined,
 ): boolean => {
-  if (value[runEnd] !== "(") return false;
-  const length = runEnd - from;
-  for (const name of SUBSTITUTION_FUNCTIONS) {
-    if (name.length !== length) continue;
-    let offset = 0;
-    while (offset < length && value[from + offset] === name[offset]) {
-      offset += 1;
-    }
-    if (offset === length) return true;
+  if (functionName !== undefined) {
+    return DECORATION_COLOR_FUNCTIONS.has(functionName);
   }
-  return false;
-};
-
-// `[start, end)` 토큰이 `var(…)`처럼 치환 함수 호출 하나인지 본다. 이름 앞에
-// 다른 글자가 없고 괄호 짝이 닫혀야 한다. 열린 `var(--x`와 `)` 뒤에 글자가
-// 남은 `var(--x)foo`는 치환 토큰이 아니다. 토큰을 자르지 않고 대괄호로
-// 읽는다. 치환 토큰은 개수 제한이 없어, 토큰마다 긴 값에 `slice`를 부르면
-// 처리 문자 수가 입력 길이의 제곱으로 뛴다.
-const isSubstitutionToken = (
-  value: string,
-  start: number,
-  end: number,
-): boolean => {
-  const runEnd = nameRunEnd(value, start);
+  if (word !== undefined) {
+    return (
+      DECORATION_COLOR_IDENTIFIERS.has(word) ||
+      readCssColor(word).kind !== "invalid"
+    );
+  }
   return (
-    runEnd < end &&
-    isSubstitutionCallAt(value, start, runEnd) &&
-    pairParens(value, runEnd, end) === "closed"
+    node.type === "hash" &&
+    readCssColor(asciiLowerCase(node.text)).kind !== "invalid"
   );
 };
 
-// 값 어디에든(괄호 안 중첩 포함) 치환 함수 호출이 있는지 값마다 한 번 훑는다.
-// 호출은 이름 글자 run 바로 뒤가 `(`이고 run이 치환 함수 이름과 같은 경우다.
-// run은 가장 긴 구간이라 run 바로 앞 글자는 이름 글자가 아니다. 글자를
-// 대괄호로 읽는다. 따옴표 안은 구분하지 않는다. 따옴표 안의 `var(`도 호출로
-// 본다. 그런 토큰은 어차피 무효라 결과가 "무효" 대신 "꺼짐"이 되는 차이뿐이다.
-const hasSubstitutionFunction = (value: string): boolean => {
-  let index = 0;
-  while (index < value.length) {
-    if (!isNameCharacter(value[index] as string)) {
-      index += 1;
-      continue;
-    }
-    const runEnd = nameRunEnd(value, index);
-    if (isSubstitutionCallAt(value, index, runEnd)) return true;
-    index = runEnd;
-  }
-  return false;
-};
-
-// 이름 글자 run 바로 앞에 오면 `--f(`를 호출로 읽지 않게 하는 ASCII 글자다.
-// Chromium은 이 글자들 뒤의 `--f(`가 든 값을 무효로 버린다(실측). `!`·`#`·`@`
-// 는 단독 토큰이고, `{`·`}`·`]`는 블록 글자이고, 따옴표는 문자열 시작이다.
-const CALL_BLOCKING_PREFIX: ReadonlySet<string> = new Set([
-  "!",
-  "#",
-  "@",
-  "{",
-  "}",
-  "]",
-  '"',
-  "'",
+// 치환 함수다. 값 어디에 있든 Chromium은 선언을 파싱 단계에서 버리지 않고,
+// 치환 결과로 계산 시점에 장식 여부를 정한다.
+const SUBSTITUTION_FUNCTIONS: ReadonlySet<string> = new Set([
+  "var",
+  "env",
+  "attr",
+  "if",
 ]);
 
-// run 바로 앞 글자 `previous`가 호출을 막는지 본다. 비ASCII 글자는 Chromium이
-// 이름 글자로 읽어 `é--f`가 한 이름이 되므로 막는다.
-const blocksCustomFunctionCall = (previous: string | undefined): boolean =>
-  previous !== undefined &&
-  (CALL_BLOCKING_PREFIX.has(previous) || previous >= "\u0080");
+// 사용자 정의 함수 호출은 이름이 `--`로 시작하고 길이가 3 이상이다. `--(`는
+// 호출이 아니다.
+const isCustomFunctionName = (name: string): boolean =>
+  name.length >= 3 && name[0] === "-" && name[1] === "-";
 
-// 값 어디에든(괄호 안 중첩 포함) 사용자 정의 함수 호출이 있는지 값마다 한 번
-// 훑는다. 호출은 이름 글자 run이 `--`로 시작하고 길이가 3 이상이며 바로 뒤가
-// `(`인 경우다. `--f(`·`---(`는 호출이고 `--(`(run 길이 2)·`--f (`(공백)·
-// `foo--f(`(run이 `--`로 시작하지 않음)는 아니다. run 바로 앞 글자가
-// `CALL_BLOCKING_PREFIX`이거나 비ASCII 글자이면 호출이 아니다(`#--f(`·`é--f(`).
-// 이름 글자가 ASCII뿐이라 그런 글자 뒤에서 run이 새로 시작해 앞 글자를 따로
-// 봐야 한다. `@function` 정의는 스타일시트에만 둘 수 있고 `importHtml`은
-// `<style>`을 읽지 않아, 클립보드 입력의 호출은 늘 미정의다. 그래서 Chromium
-// 결과가 늘 꺼짐이다. 글자를 대괄호로 읽는다. 한계: 이름은 ASCII 글자만 읽는다.
-// 비ASCII·`\` 이스케이프 이름(`--é(`)은 호출로 보지 않는다. 따옴표 안 낱말
-// (`"a --f(1px)"`), `{}` 블록 안, `url(`·`env(`·`attr(` 인자의 호출은 구분하지
-// 않고 호출로 본다. Chromium은 그 값을 무효로 버린다.
-const hasCustomFunctionCall = (value: string): boolean => {
-  let index = 0;
-  while (index < value.length) {
-    if (!isNameCharacter(value[index] as string)) {
-      index += 1;
-      continue;
+// 값 안(함수와 블록 안쪽 포함)에 사용자 정의 함수 호출과 치환 함수가 있는지
+// 한 번 훑는다. 명시 스택으로 읽어 깊은 중첩에서도 호출 스택이 넘치지 않는다.
+// 문자열 토큰은 구조가 아니라 보지 않는다. 함수마다 이름을 한 번 읽는다.
+const findNestedFunctions = (
+  value: readonly CssComponentValue[],
+): { customCall: boolean; substitution: boolean } => {
+  let customCall = false;
+  let substitution = false;
+  const stack: (readonly CssComponentValue[])[] = [value];
+  while (stack.length > 0) {
+    for (const node of stack.pop() as readonly CssComponentValue[]) {
+      if (node.type === "function") {
+        const name = asciiLowerCase(node.name);
+        if (isCustomFunctionName(name)) customCall = true;
+        else if (SUBSTITUTION_FUNCTIONS.has(name)) substitution = true;
+        stack.push(node.value);
+      } else if (node.type === "block") {
+        stack.push(node.value);
+      }
     }
-    const runEnd = nameRunEnd(value, index);
-    if (
-      runEnd - index >= 3 &&
-      value[index] === "-" &&
-      value[index + 1] === "-" &&
-      value[runEnd] === "(" &&
-      !blocksCustomFunctionCall(value[index - 1])
-    ) {
-      return true;
-    }
-    index = runEnd;
   }
-  return false;
+  return { customCall, substitution };
 };
 
-// text-decoration 줄임 또는 text-decoration-line 값 하나(소문자)를 읽는다.
-// 무효면 undefined다. 문법(Chromium 실측)은 이렇다.
+// text-decoration 줄임 또는 text-decoration-line 값(component value 목록)을
+// 읽는다. 무효면 undefined다. 문법(Chromium 실측)은 이렇다.
 // - 전역 키워드는 값 하나로만 쓴다.
 // - line 낱말(underline·overline·line-through·blink)은 각각 한 번이고 서로
 //   붙어 있어야 한다. none·spelling-error·grammar-error는 다른 line 값과 못
@@ -987,26 +849,34 @@ const hasCustomFunctionCall = (value: string): boolean => {
 //   round·mod·rem·abs·hypot·-webkit-calc)다. 색은 css-color.ts가 읽는 색,
 //   색 함수 14개와 색 식별자 45개(시스템 색 등)다. 함수 토큰은 이름만 보고
 //   안쪽은 검증하지 않는다. Chromium은 `calc(1)`·`lab(foo)`를 무효로 보지만
-//   여기서는 받는다. 괄호 짝은 본다: 닫힌 토큰과 값 끝에서 닫은 것으로 읽는
-//   열린 토큰만 함수 토큰이고, `)` 뒤에 글자가 남은 토큰은 무효다.
-// - 깊이 0의 바깥 `)`가 값 어디에 있든 무효다. 치환 함수가 있어도 꺼짐이
-//   아니라 무효다(Chromium 실측). 값 맨 앞에서 한 번 훑어 거른다.
-// - 사용자 정의 함수 호출(`--f(…)`)이 값 어디에 있든 꺼짐이다. 바깥 `)` 검사
-//   다음, 토큰 분류 앞에서 판정한다. 호출 앞뒤 토큰의 유효 여부를 보지 않는다.
-// - 치환 함수(var·env·attr·if) 토큰은 닫혔을 때만 치환 토큰이다. 칸을 차지하지
+//   여기서는 받는다. 닫히지 않은 함수는 값 끝에서 닫은 것으로 읽는다.
+// - 최상위 `{}` 블록이 있으면 안쪽이 무엇이든 무효다. 소괄호·함수·대괄호 안의
+//   `{}`는 안쪽 호출·치환 함수를 아래 규칙대로 찾는다.
+// - 사용자 정의 함수 호출(`--f(…)`)이 값 어디에 있든 꺼짐이다. 호출 앞뒤
+//   토큰의 유효 여부를 보지 않는다.
+// - 치환 함수(var·env·attr·if)는 닫혔을 때만 치환 토큰이다. 칸을 차지하지
 //   않고 건너뛴다. line 낱말 연속을 끊는다. Chromium은 값 어디에든 인자가
 //   정상인 치환 함수가 있으면 선언을 버리지 않고 항상 앞 선언을 덮는다.
 //   인자가 비었거나 잘못된 호출은 Chromium이 버리지만 여기서는 이름만 본다.
 //   치환 결과를 알 수 없으므로 무효를 만났을 때 값에 치환 함수가 있으면
 //   장식을 끈다. 끝까지 유효해도 line 낱말도 단독 낱말도 못 봤다면 line 값을
 //   알 수 없어 선언을 버린다.
-// 무효를 찾는 즉시 끝낸다. 치환 함수 탐색은 무효를 찾았을 때 값마다 한 번이고
-// 사용자 정의 함수 호출 탐색은 값 앞에서 값마다 한 번이다.
-// 토큰마다 일정한 일만 하므로 값 길이에 선형이다.
+// 무효를 찾는 즉시 끝낸다. 함수 탐색은 값마다 한 번이고 component마다 일정한
+// 일만 하므로 값 길이에 선형이다.
 const readDecoration = (
-  value: string,
+  value: readonly CssComponentValue[],
   lineOnly: boolean,
 ): LineMarks | undefined => {
+  if (value.some((node) => node.type === "block" && node.open === "{")) {
+    return undefined;
+  }
+  const nested = findNestedFunctions(value);
+  if (nested.customCall) return NO_LINE_MARKS;
+
+  // 무효를 만났을 때의 결과다. 치환 함수가 있으면 치환 결과를 알 수 없어 꺼짐이다.
+  const invalid = (): LineMarks | undefined =>
+    nested.substitution ? NO_LINE_MARKS : undefined;
+
   let seenWords = 0;
   // 0은 line 낱말을 아직 못 봤고, 1은 line 낱말이 이어지는 중이고, 2는 line
   // 값이 끝났다는 표시다.
@@ -1016,39 +886,30 @@ const readDecoration = (
   let sawThickness = false;
   let sawColor = false;
   let sawSubstitution = false;
-  let tokenCount = 0;
-  let index = skipCssSpace(value, 0);
+  const nodes = value.filter((node) => node.type !== "whitespace");
 
-  if (hasStrayCloseParen(value)) return undefined;
-  if (hasCustomFunctionCall(value)) return NO_LINE_MARKS;
-
-  // 무효를 만났을 때의 결과다. 치환 함수가 있으면 치환 결과를 알 수 없어 꺼짐이다.
-  const invalid = (): LineMarks | undefined =>
-    hasSubstitutionFunction(value) ? NO_LINE_MARKS : undefined;
-
-  while (index < value.length) {
-    const end = valueTokenEnd(value, index);
-    const tokenStart = index;
-    tokenCount += 1;
-    index = skipCssSpace(value, end);
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index] as CssComponentValue;
 
     // 치환 토큰은 칸을 차지하지 않는다. 전역 키워드와 겹치지 않아 먼저 본다.
-    if (isSubstitutionToken(value, tokenStart, end)) {
+    const functionName =
+      node.type === "function" ? asciiLowerCase(node.name) : undefined;
+    if (
+      node.type === "function" &&
+      node.closed &&
+      SUBSTITUTION_FUNCTIONS.has(functionName as string)
+    ) {
       sawSubstitution = true;
       if (lineState === 1) lineState = 2;
       continue;
     }
 
-    const token = value.slice(tokenStart, end);
-    if (CSS_WIDE_KEYWORDS.has(token)) {
-      return tokenCount === 1 && index >= value.length
-        ? NO_LINE_MARKS
-        : invalid();
+    const word = node.type === "ident" ? asciiLowerCase(node.value) : undefined;
+    if (word !== undefined && CSS_WIDE_KEYWORDS.has(word)) {
+      return nodes.length === 1 ? NO_LINE_MARKS : invalid();
     }
 
-    const functionName = functionTokenName(token);
-
-    const wordBit = LINE_WORD_BITS.get(token);
+    const wordBit = word === undefined ? undefined : LINE_WORD_BITS.get(word);
     if (wordBit !== undefined) {
       if (lineState === 2 || sawAlone || (seenWords & wordBit) !== 0) {
         return invalid();
@@ -1059,27 +920,22 @@ const readDecoration = (
     }
     if (lineState === 1) lineState = 2;
 
-    if (LINE_ALONE_KEYWORDS.has(token)) {
+    if (word !== undefined && LINE_ALONE_KEYWORDS.has(word)) {
       if (lineState !== 0 || sawAlone) return invalid();
       sawAlone = true;
     } else if (lineOnly) {
       return invalid();
-    } else if (DECORATION_STYLES.has(token)) {
+    } else if (word !== undefined && DECORATION_STYLES.has(word)) {
       if (sawStyle) return invalid();
       sawStyle = true;
     } else if (
-      isThicknessToken(token) ||
+      isThicknessToken(node) ||
       (functionName !== undefined &&
         DECORATION_THICKNESS_FUNCTIONS.has(functionName))
     ) {
       if (sawThickness) return invalid();
       sawThickness = true;
-    } else if (
-      functionName !== undefined
-        ? DECORATION_COLOR_FUNCTIONS.has(functionName)
-        : DECORATION_COLOR_IDENTIFIERS.has(token) ||
-          readCssColor(token).kind !== "invalid"
-    ) {
+    } else if (isDecorationColor(node, word, functionName)) {
       if (sawColor) return invalid();
       sawColor = true;
     } else {
@@ -1087,7 +943,7 @@ const readDecoration = (
     }
   }
 
-  if (tokenCount === 0) return undefined;
+  if (nodes.length === 0) return undefined;
   if (sawSubstitution && seenWords === 0 && !sawAlone) return undefined;
   return {
     underline: (seenWords & UNDERLINE_BIT) !== 0,
@@ -1147,27 +1003,34 @@ export const readInlineStyleMarks = (
     important: false,
   };
 
-  for (const { name: property, text, important } of declarations) {
+  for (const {
+    name: property,
+    text,
+    value: components,
+    important,
+  } of declarations) {
     if (!INLINE_MARK_PROPERTIES.has(property)) continue;
-    const value = asciiLowerCase(text);
 
     if (property === "font-weight") {
-      const classified = classifyFontWeight(value);
+      const classified = classifyFontWeight(asciiLowerCase(text));
       if (classified !== undefined) applyMark(weight, classified, important);
     } else if (property === "font") {
       // 줄임은 굵기와 기울임을 함께 정한다. 굵기 토큰이 없으면 normal로 덮는다.
-      const shorthand = parseFontShorthand(value);
+      const shorthand = parseFontShorthand(asciiLowerCase(text));
       if (shorthand !== undefined) {
         applyMark(weight, shorthand.weight, important);
         applyMark(fontStyle, shorthand.fontStyle, important);
       }
     } else if (property === "font-style") {
-      const styleRead = readFontStyle(value);
+      const styleRead = readFontStyle(components);
       if (styleRead !== undefined) {
         applyMark(fontStyle, styleRead.fontStyle, important);
       }
     } else {
-      const lines = readDecoration(value, property === "text-decoration-line");
+      const lines = readDecoration(
+        components,
+        property === "text-decoration-line",
+      );
       if (lines !== undefined) applyMark(decoration, lines, important);
     }
   }

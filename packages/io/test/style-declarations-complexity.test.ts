@@ -27,10 +27,11 @@
  *   `parseFontShorthand`의 대괄호 읽기 절과 시간 상한 테스트가 덮는다.
  * - `parseFontShorthand`가 받은 `value`를 직접 읽는 것만 센다. `slice`로 만든
  *   토큰을 받아 대괄호로 읽는 `readNumeric`(css-color.ts)의 루프는 못 센다.
- * - 치환 함수 탐색(`hasSubstitutionFunction`)·괄호 짝 판정(`pairParens`)·바깥
- *   `)` 사전 검사(`hasStrayCloseParen`)·사용자 정의 함수 호출 탐색
- *   (`hasCustomFunctionCall`)의 대괄호 읽기는 `readInlineStyleMarks` 시간 상한
- *   테스트만 덮는다(Issue #363·#366·#367).
+ * - `readDecoration`·`readFontStyle`은 선언 값(component value)을 읽고 입력 글자를
+ *   읽지 않는다. 그 순회(`findNestedFunctions` 포함)는 이 계측에 보이지 않고
+ *   `readInlineStyleMarks` 시간 상한 테스트와 깊은 중첩 모양이 덮는다(Issue #363·
+ *   #366·#367·#368). 순회를 토큰마다 다시 시작하는 변이는 시간 상한 행이 끝나지
+ *   않아 잡힌다. 재귀 순회 변이는 깊은 중첩 모양이 호출 스택 초과로 잡는다.
  */
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -260,11 +261,10 @@ const inputShapes: Array<[string, (size: number) => string]> = [
     "text-decoration 치환 함수 이름과 비슷한 글자가 많은 입력",
     (size) => `text-decoration:underline ${"avar(".repeat(size)}`,
   ],
-  // 아래는 함수 토큰의 괄호 짝(Issue #366)이 만든 입력 모양이다. 짝 판정
-  // (`pairParens`)과 바깥 `)` 사전 검사(`hasStrayCloseParen`)는 글자를 대괄호로
-  // 읽어서 이 계측에 보이지 않는다. 이 모양들은 짝 판정이 닫힘·잉여 글자·열림
-  // 각 분기에서 String 메서드를 반복해 부르지 않는지 센다. 재순회 변이는 아래
-  // 시간 상한의 치환 토큰 행이 잡는다.
+  // 아래는 함수 토큰의 괄호 짝(Issue #366)이 만든 입력 모양이다. component value
+  // 순회는 입력 글자를 읽지 않아 이 계측에 보이지 않는다. 이 모양들은 열림·
+  // 닫힘·잉여 글자 각 분기가 String 메서드를 반복해 부르지 않는지 센다. 깊은
+  // 중첩 두 모양은 재귀 순회 변이를 호출 스택 초과로 잡는다.
   [
     "text-decoration 열린 괄호가 아주 많은 함수 토큰 하나인 입력",
     (size) => `text-decoration:underline calc${"(".repeat(size)}`,
@@ -290,15 +290,10 @@ const inputShapes: Array<[string, (size: number) => string]> = [
     "text-decoration 닫힌 뒤 잉여 글자가 붙은 치환 토큰이 긴 입력",
     (size) => `text-decoration:underline var(--x)${"a".repeat(size * 16)}`,
   ],
-  // 아래는 사용자 정의 함수 호출 탐색(Issue #367)이 만든 입력 모양이다. 탐색
-  // (`hasCustomFunctionCall`)은 글자를 대괄호로 읽어서 이 계측에 보이지 않는다.
-  // run이 아주 많은 두 모양("`--` 이름 run이 아주 많고 호출이 없는 입력",
-  // "호출이 값 맨 끝에 있는 긴 입력")은 이름 글자 run마다 `value.slice`로
-  // 앞부분을 잘라 보는 변이를 잡는다. 호출이 없는 입력은 탐색이 값 끝까지
-  // 가므로 run마다 하는 일이 다 드러난다. run이 하나인 두 모양(`--` 긴 이름
-  // run, `-` 긴 이름 run)은 `slice` 변이를 못 가려낸다. run이 하나라 호출이
-  // 한 번뿐이다. 이름 글자 run 안에서 한 글자씩 다시 시작하는 변이와 값 앞부분을
-  // 다시 읽는 변이는 아래 시간 상한이 잡는다.
+  // 아래는 사용자 정의 함수 호출 탐색(Issue #367)이 만든 입력 모양이다. 탐색은
+  // component value를 읽어 이 계측에 보이지 않는다. 호출이 없는 입력은 탐색이
+  // 값 끝까지 가므로 component마다 하는 일이 다 드러난다. 값 앞부분을 다시 읽는
+  // 변이는 아래 시간 상한이 잡는다.
   [
     "text-decoration `--` 이름 run이 아주 많고 호출이 없는 입력",
     (size) => `text-decoration:underline ${"--f ".repeat(size)}`,
@@ -469,6 +464,14 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
   // 변이로 확인한 RED다(2026-10-12, 40,000개). `readDecoration`의 토큰 루프 안에서
   // `hasStrayCloseParen(value)`를 토큰마다 다시 부르는 변이는 두 행이 41.0초와
   // 40.8초로 잡는다.
+  // Issue #368 RD-003이 `readDecoration`을 component value 위로 옮겨, 위에 적은
+  // 글자 스캐너(`hasSubstitutionFunction`·`pairParens`·`hasStrayCloseParen`·
+  // `hasCustomFunctionCall`)는 없다. 위 변이 서술은 옛 구현 기준 이력이다. 같은 두
+  // 행이 지금 잡는 변이는 `readDecoration`의 토큰 루프 안에서 `findNestedFunctions`를
+  // 토큰마다 다시 부르는 것이다. 그 변이는 두 행이 끝나지 않아(300초 넘음, 실측
+  // Node, 2026-10-12, 40,000개) 게이트가 시간 초과로 실패한다. 순회를 재귀로 바꾸는
+  // 변이는 깊은 중첩 모양 다섯 행과 이 파일의 "무효 토큰 뒤 치환 함수 이름과 비슷한
+  // 글자" 행이 호출 스택 초과로 잡는다.
   it.each([
     [
       "괄호 안 세미콜론",
