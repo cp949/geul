@@ -77,13 +77,16 @@ const valueShapes: Array<[string, (size: number) => string]> = [
 ];
 
 const declarationShapes: Array<[string, (size: number) => string]> = [
-  ["선언이 아주 많은 입력", (size) => "--a:1;".repeat(size)],
+  // 반복 단위가 긴 두 모양은 반복 수를 줄인다. Proxy 읽기 계측이 느려 전체
+  // 실행 부하에서 5초 timeout에 걸렸다(2026-10-12, 입력 32만 자). 증가율
+  // 비교는 크기와 무관하다.
+  ["선언이 아주 많은 입력", (size) => "--a:1;".repeat(size / 2)],
   ["값이 긴 선언", (size) => `--a:${"a ".repeat(size)}`],
   ["at-rule이 많은 입력", (size) => "@x;".repeat(size)],
   ["블록 at-rule이 많은 입력", (size) => "@x{}".repeat(size)],
   ["콜론 없는 선언이 많은 입력", (size) => "x;".repeat(size)],
   ["닫히지 않은 함수 뒤 세미콜론", (size) => `--a:f(${";".repeat(size)}`],
-  ["important 선언이 많은 입력", (size) => "--a:1!important;".repeat(size)],
+  ["important 선언이 많은 입력", (size) => "--a:1!important;".repeat(size / 4)],
   ["느낌표가 많은 값", (size) => `--a:1 ${"! ".repeat(size)}`],
   ["깊은 괄호 중첩 값", (size) => `--a:${"(".repeat(size)}`],
 ];
