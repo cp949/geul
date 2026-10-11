@@ -83,3 +83,44 @@ export const measureStringWorkload = (run: () => void): StringWorkload => {
   }
   return workload;
 };
+
+// 대괄호 읽기(`value[index]`)를 세는 계측이다. 위 String 메서드 계측은 글자를
+// 대괄호로 읽는 루프를 보지 못한다. `new String(value)`를 Proxy로 감싸 숫자 키
+// `get`만 센다. 함수 속성(`slice`·`charCodeAt` 등)은 target에 bind해 돌려주고
+// 세지 않는다. 계측 코드는 typeof와 Number 비교만 쓴다. String 메서드를 부르지
+// 않아 읽기 수가 오염되지 않고, 전역을 바꾸지 않아 되돌릴 것도 없다.
+// Proxy는 원시 문자열이 아니라서 `value === "inherit"` 같은 전체 일치 분기는
+// 타지 않는다. 호출부의 입력 모양은 그 분기 밖이어야 한다.
+// 읽기 수가 입력 길이의 `MAX_READS_PER_CHAR`배를 넘으면 던진다. vitest는 동기
+// 루프를 중간에 끊지 못한다. 재순회 회귀가 생기면 상한이 없을 때 실패 보고까지
+// 수 분에서 수십 분이 걸린다. 선형 구현의 읽기 수는 글자당 많아야 십여 회다.
+export const MAX_READS_PER_CHAR = 32;
+
+export const countIndexReads = (
+  value: string,
+  run: (proxy: string) => void,
+): number => {
+  let reads = 0;
+  const limit = value.length * MAX_READS_PER_CHAR;
+  const target = new String(value);
+  const proxy = new Proxy(target, {
+    get(boxed, key) {
+      if (
+        typeof key === "string" &&
+        key !== "" &&
+        Number.isInteger(Number(key))
+      ) {
+        reads += 1;
+        if (reads > limit) {
+          throw new Error(
+            `대괄호 읽기가 입력 길이 ${value.length}의 ${MAX_READS_PER_CHAR}배를 넘었다`,
+          );
+        }
+      }
+      const member: unknown = Reflect.get(boxed, key, boxed);
+      return typeof member === "function" ? member.bind(boxed) : member;
+    },
+  });
+  run(proxy as unknown as string);
+  return reads;
+};
