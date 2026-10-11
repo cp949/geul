@@ -356,10 +356,12 @@ describe("enabledBlockTypes 명령 분류 매트릭스(Issue #370)", () => {
 
   describe("거절 분류 명령", () => {
     it.each(rejectionEntries)(
-      "%s / %s: 거절하고 문서와 undo 스택을 바꾸지 않는다",
+      "%s / %s: 거절하고 문서·selection·stored mark·undo 스택을 바꾸지 않는다",
       (_command, _title, scenario) => {
         const { editor, tiptap } = setup(scenario.enabledBlockTypes);
         const before = editor.getDocument();
+        const selectionBefore = tiptap.state.selection;
+        const storedMarksBefore = tiptap.state.storedMarks;
         const undoBefore = undoDepth(tiptap.state);
 
         const result = scenario.run(editor);
@@ -369,6 +371,8 @@ describe("enabledBlockTypes 명령 분류 매트릭스(Issue #370)", () => {
           error: { code: scenario.code },
         });
         expect(editor.getDocument()).toEqual(before);
+        expect(tiptap.state.selection.eq(selectionBefore)).toBe(true);
+        expect(tiptap.state.storedMarks).toEqual(storedMarksBefore);
         expect(undoDepth(tiptap.state)).toBe(undoBefore);
       },
     );
