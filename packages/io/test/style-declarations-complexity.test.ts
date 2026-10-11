@@ -1,66 +1,53 @@
 /**
- * `parseInlineStyleMarks`·`parseStyleDeclarations`·`parseWhiteSpaceMode`가
- * style 입력 길이에 선형임을 시간이 아니라 관측 가능한 작업량으로 고정한다
- * (G-TST-004).
+ * 선언 판독기(`readInlineStyleMarks`·`readStyleDeclarations`·
+ * `readWhiteSpaceMode`·`hasComputedStyleDump`·`readDumpAuthorDeclarations`)와
+ * 그 앞단 `parseCssDeclarations`가 style 입력 길이에 선형임을 시간이 아니라
+ * 관측 가능한 작업량으로 고정한다(G-TST-004, Issue #368).
  *
- * 파서들은 큰 문자열을 `String.prototype`의 문자열 메서드(split·indexOf·slice·
- * trim 등)로 읽는다. 그 메서드를 감싸 두 축을 센다.
- * 1. 호출 횟수: 선언마다 다시 훑는 형태(이미 읽은 조각을 되돌아가 재처리)는
- *    호출 횟수가 선언 수의 제곱으로 뛴다.
- * 2. 처리 문자 수: 호출마다 수신 문자열의 길이를 더한다. 긴 문자열 전체를
- *    선언마다 다시 처리하거나, 긴 값을 위치마다 잘라 보는 형태는 호출 횟수가
- *    선형이어도 처리 문자 수가 제곱으로 뛴다. 호출 횟수만 세면 놓친다.
+ * 선언 분리는 css/ 토크나이저가 맡는다. 토크나이저는 입력을 `value[index]`로만
+ * 읽는다. 판독기는 선언 목록을 받는다. 테스트는 `style-declarations-support.ts`
+ * 래퍼로 `style` 문자열을 넣는다. 두 축을 센다.
+ * 1. String 메서드 작업량: 호출 횟수와 수신 문자열 길이 합
+ *    (`measureStringWorkload`). 정상 구현은 큰 입력에 String 메서드를 부르지
+ *    않는다. 작은 입력에서 작업량이 0이면 큰 입력에서도 0이어야 한다. 0이
+ *    아니면 증가율이 `MAX_GROWTH` 이하여야 한다.
+ * 2. 대괄호 읽기 수: `new String(value)`를 Proxy로 감싸 숫자 키 읽기를 센다
+ *    (`countIndexReads`). 읽기 수가 입력 길이 이상이고 증가율이 `MAX_GROWTH`
+ *    이하여야 한다. Proxy 계측은 느려 작은 크기(`READ_SIZE`)로 돌린다.
  *
- * 크기 N과 2N 입력의 작업량 증가율이 2 이하여야 한다. 입력 모양은 선언이 아주
- * 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력, 공백·토큰이 긴
- * 입력과 font 줄임, 선언 분리(닫히지 않은 따옴표·괄호, 개행이 끝내는
- * 따옴표, `[`·`{` 블록 스택, 따옴표 없는 `url(` 토큰), text-decoration·
- * font-style 값 판정(토큰이 많거나 긴 값, 치환 함수·함수 토큰·괄호 짝)이 만드는
+ * 크기 N과 2N 입력의 증가율을 비교한다. 입력 모양은 선언이 아주 많은 입력,
+ * 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력, 공백·토큰이 긴 입력과 font
+ * 줄임, 선언 분리(닫히지 않은 따옴표·괄호, 개행이 끝내는 따옴표, `[`·`{`
+ * 블록, 따옴표 없는 `url(` 토큰), text-decoration·font-style 값 판정이 만드는
  * 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
- * `parseInlineStyleMarks`와 `parseWhiteSpaceMode`(Issue #361)는
- * `parseStyleDeclarations`와 같은 흐름이다.
- * `splitDeclarations`가 `;`로 한 번 자르고 따옴표·블록 스택·주석 상태를 조각
- * 단위로 이어 붙인다. `readDeclaration`이 선언마다 글자를 한 번 훑고, 값 판정은 토큰마다
- * 일정한 일만 하며 무효를 찾는 즉시 끝낸다. 정규식을 쓰지 않는다. 공백 run
- * 입력에서 이차 시간이 되는 `\s*!important\s*$` 형태를 피했다.
- *
- * 한계: 정규식 엔진 내부 작업과 대괄호로 글자를 읽는 루프는 이 String 메서드
- * 계측에 잡히지 않는다.
- * - font 줄임 파서(`parseFontShorthand`)의 대괄호 읽기는 아래
- *   `parseFontShorthand`의 대괄호 읽기 절이 센다(Issue #340).
- *   `parseFontShorthand`가 받은 `value`를 직접 읽는 것만 센다. `slice`로 만든
+ * 한계: 정규식 엔진 내부 작업은 계측에 잡히지 않는다.
+ * - 대괄호 읽기 축은 `parseCssDeclarations`가 입력을 읽는 만큼만 센다. 판독기가
+ *   선언 값(`text`)을 대괄호로 다시 읽는 루프는 못 센다. 그 루프는 아래
+ *   `parseFontShorthand`의 대괄호 읽기 절과 시간 상한 테스트가 덮는다.
+ * - `parseFontShorthand`가 받은 `value`를 직접 읽는 것만 센다. `slice`로 만든
  *   토큰을 받아 대괄호로 읽는 `readNumeric`(css-color.ts)의 루프는 못 센다.
- * - 선언 분할기(`splitDeclarations`)의 대괄호 읽기는 시간 상한 테스트만 덮는다.
- *   `parseStyleDeclarations`·`parseInlineStyleMarks`·`parseWhiteSpaceMode`
- *   각각에 둔다. 따옴표 없는 `url(` 토큰(Issue #364)도 같다.
- * - 치환 함수 탐색(`hasSubstitutionFunction`)의 대괄호 읽기도
- *   `parseInlineStyleMarks` 시간 상한 테스트만 덮는다(Issue #363).
- * - 괄호 짝 판정(`pairParens`)과 바깥 `)` 사전 검사(`hasStrayCloseParen`)의
- *   대괄호 읽기도 같다(Issue #366).
- * - 사용자 정의 함수 호출 탐색(`hasCustomFunctionCall`)의 대괄호 읽기도
- *   같다(Issue #367).
- * `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳 run에서 이차
- * 시간이었지만 `matchAll` 호출 1회라 이 계측의 증가율이 2로 보였다. 그래서
- * `parseStyleDeclarations`에는 이 작업량 테스트에 더해 시간 상한 테스트를 하나
- * 둔다.
+ * - 치환 함수 탐색(`hasSubstitutionFunction`)·괄호 짝 판정(`pairParens`)·바깥
+ *   `)` 사전 검사(`hasStrayCloseParen`)·사용자 정의 함수 호출 탐색
+ *   (`hasCustomFunctionCall`)의 대괄호 읽기는 `readInlineStyleMarks` 시간 상한
+ *   테스트만 덮는다(Issue #363·#366·#367).
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  hasComputedStyleDump,
-  parseFontShorthand,
-  parseInlineStyleMarks,
-  parseStyleDeclarations,
-  parseWhiteSpaceMode,
-  readDumpAuthorDeclarations,
-} from "../src/clipboard/style-declarations.js";
+import { parseFontShorthand } from "../src/clipboard/style-declarations.js";
 import {
   countIndexReads,
   measureStringWorkload,
   restoreStringMethods,
   type StringWorkload,
 } from "./string-workload-support.js";
+import {
+  hasComputedStyleDump,
+  parseInlineStyleMarks,
+  parseStyleDeclarations,
+  parseWhiteSpaceMode,
+  readDumpAuthorDeclarations,
+} from "./style-declarations-support.js";
 
 const measureWorkload = (style: string): StringWorkload =>
   measureStringWorkload(() => {
@@ -70,6 +57,62 @@ const measureWorkload = (style: string): StringWorkload =>
 afterEach(restoreStringMethods);
 
 const BASE_SIZE = 20_000;
+
+const MAX_GROWTH = 2.05;
+
+/**
+ * String 메서드 작업량(호출 횟수·처리 문자 수)이 입력 크기에 선형인지 본다.
+ * 선언 읽기는 입력을 대괄호로만 읽는다(Issue #368). 큰 입력에 String 메서드를
+ * 부르지 않는 것이 정상이다. 작은 입력에서 작업량이 0이면 큰 입력에서도 0이어야
+ * 한다. 0이 아니면 증가율을 비교한다.
+ */
+const expectLinearStringWork = (
+  run: (style: string) => unknown,
+  build: (size: number) => string,
+): void => {
+  const small = measureStringWorkload(() => {
+    run(build(BASE_SIZE));
+  });
+  const large = measureStringWorkload(() => {
+    run(build(BASE_SIZE * 2));
+  });
+
+  if (small.chars === 0) {
+    expect(large.calls).toBe(0);
+    expect(large.chars).toBe(0);
+    return;
+  }
+  expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
+    MAX_GROWTH,
+  );
+  expect(large.chars / small.chars, "처리 문자 수 증가율").toBeLessThanOrEqual(
+    MAX_GROWTH,
+  );
+};
+
+// Proxy 계측은 느리다(입력 32만 자에 1.9초). 대괄호 읽기 축은 작은 크기로 돌린다.
+const READ_SIZE = BASE_SIZE / 8;
+
+/**
+ * 대괄호 읽기 수(`value[index]`)가 입력 크기에 선형인지 본다. 토크나이저가
+ * 입력을 읽는 방식이라 String 메서드 계측에 보이지 않는다. 읽기 수가 입력
+ * 길이 이상이어야 입력을 끝까지 읽은 것이다.
+ */
+const expectLinearIndexReads = (
+  run: (style: string) => unknown,
+  build: (size: number) => string,
+): void => {
+  const smallInput = build(READ_SIZE);
+  const small = countIndexReads(smallInput, (proxy) => {
+    run(proxy);
+  });
+  const large = countIndexReads(build(READ_SIZE * 2), (proxy) => {
+    run(proxy);
+  });
+
+  expect(small).toBeGreaterThanOrEqual(smallInput.length);
+  expect(large / small, "대괄호 읽기 증가율").toBeLessThanOrEqual(MAX_GROWTH);
+};
 
 const inputShapes: Array<[string, (size: number) => string]> = [
   ["선언이 아주 많은 입력", (size) => "font-weight:700;".repeat(size)],
@@ -329,20 +372,14 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
   it.each(inputShapes)(
     "%s은 크기가 2배가 되면 호출 횟수와 처리 문자 수가 2배 이하로 는다",
     (_name, build) => {
-      const small = measureWorkload(build(BASE_SIZE));
-      const large = measureWorkload(build(BASE_SIZE * 2));
+      expectLinearStringWork(parseInlineStyleMarks, build);
+    },
+  );
 
-      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
-      expect(small.calls).toBeGreaterThan(0);
-      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
-
-      expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
-        2,
-      );
-      expect(
-        large.chars / small.chars,
-        "처리 문자 수 증가율",
-      ).toBeLessThanOrEqual(2);
+  it.each(inputShapes)(
+    "%s은 크기가 2배가 되면 대괄호 읽기가 2배 이하로 는다",
+    (_name, build) => {
+      expectLinearIndexReads(parseInlineStyleMarks, build);
     },
   );
 
@@ -647,24 +684,14 @@ describe("parseStyleDeclarations의 선형 시간", () => {
   it.each(declarationInputShapes)(
     "%s은 크기가 2배가 되면 호출 횟수와 처리 문자 수가 2배 이하로 는다",
     (_name, build) => {
-      const small = measureStringWorkload(() => {
-        parseStyleDeclarations(build(BASE_SIZE));
-      });
-      const large = measureStringWorkload(() => {
-        parseStyleDeclarations(build(BASE_SIZE * 2));
-      });
+      expectLinearStringWork(parseStyleDeclarations, build);
+    },
+  );
 
-      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
-      expect(small.calls).toBeGreaterThan(0);
-      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
-
-      expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
-        2,
-      );
-      expect(
-        large.chars / small.chars,
-        "처리 문자 수 증가율",
-      ).toBeLessThanOrEqual(2);
+  it.each(declarationInputShapes)(
+    "%s은 크기가 2배가 되면 대괄호 읽기가 2배 이하로 는다",
+    (_name, build) => {
+      expectLinearIndexReads(parseStyleDeclarations, build);
     },
   );
 
@@ -788,24 +815,14 @@ describe("parseWhiteSpaceMode의 선형 시간", () => {
   it.each(whiteSpaceInputShapes)(
     "%s은 크기가 2배가 되면 호출 횟수와 처리 문자 수가 2배 이하로 는다",
     (_name, build) => {
-      const small = measureStringWorkload(() => {
-        parseWhiteSpaceMode(build(BASE_SIZE));
-      });
-      const large = measureStringWorkload(() => {
-        parseWhiteSpaceMode(build(BASE_SIZE * 2));
-      });
+      expectLinearStringWork(parseWhiteSpaceMode, build);
+    },
+  );
 
-      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
-      expect(small.calls).toBeGreaterThan(0);
-      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
-
-      expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
-        2,
-      );
-      expect(
-        large.chars / small.chars,
-        "처리 문자 수 증가율",
-      ).toBeLessThanOrEqual(2);
+  it.each(whiteSpaceInputShapes)(
+    "%s은 크기가 2배가 되면 대괄호 읽기가 2배 이하로 는다",
+    (_name, build) => {
+      expectLinearIndexReads(parseWhiteSpaceMode, build);
     },
   );
 
@@ -868,24 +885,14 @@ describe("hasComputedStyleDump의 선형 시간", () => {
   it.each(dumpInputShapes)(
     "%s은 크기가 2배가 되면 호출 횟수와 처리 문자 수가 2배 이하로 는다",
     (_name, build) => {
-      const small = measureStringWorkload(() => {
-        hasComputedStyleDump(build(BASE_SIZE));
-      });
-      const large = measureStringWorkload(() => {
-        hasComputedStyleDump(build(BASE_SIZE * 2));
-      });
+      expectLinearStringWork(hasComputedStyleDump, build);
+    },
+  );
 
-      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
-      expect(small.calls).toBeGreaterThan(0);
-      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
-
-      expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
-        2,
-      );
-      expect(
-        large.chars / small.chars,
-        "처리 문자 수 증가율",
-      ).toBeLessThanOrEqual(2);
+  it.each(dumpInputShapes)(
+    "%s은 크기가 2배가 되면 대괄호 읽기가 2배 이하로 는다",
+    (_name, build) => {
+      expectLinearIndexReads(hasComputedStyleDump, build);
     },
   );
 });
@@ -908,24 +915,14 @@ describe("readDumpAuthorDeclarations의 선형 시간", () => {
   it.each(dumpAuthorInputShapes)(
     "%s은 크기가 2배가 되면 호출 횟수와 처리 문자 수가 2배 이하로 는다",
     (_name, build) => {
-      const small = measureStringWorkload(() => {
-        readDumpAuthorDeclarations(build(BASE_SIZE));
-      });
-      const large = measureStringWorkload(() => {
-        readDumpAuthorDeclarations(build(BASE_SIZE * 2));
-      });
+      expectLinearStringWork(readDumpAuthorDeclarations, build);
+    },
+  );
 
-      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
-      expect(small.calls).toBeGreaterThan(0);
-      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
-
-      expect(large.calls / small.calls, "호출 횟수 증가율").toBeLessThanOrEqual(
-        2,
-      );
-      expect(
-        large.chars / small.chars,
-        "처리 문자 수 증가율",
-      ).toBeLessThanOrEqual(2);
+  it.each(dumpAuthorInputShapes)(
+    "%s은 크기가 2배가 되면 대괄호 읽기가 2배 이하로 는다",
+    (_name, build) => {
+      expectLinearIndexReads(readDumpAuthorDeclarations, build);
     },
   );
 });

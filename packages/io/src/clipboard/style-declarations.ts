@@ -1,5 +1,7 @@
 import { isCanonicalCellAlign, isCanonicalCellColor } from "@cp949/geul-model";
 
+import type { CssDeclaration } from "../css/declarations.js";
+import { asciiLowerCase } from "../css/tokens.js";
 import {
   type CssColorResult,
   isCssLengthUnit,
@@ -13,337 +15,6 @@ export type StyleDeclarations = {
   color?: string;
   backgroundColor?: string;
   align?: "left" | "center" | "right";
-};
-
-// 정규식 `\s`와 같은 집합이다. 문자 하나를 정규식 없이 판정하려고 둔다.
-const REGEX_WHITESPACE = new Set([
-  "\t",
-  "\n",
-  "\v",
-  "\f",
-  "\r",
-  " ",
-  "\u00a0",
-  "\u1680",
-  "\u2000",
-  "\u2001",
-  "\u2002",
-  "\u2003",
-  "\u2004",
-  "\u2005",
-  "\u2006",
-  "\u2007",
-  "\u2008",
-  "\u2009",
-  "\u200a",
-  "\u2028",
-  "\u2029",
-  "\u202f",
-  "\u205f",
-  "\u3000",
-  "\ufeff",
-]);
-
-const isPropertyCharacter = (character: string): boolean =>
-  (character >= "a" && character <= "z") ||
-  (character >= "A" && character <= "Z") ||
-  character === "-";
-
-// `;`로 자른 선언 하나에서 속성 이름과 값을 읽는다. 옛 정규식
-// `([a-zA-Z-]+)\s*:\s*([^;]+)`과 결과가 같다.
-// - 속성은 `:` 직전(공백은 건너뜀)의 [a-zA-Z-] run이다. 그 앞의 다른 글자는
-//   무시한다.
-// - 앞에 속성 run이 없는 `:`는 건너뛰고 다음 `:`를 본다.
-// - 속성 run이 있는 첫 `:`가 선언의 유일한 매칭이다. 값은 그 뒤 끝까지다.
-// - 그 `:`가 선언의 마지막 글자면 값이 비어 매칭이 없다. 뒤에 `:`도 없다.
-// 정규식은 시작 위치마다 끝까지 매칭했다가 되돌아가 알파벳 run에서 이차
-// 시간이었다. 여기서는 선언을 한 번 훑고 각 글자를 상수 번만 본다. 글자는
-// 대괄호로 읽는다 — String 메서드를 선언마다 부르지 않는다.
-const readDeclaration = (
-  declaration: string,
-): { property: string; rawValue: string } | undefined => {
-  // 현재 속성 후보 run의 [start, end). start가 -1이면 후보가 없다.
-  let runStart = -1;
-  let runEnd = -1;
-  // 후보 run이 아직 열려 있는지(글자가 이어지는 중)다. 닫힌 뒤에는 공백만
-  // 와야 후보가 유지된다.
-  let inRun = false;
-
-  for (let index = 0; index < declaration.length; index += 1) {
-    const character = declaration[index] as string;
-    if (isPropertyCharacter(character)) {
-      if (!inRun) runStart = index;
-      inRun = true;
-      runEnd = index + 1;
-    } else if (REGEX_WHITESPACE.has(character)) {
-      inRun = false;
-    } else if (character === ":" && runStart >= 0) {
-      if (index === declaration.length - 1) return undefined;
-      return {
-        property: declaration.slice(runStart, runEnd),
-        rawValue: declaration.slice(index + 1),
-      };
-    } else {
-      inRun = false;
-      runStart = -1;
-    }
-  }
-
-  return undefined;
-};
-
-// `;`로 선언을 자르고 `/* */` 주석을 공백 하나로 바꾼다. 블록과 따옴표 안의
-// `;`에서는 자르지 않는다(`url(data:image/png;base64,...)`). 닫히지 않은
-// 블록은 입력 끝까지 한 선언이고, 닫히지 않은 주석은 끝까지 주석이다.
-// 블록은 CSS simple block 규칙을 따른다(Issue #365).
-// - `(`·`[`·`{`가 블록을 연다. 기대하는 닫는 글자를 스택에 넣는다.
-// - 스택 맨 위와 짝 맞는 닫는 글자만 블록을 닫는다. `[)`의 `)`는 `[`를 닫지
-//   않고 블록 안 글자로 남는다. 블록 밖 닫는 글자는 무시한다.
-// - 블록 안에서도 따옴표·주석·이스케이프는 그대로 읽는다.
-// - 스택이 비었을 때만 `;`가 선언을 끝낸다.
-// 따옴표 없는 `url(`은 CSS url 토큰이다(Issue #364). `)`까지 한 덩어리로 읽는다.
-// - 따옴표·주석 밖의 `(` 바로 앞 세 글자가 `url`(대소문자 무시)이고 그 앞
-//   글자가 이름 글자(a–z, A–Z, 0–9, `-`, `_`, 비ASCII)·`#`·`@`가 아니면 url
-//   함수다. `)`를 스택에 넣고 url을 pending으로 둔다.
-// - pending에서 공백은 건너뛴다. 다음 글자가 따옴표면 보통 함수 블록이다.
-//   그 밖의 글자면 토큰이다. 조각이 pending으로 끝나면 다음 글자가 `;`라
-//   토큰이다.
-// - 토큰 안에서는 백슬래시가 다음 글자를 이스케이프한다. 이스케이프되지 않은
-//   `)`만 토큰을 닫는다. `'`·`"`·`/*`·`(`·`[`·`{`·`;`는 보통 글자다.
-//   `url(data:image/png;base64,...)`의 `;`도 여기에 든다.
-// - 닫히지 않은 토큰은 입력 끝까지 한 선언이다.
-// - 한계: 값 판독기는 bad url을 모른다. Chromium은 `url(it's.png)`처럼
-//   따옴표·`(`·가운데 공백이 든 url을 bad-url로 보고 그 선언을 버린다. 판독기는
-//   유효 이미지로 읽는다. `color:red;background-color:blue;background:url(it's.png)`
-//   는 Chromium이 배경 파랑이고 우리는 배경을 지운다. `background:url(a b.png) red`
-//   는 Chromium이 배경 없음이고 우리는 빨강이다.
-// - 앞 글자가 이스케이프된 글자이거나 NUL이면 이름의 일부라 url 함수가
-//   아니다(`a\ url(`·`a\url(`). `\url(` 단독은 url 함수다. `\`+개행은
-//   이스케이프가 아니라 `a\⏎url(`은 url 함수다.
-// - 한계: 이름 안의 이스케이프는 읽지 않는다. `\75rl(it's)`·`u\rl(it's)`는
-//   Chromium이 url로 읽고 우리는 아니다. 헥스 이스케이프 뒤 공백도 이름의
-//   일부로 세지 않는다. `\31 url(it's)`는 Chromium이 url이 아니고 우리는 url로
-//   읽는다.
-// 따옴표는 CSS 문자열 토큰 규칙을 따른다(Issue #362).
-// - 개행(LF·CR·FF)이 닫히지 않은 따옴표를 끝낸다. CRLF는 개행 하나다.
-// - 그렇게 끝난 문자열은 bad다. bad 문자열이 든 선언은 결과에 넣지 않는다.
-//   Chromium처럼 그 선언을 버리고 블록 밖 다음 `;`부터 다시 읽는다.
-// - 백슬래시 뒤 개행(CRLF 포함)은 문자열을 잇는다.
-// - VT·U+2028 같은 다른 글자는 개행이 아니다. 문자열이 이어진다.
-// - 개행 없이 닫히지 않은 따옴표는 입력 끝까지 한 선언이다.
-// 계측 테스트(G-TST-004)가 큰 문자열의 String 메서드 호출을 세므로 큰 문자열
-// 메서드는 `split(";")` 한 번만 부른다. 이어 붙일 조각과 주석 치환은 조각
-// 단위로, 글자를 대괄호로 읽고 `+=`로 쌓는다.
-// escaped는 조각이 따옴표 밖 `\\`로 끝났다는 표시다. 다음 `;`가 이스케이프된다.
-// bad는 지금 쌓는 선언에 개행으로 끝난 문자열이 있다는 표시다.
-// closers는 열린 블록이 기대하는 닫는 글자 스택이다. 배열 push·pop과 마지막
-// 원소 비교만 쓴다.
-// url은 따옴표 없는 url 토큰의 상태다. "none"은 토큰 밖이다. "pending"은 `url(`
-// 뒤 공백만 지난 상태다. "token"은 `)`를 기다리는 토큰 안이다.
-type UrlState = "none" | "pending" | "token";
-
-type ScanState = {
-  quote: string;
-  closers: string[];
-  url: UrlState;
-  inComment: boolean;
-  escaped: boolean;
-  bad: boolean;
-};
-
-const isCssNewline = (character: string | undefined): boolean =>
-  character === "\n" || character === "\r" || character === "\f";
-
-// CSS 이름 글자다: a–z, A–Z, 0–9, `-`, `_`, NUL, 비ASCII. url 함수 앞 글자
-// 판정에 쓴다. NUL은 전처리에서 U+FFFD가 되어 이름 글자다.
-const isIdentCharacter = (character: string): boolean =>
-  (character >= "a" && character <= "z") ||
-  (character >= "A" && character <= "Z") ||
-  (character >= "0" && character <= "9") ||
-  character === "-" ||
-  character === "_" ||
-  character === "\u0000" ||
-  character >= "\u0080";
-
-const isUrlLetter = (character: string | undefined, lower: string): boolean =>
-  character === lower || character === lower.toUpperCase();
-
-// piece[index]의 `(`가 url 함수를 여는지 본다. 바로 앞 세 글자가 `url`이고 그
-// 앞 글자가 이름 글자·`#`·`@`가 아니어야 한다. `;`는 이름 글자가 아니라 조각
-// 경계 앞은 보지 않아도 된다.
-// 앞 글자가 이스케이프 쌍의 이스케이프된 글자이면 이름의 일부다(`a\ url(`).
-// 이스케이프된 글자의 위치 escapedAt·prevEscapedAt은 가장 최근 둘이다. u가
-// 이스케이프됐으면(`a\url(`) 백슬래시가 이름의 시작이라 한 칸 더 앞을 본다.
-// `\url(` 단독은 `\u`가 u라서 url 함수다.
-const opensUrlFunction = (
-  piece: string,
-  index: number,
-  escapedAt: number,
-  prevEscapedAt: number,
-): boolean => {
-  if (
-    !isUrlLetter(piece[index - 3], "u") ||
-    !isUrlLetter(piece[index - 2], "r") ||
-    !isUrlLetter(piece[index - 1], "l")
-  ) {
-    return false;
-  }
-  const uEscaped = escapedAt === index - 3;
-  const before = (uEscaped ? index - 4 : index - 3) - 1;
-  if (before === (uEscaped ? prevEscapedAt : escapedAt)) return false;
-  const character = piece[before];
-  return (
-    character === undefined ||
-    !(isIdentCharacter(character) || character === "#" || character === "@")
-  );
-};
-
-const scanPiece = (piece: string, state: ScanState): string => {
-  // 주석을 만나기 전에는 조각을 그대로 쓴다. out이 정해지면 글자를 쌓는다.
-  let out: string | undefined = state.inComment ? "" : undefined;
-  // 앞 조각이 `\`로 끝났으면 잘려 나간 `;`가 이스케이프된 글자다. 위치 -1이다.
-  // escapedAt·prevEscapedAt은 따옴표 밖 이스케이프 쌍에서 이스케이프된 글자의
-  // 가장 최근 두 위치다. 없으면 -3이다.
-  let escapedAt = state.escaped ? -1 : -3;
-  let prevEscapedAt = -3;
-  state.escaped = false;
-  // 조각이 pending으로 끝났으면 잘려 나간 `;`가 첫 글자다. 공백도 따옴표도
-  // 아니라 토큰이 된다.
-  if (state.url === "pending") state.url = "token";
-  const keep = (character: string): void => {
-    if (out !== undefined) out += character;
-  };
-
-  for (let index = 0; index < piece.length; index += 1) {
-    const character = piece[index] as string;
-    // pending은 따옴표·주석과 함께 있지 않다. 따옴표와 `/`는 토큰이나 none으로
-    // 먼저 바뀐다.
-    if (state.url === "pending" && !isCssSpace(character)) {
-      state.url = character === '"' || character === "'" ? "none" : "token";
-    }
-    if (state.inComment) {
-      if (character === "*" && piece[index + 1] === "/") {
-        state.inComment = false;
-        index += 1;
-      }
-    } else if (state.quote !== "") {
-      keep(character);
-      if (character === "\\") {
-        index += 1;
-        keep(piece[index] ?? "");
-        // 백슬래시 뒤 CRLF는 개행 하나라 LF까지 건너뛴다.
-        if (piece[index] === "\r" && piece[index + 1] === "\n") {
-          index += 1;
-          keep("\n");
-        }
-      } else if (character === state.quote) {
-        state.quote = "";
-      } else if (isCssNewline(character)) {
-        state.quote = "";
-        state.bad = true;
-      }
-    } else if (state.url === "token") {
-      keep(character);
-      if (character === "\\") {
-        index += 1;
-        keep(piece[index] ?? "");
-      } else if (character === ")") {
-        state.closers.pop();
-        state.url = "none";
-      }
-    } else if (character === "/" && piece[index + 1] === "*") {
-      if (out === undefined) {
-        out = "";
-        for (let copy = 0; copy < index; copy += 1) out += piece[copy];
-      }
-      out += " ";
-      state.inComment = true;
-      index += 1;
-    } else if (character === "\\") {
-      // 따옴표 밖 백슬래시도 다음 글자를 이스케이프한다. `\\(`는 괄호를 열지
-      // 않고, 조각 끝의 `\\`는 잘려 나간 `;`를 이스케이프한다.
-      keep(character);
-      index += 1;
-      keep(piece[index] ?? "");
-      // `\`+개행은 유효 이스케이프가 아니다. 개행은 이름의 일부가 아니라
-      // 위치를 남기지 않는다(`a\⏎url(`은 url 함수다).
-      if (!isCssNewline(piece[index])) {
-        prevEscapedAt = escapedAt;
-        escapedAt = index;
-      }
-      if (index >= piece.length) state.escaped = true;
-    } else {
-      keep(character);
-      if (character === '"' || character === "'") state.quote = character;
-      else if (character === "(") {
-        state.closers.push(")");
-        if (opensUrlFunction(piece, index, escapedAt, prevEscapedAt)) {
-          state.url = "pending";
-        }
-      } else if (character === "[") state.closers.push("]");
-      else if (character === "{") state.closers.push("}");
-      else if (character === state.closers[state.closers.length - 1]) {
-        state.closers.pop();
-      }
-    }
-  }
-
-  return out ?? piece;
-};
-
-const splitDeclarations = (style: string): string[] => {
-  const declarations: string[] = [];
-  const state: ScanState = {
-    quote: "",
-    closers: [],
-    url: "none",
-    inComment: false,
-    escaped: false,
-    bad: false,
-  };
-  let pending: string | undefined;
-
-  for (const piece of style.split(";")) {
-    // 앞 조각이 주석 안에서 끝났으면 그 `;`는 주석 내용이라 버린다.
-    const joiner = state.inComment ? "" : ";";
-    const scanned = scanPiece(piece, state);
-    pending = pending === undefined ? scanned : pending + joiner + scanned;
-    if (
-      state.quote === "" &&
-      state.closers.length === 0 &&
-      !state.inComment &&
-      !state.escaped
-    ) {
-      if (!state.bad) declarations.push(pending);
-      pending = undefined;
-      state.bad = false;
-    }
-  }
-  if (pending !== undefined && !state.bad) declarations.push(pending);
-
-  return declarations;
-};
-
-const IMPORTANT_KEYWORD = "important";
-
-// 값 끝의 `!important`(`!`와 낱말 사이 공백, 대소문자 허용)를 떼어 낸다.
-const splitImportant = (
-  rawValue: string,
-): { value: string; important: boolean } => {
-  const trimmed = rawValue.trimEnd();
-  const wordStart = trimmed.length - IMPORTANT_KEYWORD.length;
-  if (
-    wordStart < 1 ||
-    trimmed.slice(wordStart).toLowerCase() !== IMPORTANT_KEYWORD
-  ) {
-    return { value: rawValue, important: false };
-  }
-  let bang = wordStart;
-  while (bang > 0 && isCssSpace(trimmed[bang - 1] as string)) bang -= 1;
-  if (bang === 0 || trimmed[bang - 1] !== "!") {
-    return { value: rawValue, important: false };
-  }
-  return { value: trimmed.slice(0, bang - 1), important: true };
 };
 
 // 색 하나가 받는 칸이다. 중요도가 높은 선언이 칸을 차지하면 일반 선언은 못
@@ -385,70 +56,72 @@ const slotState = (slot: ColorSlot): ColorState => {
   return color === undefined ? UNSET : { kind: "color", color };
 };
 
+type AlignSlot = { value: StyleDeclarations["align"]; important: boolean };
+
 type StyleSlots = {
   color: ColorSlot;
   background: ColorSlot;
-  align: StyleDeclarations["align"];
+  align: AlignSlot;
 };
 
 // color·background-color·background·text-align 선언을 읽어 칸 상태로 모은다.
-const readStyleSlots = (style: string): StyleSlots => {
+const readStyleSlots = (
+  declarations: readonly CssDeclaration[],
+): StyleSlots => {
   const color: ColorSlot = { result: undefined, important: false };
   const background: ColorSlot = { result: undefined, important: false };
-  let align: StyleDeclarations["align"];
+  const align: AlignSlot = { value: undefined, important: false };
 
-  for (const declaration of splitDeclarations(style)) {
-    const read = readDeclaration(declaration);
-    if (read === undefined) continue;
-    const property = read.property.toLowerCase();
-
-    if (property === "color") {
-      const { value, important } = splitImportant(read.rawValue);
-      applyColor(color, readCssColor(value), important);
-    } else if (property === "background-color") {
-      const { value, important } = splitImportant(read.rawValue);
-      applyColor(background, readCssColor(value), important);
-    } else if (property === "background") {
-      const { value, important } = splitImportant(read.rawValue);
-      applyColor(background, readBackgroundShorthand(value), important);
-    } else if (property === "text-align") {
-      const value = read.rawValue.trim().toLowerCase();
-      if (isCanonicalCellAlign(value)) align = value;
+  for (const { name, text, important } of declarations) {
+    if (name === "color") {
+      applyColor(color, readCssColor(text), important);
+    } else if (name === "background-color") {
+      applyColor(background, readCssColor(text), important);
+    } else if (name === "background") {
+      applyColor(background, readBackgroundShorthand(text), important);
+    } else if (name === "text-align") {
+      const value = asciiLowerCase(text);
+      if (isCanonicalCellAlign(value) && (important || !align.important)) {
+        align.value = value;
+        align.important ||= important;
+      }
     }
   }
 
   return { color, background, align };
 };
 
-// style 속성에서 color/background-color/background/text-align 네
-// 선언만 읽는다. 나머지 CSS 선언은 조용히 버린다 — 파싱 실패로 전체
-// 붙여넣기를 거절하지 않는다.
+// 선언 목록에서 color/background-color/background/text-align 네 선언만
+// 읽는다. 나머지 선언은 조용히 버린다 — 파싱 실패로 전체 붙여넣기를 거절하지
+// 않는다. 선언 목록은 `parseCssDeclarations`(css/declarations.ts)가 만든다.
 // 색 값은 CSS 문법대로 읽는다(css-color.ts). 우선순위는 브라우저와 같다.
 // - `!important` 선언은 일반 선언을 이긴다. 같은 중요도끼리는 뒤가 이긴다.
+//   text-align도 같다(Issue #368).
 // - 문법 오류 선언은 버리고 앞 값을 유지한다.
 // - 투명·반투명·상속 키워드와 색 토큰 없는 `background`는 같은 요소의 앞
 //   값을 지운다. 바깥 요소의 색은 건드리지 않는다.
 // - `background-color`와 `background`는 같은 배경색 칸을 순서대로 덮는다.
-// text-align은 `!important`를 읽지 않는다(옛 동작 유지).
-export const parseStyleDeclarations = (style: string): StyleDeclarations => {
-  const { color, background, align } = readStyleSlots(style);
+export const readStyleDeclarations = (
+  declarations: readonly CssDeclaration[],
+): StyleDeclarations => {
+  const { color, background, align } = readStyleSlots(declarations);
 
   const result: StyleDeclarations = {};
   const textColor = slotColor(color);
   if (textColor !== undefined) result.color = textColor;
   const backgroundColor = slotColor(background);
   if (backgroundColor !== undefined) result.backgroundColor = backgroundColor;
-  if (align !== undefined) result.align = align;
+  if (align.value !== undefined) result.align = align.value;
   return result;
 };
 
-// parseStyleDeclarations와 같은 선언을 읽되 clear와 unset을 구분해 돌려준다
+// readStyleDeclarations와 같은 선언을 읽되 clear와 unset을 구분해 돌려준다
 // (Issue #334). 패키지 내부용이다. `mark`의 기본 배경과 `font`의 color 속성이
 // "선언이 없음"과 "색을 정하지 않는 값"을 다르게 다룬다.
-export const parseStyleColorStates = (
-  style: string,
+export const readStyleColorStates = (
+  declarations: readonly CssDeclaration[],
 ): { color: ColorState; backgroundColor: ColorState } => {
-  const { color, background } = readStyleSlots(style);
+  const { color, background } = readStyleSlots(declarations);
   return {
     color: slotState(color),
     backgroundColor: slotState(background),
@@ -460,33 +133,23 @@ export const parseStyleColorStates = (
 // 전체를 style로 싣고, 그 안에 항상 `-webkit-text-stroke-width`가 있다. 덤프
 // 안쪽의 테마 color·background-color는 작성자가 쓴 색이 아니다. 작성자 색은
 // 표식 뒤 `text-decoration*` 선언 뒤에서만 `readDumpAuthorDeclarations`가
-// 꺼낸다. 속성 이름은 대소문자를 구분하지
-// 않는다. 기존 선언 분할기를 쓰므로 주석·따옴표 안의 이름은 선언이 아니다.
-// 선언을 한 번만 훑는다.
+// 꺼낸다. 선언 이름은 이미 소문자다. 주석·따옴표 안의 이름은 선언이 아니다.
 const COMPUTED_STYLE_DUMP_PROPERTY = "-webkit-text-stroke-width";
 
-export const hasComputedStyleDump = (style: string): boolean => {
-  for (const declaration of splitDeclarations(style)) {
-    const read = readDeclaration(declaration);
-    if (
-      read !== undefined &&
-      read.property.toLowerCase() === COMPUTED_STYLE_DUMP_PROPERTY
-    ) {
-      return true;
-    }
-  }
-  return false;
-};
+export const hasComputedStyleDump = (
+  declarations: readonly CssDeclaration[],
+): boolean =>
+  declarations.some(({ name }) => name === COMPUTED_STYLE_DUMP_PROPERTY);
 
 // `text-decoration`과 그 longhand(`text-decoration-color` 등)다.
 const isTextDecorationProperty = (property: string): boolean =>
   property === "text-decoration" || property.startsWith("text-decoration-");
 
-// 덤프 style에서 작성자가 쓴 선언 부분을 문자열로 돌려준다(Issue #341).
-// - 덤프 표식이 없으면 undefined다. 호출부가 style 전체를 읽는다.
+// 덤프 style에서 작성자가 쓴 선언만 돌려준다(Issue #341).
+// - 덤프 표식이 없으면 undefined다. 호출부가 선언 전체를 읽는다.
 // - 표식이 있으면 표식 뒤의 마지막 `text-decoration*` 선언(앵커) 뒤의 선언을
-//   `;`로 이어 돌려준다. 앵커가 없거나 그 뒤에 선언이 없으면 빈 문자열이다.
-//   표식이 여러 개면 마지막 표식 뒤만 센다.
+//   돌려준다. 앵커가 없거나 그 뒤에 선언이 없으면 빈 목록이다. 표식이 여러
+//   개면 마지막 표식 뒤만 센다.
 // Chromium 153의 직렬화 순서에 기댄다.
 // - 인라인 style이 준 text-decoration은 표식 뒤에 온다. 테마 color·
 //   background-color는 표식 앞뒤에 있고 앵커 앞이다. 요소를 통째로 포함한 복사의
@@ -495,28 +158,25 @@ const isTextDecorationProperty = (property: string): boolean =>
 //   않으므로 이 요소는 색을 읽지 않는다. 인라인 color를 같이 걸어도 같다.
 // - 안쪽만 복사한 요소는 작성자 color가 맨 앞에 와서 테마 color와 구분할 수 없다.
 // - u·s·del·strike·a는 `text-decoration*` 선언이 없고 작성자 배경이 테마 배경 자리에 온다.
-// 이들은 빈 문자열이라 색을 읽지 않는다. 다른 Chromium 버전의 순서는 알 수 없다.
+// 이들은 빈 목록이라 색을 읽지 않는다. 다른 Chromium 버전의 순서는 알 수 없다.
 export const readDumpAuthorDeclarations = (
-  style: string,
-): string | undefined => {
-  const declarations = splitDeclarations(style);
+  declarations: readonly CssDeclaration[],
+): readonly CssDeclaration[] | undefined => {
   let hasDump = false;
   // 표식 뒤 마지막 text-decoration* 선언의 다음 위치다. -1이면 앵커가 없다.
   let authorStart = -1;
   for (let index = 0; index < declarations.length; index += 1) {
-    const read = readDeclaration(declarations[index] as string);
-    if (read === undefined) continue;
-    const property = read.property.toLowerCase();
-    if (property === COMPUTED_STYLE_DUMP_PROPERTY) {
+    const { name } = declarations[index] as CssDeclaration;
+    if (name === COMPUTED_STYLE_DUMP_PROPERTY) {
       hasDump = true;
       // 표식 앞의 text-decoration*은 앵커가 아니다.
       authorStart = -1;
-    } else if (isTextDecorationProperty(property)) {
+    } else if (isTextDecorationProperty(name)) {
       authorStart = index + 1;
     }
   }
   if (!hasDump) return undefined;
-  return authorStart < 0 ? "" : declarations.slice(authorStart).join(";");
+  return authorStart < 0 ? [] : declarations.slice(authorStart);
 };
 
 // font-weight 선언 하나의 분류다.
@@ -1450,12 +1110,10 @@ const applyMark = <T>(
   slot.important ||= important;
 };
 
-// style 속성에서 인라인 서식 마크(굵게·기울임·밑줄·취소선) 판정에 쓰는
+// 선언 목록에서 인라인 서식 마크(굵게·기울임·밑줄·취소선) 판정에 쓰는
 // font-weight·font-style·text-decoration(-line)·font 줄임 선언만 읽는다.
-// 색 경로(parseStyleDeclarations)와 같은 흐름이다: `splitDeclarations`로
-// 선언을 자르고(따옴표·블록 안 `;`, `/* */` 주석, 닫히지 않은 따옴표·블록),
-// `readDeclaration`으로 이름과 값을 나누고, `splitImportant`로 중요도를
-// 떼어 칸에 쓴다. 입력 길이에 선형이다.
+// 색 경로(readStyleDeclarations)와 같은 선언 목록(`parseCssDeclarations`)을
+// 받아 칸에 쓴다.
 // - 칸은 굵기·기울임·장식 셋이다. font 줄임은 굵기·기울임 칸에, text-decoration
 //   과 text-decoration-line은 장식 칸 하나를 함께 쓴다.
 // - `!important` 선언이 칸을 차지하면 일반 선언은 못 덮는다. 같은 중요도끼리는
@@ -1470,11 +1128,12 @@ const applyMark = <T>(
 //   - 치환 결과를 추적하지 않는다. `<style>`과 조상의 `--x` 정의를 읽지 않는다.
 //   - font 경로의 수식 함수는 `calc`·`min`·`max`·`clamp` 넷뿐이다.
 //   - `oblique` 각도 범위를 검사하지 않는다.
-// - 속성 이름 앞의 쓰레기 글자는 무시한다(`readDeclaration`의 규칙).
 // 값이 꺼짐(normal, none)이어도 이 함수는 그 선언만 반영한다 — 바깥 요소가
 // 만든 마크를 지우는 일은 없다. 끄는 값은 normal로 돌려주고 겹치기는 호출부가
 // 정한다.
-export const parseInlineStyleMarks = (style: string): InlineStyleMarks => {
+export const readInlineStyleMarks = (
+  declarations: readonly CssDeclaration[],
+): InlineStyleMarks => {
   const weight: MarkSlot<InlineFontWeight | undefined> = {
     value: undefined,
     important: false,
@@ -1488,14 +1147,9 @@ export const parseInlineStyleMarks = (style: string): InlineStyleMarks => {
     important: false,
   };
 
-  for (const declaration of splitDeclarations(style)) {
-    const read = readDeclaration(declaration);
-    if (read === undefined) continue;
-    const property = read.property.toLowerCase();
+  for (const { name: property, text, important } of declarations) {
     if (!INLINE_MARK_PROPERTIES.has(property)) continue;
-    const split = splitImportant(read.rawValue);
-    const value = split.value.trim().toLowerCase();
-    const important = split.important;
+    const value = asciiLowerCase(text);
 
     if (property === "font-weight") {
       const classified = classifyFontWeight(value);
@@ -1580,45 +1234,31 @@ const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
   return undefined;
 };
 
-// style 속성의 `white-space` 선언을 소스 공백 모드로 읽는다(Issue #361).
-// 색 경로·`parseInlineStyleMarks`와 같은 흐름이다. `splitDeclarations`로
-// 선언을 자르고(따옴표·블록 안 `;`, `/* */` 주석, 이스케이프된 `;`),
-// `readDeclaration`으로 이름과 값을 나누고, `splitImportant`로 중요도를 떼어
-// 칸에 쓴다. 입력 길이에 선형이다.
+// 선언 목록의 `white-space` 선언을 소스 공백 모드로 읽는다(Issue #361).
+// 색 경로·`readInlineStyleMarks`와 같은 선언 목록을 받아 칸에 쓴다.
 // - 칸 규칙은 `applyMark`와 같다. `!important` 선언이 칸을 차지하면 일반
 //   선언은 못 덮는다. 같은 중요도끼리는 뒤가 이긴다.
 // - 무효 값은 칸을 건드리지 않는다. `!important`가 붙어도 같다.
 // - 상속 키워드(inherit·initial·unset·revert·revert-layer)는 유효 값이다.
 //   칸을 비운다.
 // 칸이 비면 undefined다. 호출부가 부모 모드를 상속한다.
-// 한계: 공유 헬퍼의 차이를 그대로 받는다. 아래는 옛 `split(";")` 구현이
-// Chromium과 같게 읽던 입력이다.
-// - 속성 이름 앞의 쓰레기 글자는 무시한다(`readDeclaration`의 규칙).
-//   `x white-space:pre`·`_white-space:pre`·`*white-space:pre`를 preserve로
-//   읽는다. `white-space:pre;_white-space:normal`은 normal이다. Chromium은
-//   이런 선언을 버린다.
-// - 따옴표 없는 `url(`은 url 토큰으로 읽는다(#364). 안의 `'`·`/*`·`[`·`{`는
-//   뒤 선언을 삼키지 않는다. 단 bad url 선언을 버리지 않는다(분할기 머리 주석).
-export const parseWhiteSpaceMode = (
-  style: string,
+export const readWhiteSpaceMode = (
+  declarations: readonly CssDeclaration[],
 ): WhiteSpaceMode | undefined => {
   const slot: MarkSlot<WhiteSpaceMode | undefined> = {
     value: undefined,
     important: false,
   };
 
-  for (const declaration of splitDeclarations(style)) {
-    const read = readDeclaration(declaration);
-    if (read === undefined) continue;
-    if (read.property.toLowerCase() !== "white-space") continue;
-    const split = splitImportant(read.rawValue);
-    const value = split.value.trim().toLowerCase();
+  for (const { name, text, important } of declarations) {
+    if (name !== "white-space") continue;
+    const value = asciiLowerCase(text);
     if (WHITE_SPACE_RESET_KEYWORDS.has(value)) {
-      applyMark(slot, undefined, split.important);
+      applyMark(slot, undefined, important);
       continue;
     }
     const mode = readWhiteSpaceValue(value);
-    if (mode !== undefined) applyMark(slot, mode, split.important);
+    if (mode !== undefined) applyMark(slot, mode, important);
   }
 
   return slot.value;

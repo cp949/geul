@@ -1,7 +1,8 @@
 import {
-  parseWhiteSpaceMode,
+  readWhiteSpaceMode,
   type WhiteSpaceMode,
 } from "../clipboard/style-declarations.js";
+import { parseCssDeclarations } from "../css/declarations.js";
 import type {
   HtmlElementNode,
   HtmlNode,
@@ -21,7 +22,7 @@ import { flattenBlockBoundaryTagNames } from "./parse-html.js";
 // - 블록 경계 태그의 시작과 끝, `<br>` 앞뒤는 줄 경계다. 줄 시작의 공백은
 //   버리고 줄 끝 공백은 이미 낸 텍스트 노드에서 되돌려 지운다.
 // - `<pre>` 하위는 건드리지 않는다. `div`·`span`은 자기 style의 white-space로
-//   모드를 정한다(parseWhiteSpaceMode). 다른 태그는 style을 읽지 않고 부모
+//   모드를 정한다(readWhiteSpaceMode). 다른 태그는 style을 읽지 않고 부모
 //   모드를 상속한다. 선언이 없거나 상속 키워드면 부모 모드다. 무효 선언은 버린다.
 //   - preserve(pre·pre-wrap·break-spaces): 텍스트를 건드리지 않는다. 보호
 //     구간 앞 공백 run은 접는다.
@@ -88,7 +89,7 @@ const modeFor = (
   }
   const style = element.properties.style;
   if (typeof style !== "string") return inherited;
-  return parseWhiteSpaceMode(style) ?? inherited;
+  return readWhiteSpaceMode(parseCssDeclarations(style)) ?? inherited;
 };
 
 // 접은 결과가 빈 텍스트 노드를 children에서 뺀다. 자리에서 압축한다.

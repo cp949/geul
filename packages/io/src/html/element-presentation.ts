@@ -17,10 +17,14 @@ import { readLegacyAttributeColor } from "../clipboard/css-color.js";
 import {
   type ColorState,
   type InlineStyleMarks,
-  parseInlineStyleMarks,
-  parseStyleColorStates,
   readDumpAuthorDeclarations,
+  readInlineStyleMarks,
+  readStyleColorStates,
 } from "../clipboard/style-declarations.js";
+import {
+  type CssDeclaration,
+  parseCssDeclarations,
+} from "../css/declarations.js";
 import { propertyString } from "./hast-properties.js";
 import type { HtmlElementNode } from "./inline-content.js";
 
@@ -61,7 +65,7 @@ export type BlockPresentation = {
   format: TextFormat;
 };
 
-type ColorStates = ReturnType<typeof parseStyleColorStates>;
+type ColorStates = ReturnType<typeof readStyleColorStates>;
 
 const UNSET_COLOR_STATES: ColorStates = {
   color: { kind: "unset" },
@@ -73,8 +77,10 @@ const UNSET_COLOR_STATES: ColorStates = {
 // 덤프 안쪽의 테마 색은 작성자가 쓴 색이 아니다. 앵커가 없으면 색을 읽지 않는다.
 // 서식 선언은 시각 값이라 호출부가 style 전체에서 읽는다. 덤프 판정은 이 한
 // 곳이다(Issue #334, #338, #341, #342).
-const colorStatesOf = (style: string): ColorStates =>
-  parseStyleColorStates(readDumpAuthorDeclarations(style) ?? style);
+const colorStatesOf = (declarations: readonly CssDeclaration[]): ColorStates =>
+  readStyleColorStates(
+    readDumpAuthorDeclarations(declarations) ?? declarations,
+  );
 
 // `mark`의 기본 배경이다. 브라우저가 `mark`에 칠하는 노랑이다.
 const MARK_DEFAULT_BACKGROUND = "#FFFF00";
@@ -133,8 +139,11 @@ const presentationFromStyle = (
   presentation: ElementPresentation;
   parsed: InlineStyleMarks | undefined;
 } => {
-  const text = typeof style === "string" ? style : undefined;
-  const states = text === undefined ? undefined : colorStatesOf(text);
+  // style을 한 번만 선언 목록으로 나눠 색과 서식이 같이 쓴다(Issue #368).
+  const declarations =
+    typeof style === "string" ? parseCssDeclarations(style) : undefined;
+  const states =
+    declarations === undefined ? undefined : colorStatesOf(declarations);
   const presentation: ElementPresentation = {};
   const textColor = resolveColor(states?.color, defaults.textColor);
   if (textColor !== undefined) presentation.textColor = textColor;
@@ -145,8 +154,8 @@ const presentationFromStyle = (
   if (backgroundColor !== undefined) {
     presentation.backgroundColor = backgroundColor;
   }
-  if (text === undefined) return { presentation, parsed: undefined };
-  const parsed = parseInlineStyleMarks(text);
+  if (declarations === undefined) return { presentation, parsed: undefined };
+  const parsed = readInlineStyleMarks(declarations);
   return {
     presentation: { ...presentation, ...formatFromStyle(parsed) },
     parsed,
@@ -278,7 +287,8 @@ export const inlineElementPresentation = (
 export const blockPresentation = (node: HtmlElementNode): BlockPresentation => {
   const style = node.properties.style;
   if (typeof style !== "string") return { colors: {}, format: {} };
-  const states = colorStatesOf(style);
+  const declarations = parseCssDeclarations(style);
+  const states = colorStatesOf(declarations);
   return {
     colors: {
       ...(states.color.kind === "color"
@@ -288,7 +298,7 @@ export const blockPresentation = (node: HtmlElementNode): BlockPresentation => {
         ? { backgroundColor: states.backgroundColor.color }
         : {}),
     },
-    format: formatFromStyle(parseInlineStyleMarks(style)),
+    format: formatFromStyle(readInlineStyleMarks(declarations)),
   };
 };
 
@@ -323,12 +333,14 @@ const cellTierOf = (element: HtmlElementNode): CellTier => {
   // 덤프가 붙은 단은 표식 뒤 마지막 text-decoration* 선언 뒤의 작성자 선언만
   // 색으로 읽는다(colorStatesOf). 그 단의 bgcolor 속성은 style 배경 선언이
   // 없으면 읽는다. 서식은 덤프와 무관하게 style 전체에서 읽는다.
+  const declarations =
+    style === undefined ? undefined : parseCssDeclarations(style);
   const tier: CellTier =
-    style === undefined
+    declarations === undefined
       ? { states: UNSET_COLOR_STATES, format: {} }
       : {
-          states: colorStatesOf(style),
-          format: formatFromStyle(parseInlineStyleMarks(style)),
+          states: colorStatesOf(declarations),
+          format: formatFromStyle(readInlineStyleMarks(declarations)),
         };
   cellTierByElement.set(element, tier);
   return tier;

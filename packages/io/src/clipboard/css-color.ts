@@ -191,6 +191,16 @@ export const isCssSpace = (character: string): boolean =>
   character === "\r" ||
   character === "\f";
 
+// 양끝 CSS 공백만 걷는다. JS `trim()`은 NBSP·VT 등도 걷어 Chromium과
+// 달라진다(Issue #368: `color:`(NBSP)`red`는 색이 아니다).
+const trimCssSpace = (value: string): string => {
+  let start = 0;
+  let end = value.length;
+  while (start < end && isCssSpace(value[start] as string)) start += 1;
+  while (end > start && isCssSpace(value[end - 1] as string)) end -= 1;
+  return start === 0 && end === value.length ? value : value.slice(start, end);
+};
+
 const isDigit = (character: string | undefined): boolean =>
   character !== undefined && character >= "0" && character <= "9";
 
@@ -596,9 +606,9 @@ const readColorValue = (value: string): CssColorResult => {
   return INVALID;
 };
 
-// `color`·`background-color` 값 하나를 읽는다. 앞뒤 공백은 걷는다.
+// `color`·`background-color` 값 하나를 읽는다. 앞뒤 CSS 공백은 걷는다.
 export const readCssColor = (value: string): CssColorResult => {
-  const trimmed = value.trim();
+  const trimmed = trimCssSpace(value);
   if (GLOBAL_KEYWORDS.has(trimmed.toLowerCase())) return CLEAR;
   return readColorValue(trimmed);
 };
@@ -793,7 +803,7 @@ const isPositionToken = (token: string): boolean => {
 // `none`)은 이 요소의 배경색을 초기화하므로 clear다. 위치 토큰의 순서와
 // 개수는 검증하지 않는다(한계).
 export const readBackgroundShorthand = (value: string): CssColorResult => {
-  const trimmed = value.trim();
+  const trimmed = trimCssSpace(value);
   if (GLOBAL_KEYWORDS.has(trimmed.toLowerCase())) return CLEAR;
 
   const layers = splitBackgroundLayers(trimmed);

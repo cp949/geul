@@ -8,8 +8,8 @@
 import type { Block, Document, TextBlockProps } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
-import { parseStyleDeclarations } from "../src/clipboard/style-declarations.js";
 import { exportHtml, importHtml } from "../src/index.js";
+import { parseStyleDeclarations } from "./style-declarations-support.js";
 
 // paragraph/heading(h2 대표)/quote/목록 4종 7개 블록 타입이 textBlockPropsAttributes
 // 를 통해서만 속성을 받는다는 계약(export-html.ts) 위에서, 같은 props

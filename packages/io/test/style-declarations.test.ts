@@ -10,18 +10,19 @@
  * 재생성은 `_tmp` 하네스 방식이다: style 속성을 요소에 넣고 계산 색을 읽어
  * 불투명이고 부모 색과 다르면 색 마크, 아니면 마크 없음으로 본다.
  */
-import { isCanonicalCellAlign, isCanonicalCellColor } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
+import type {
+  InlineFontStyle,
+  InlineFontWeight,
+  StyleDeclarations,
+} from "../src/clipboard/style-declarations.js";
 import {
-  type InlineFontStyle,
-  type InlineFontWeight,
   parseInlineStyleMarks,
   parseStyleColorStates,
   parseStyleDeclarations,
   parseWhiteSpaceMode,
   readDumpAuthorDeclarations,
-  type StyleDeclarations,
-} from "../src/clipboard/style-declarations.js";
+} from "./style-declarations-support.js";
 
 describe("parseStyleDeclarations", () => {
   it("hex color/background-color/text-align을 읽는다", () => {
@@ -86,10 +87,8 @@ describe("parseStyleDeclarations", () => {
     expect(parseStyleDeclarations("background: red blue")).toEqual({});
   });
 
-  it("속성 값 앞 쓰레기 글자 뒤의 속성도 읽는다(옛 정규식과 같다)", () => {
-    expect(parseStyleDeclarations("x color: #ff0000")).toEqual({
-      color: "#FF0000",
-    });
+  it("속성 이름 앞 쓰레기 글자가 이름에 붙으면 그 선언을 읽지 않는다(Chromium과 같다)", () => {
+    expect(parseStyleDeclarations("x color: #ff0000")).toEqual({});
   });
 });
 
@@ -288,10 +287,10 @@ describe("parseStyleDeclarations의 색 선언 우선순위 (Issue #333)", () =>
     expect(parseStyleDeclarations("background:currentcolor")).toEqual({});
   });
 
-  it("text-align은 !important를 읽지 않는 기존 동작을 유지한다", () => {
+  it("text-align의 !important도 중요도 칸으로 읽는다", () => {
     expect(
       parseStyleDeclarations("text-align:left!important;color:red"),
-    ).toEqual({ color: "#FF0000" });
+    ).toEqual({ color: "#FF0000", align: "left" });
   });
 
   it("따옴표·괄호 안의 세미콜론에서 선언을 자르지 않는다", () => {
@@ -330,149 +329,140 @@ describe("parseStyleDeclarations의 색 선언 우선순위 (Issue #333)", () =>
   });
 });
 
-/**
- * 선형 구현으로 바꾸기 전의 `parseStyleDeclarations`를 그대로 복사한 오라클이다.
- * 정규식 `DECLARATION_PATTERN`과 `matchAll` 루프, 색 정규화가 원본과 같다.
- * 새 구현은 이 사본과 모든 코퍼스 입력에서 결과가 같아야 한다. 이 사본을
- * 고치거나 최적화하지 않는다. 정규식이 입력 길이에 이차 시간이라는 이유로
- * 새 구현을 만들었으므로, 이 사본에는 긴 입력을 넣지 않는다.
- */
-const legacyParseStyleDeclarations = (style: string): StyleDeclarations => {
-  const pattern = /([a-zA-Z-]+)\s*:\s*([^;]+)/g;
-  const toHexChannel = (value: number): string =>
-    Math.min(255, Math.max(0, value))
-      .toString(16)
-      .padStart(2, "0")
-      .toUpperCase();
-  const normalizeColor = (rawValue: string): string | undefined => {
-    const trimmed = rawValue.trim();
-    const hexMatch = /^#([0-9a-fA-F]{6})$/.exec(trimmed);
-    if (hexMatch !== null) {
-      const upper = `#${hexMatch[1]?.toUpperCase()}`;
-      return isCanonicalCellColor(upper) ? upper : undefined;
-    }
-    const rgbMatch =
-      /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*[\d.]+\s*)?\)$/.exec(
-        trimmed,
-      );
-    if (rgbMatch !== null) {
-      const [, r, g, b] = rgbMatch;
-      const hex = `#${toHexChannel(Number(r))}${toHexChannel(Number(g))}${toHexChannel(Number(b))}`;
-      return isCanonicalCellColor(hex) ? hex : undefined;
-    }
-    return undefined;
-  };
-
-  const result: StyleDeclarations = {};
-  for (const match of style.matchAll(pattern)) {
-    const property = match[1]?.trim().toLowerCase();
-    const rawValue = match[2]?.trim();
-    if (property === undefined || rawValue === undefined) continue;
-    if (property === "color") {
-      const normalized = normalizeColor(rawValue);
-      if (normalized !== undefined) result.color = normalized;
-    } else if (property === "background-color" || property === "background") {
-      const normalized = normalizeColor(rawValue);
-      if (normalized !== undefined) result.backgroundColor = normalized;
-    } else if (property === "text-align") {
-      const value = rawValue.toLowerCase();
-      if (isCanonicalCellAlign(value)) result.align = value;
-    }
-  }
-  return result;
-};
-
-// 색 값 판정이 바뀐 행(`!important`, 복합 `background`, rgba 알파, 색 이름)은
-// 이 코퍼스에 두지 않는다. 옛 구현과 결과가 다른 게 정답이라 위 선언 표와
-// `css-color.test.ts`가 맡는다.
-const oracleCorpus: Array<[string, string]> = [
-  ["빈 문자열", ""],
-  ["기본 세 선언", "color:#ff0000;background-color:#00FF00;text-align:right;"],
+// 경계 입력 코퍼스다. #324가 옛 정규식 구현과 결과가 같은지 보려고 모았다.
+// Issue #368 뒤로는 Chromium 153.0.8010.12 실측(2026-10-12)이 기대값이다.
+// 부모에 color:#123456을 두고 자식 style을 바꿔 계산 color·background-color·
+// text-align을 읽었다. 부모 색이면 color 없음, 투명이면 배경 없음, start면 정렬
+// 없음이다.
+const chromiumCorpus: Array<[string, string, StyleDeclarations]> = [
+  ["빈 문자열", "", {}],
+  [
+    "기본 세 선언",
+    "color:#ff0000;background-color:#00FF00;text-align:right;",
+    { color: "#FF0000", backgroundColor: "#00FF00", align: "right" },
+  ],
   [
     "속성 이름 대문자",
     "COLOR:#ff0000;Background-Color:#00ff00;TEXT-ALIGN:Right",
+    { color: "#FF0000", backgroundColor: "#00FF00", align: "right" },
   ],
-  ["값 대문자 정렬", "text-align:CENTER"],
-  ["콜론 앞뒤 공백", "color  :  #ff0000 ; text-align : left"],
-  ["속성 앞 공백", "   color:#ff0000;\n\ttext-align:right"],
-  ["속성 앞 쓰레기 글자", "x color: #ff0000"],
-  ["속성 앞 숫자와 콜론", "1: color: #ff0000"],
-  ["빈 선언이 앞선 입력", ";;color:#ff0000"],
-  ["숫자가 붙은 속성", "x1color:#ff0000"],
-  ["속성 사이 공백 토큰", "mso foo color:#ff0000"],
-  ["값 안 콜론", "color:#ff0000:x;text-align:left:right"],
-  ["콜론 연속", "color::#ff0000"],
-  ["콜론이 여럿인 선언", "a:b:color:#ff0000"],
-  ["값이 빈 선언", "color:;text-align:left"],
-  ["값 없이 끝나는 선언", "text-align:left;color:"],
-  ["공백뿐인 값", "color:   ;text-align:right"],
-  ["공백뿐인 값으로 끝남", "color:   "],
-  ["세미콜론 없음", "color:#abcdef"],
-  ["속성 이름만 있는 조각", "color;text-align;background"],
-  ["속성 이름과 공백만 있는 조각", "color   ;  text-align  "],
-  ["콜론만 있는 조각", ":;:::;color:#ff0000"],
-  ["숫자 뒤 콜론", "12:34;color:#ff0000"],
-  ["하이픈만 있는 속성", "-:red;--:x;color:#ff0000"],
-  ["background 축약형", "background:#FFFF00"],
-  ["background rgb 축약형", "background: rgb(255, 255, 0)"],
+  ["값 대문자 정렬", "text-align:CENTER", { align: "center" }],
+  [
+    "콜론 앞뒤 공백",
+    "color  :  #ff0000 ; text-align : left",
+    { color: "#FF0000", align: "left" },
+  ],
+  [
+    "속성 앞 공백",
+    "   color:#ff0000;\n\ttext-align:right",
+    { color: "#FF0000", align: "right" },
+  ],
+  ["속성 앞 쓰레기 글자", "x color: #ff0000", {}],
+  ["속성 앞 숫자와 콜론", "1: color: #ff0000", {}],
+  ["빈 선언이 앞선 입력", ";;color:#ff0000", { color: "#FF0000" }],
+  ["숫자가 붙은 속성", "x1color:#ff0000", {}],
+  ["속성 사이 공백 토큰", "mso foo color:#ff0000", {}],
+  ["값 안 콜론", "color:#ff0000:x;text-align:left:right", {}],
+  ["콜론 연속", "color::#ff0000", {}],
+  ["콜론이 여럿인 선언", "a:b:color:#ff0000", {}],
+  ["값이 빈 선언", "color:;text-align:left", { align: "left" }],
+  ["값 없이 끝나는 선언", "text-align:left;color:", { align: "left" }],
+  ["공백뿐인 값", "color:   ;text-align:right", { align: "right" }],
+  ["공백뿐인 값으로 끝남", "color:   ", {}],
+  ["세미콜론 없음", "color:#abcdef", { color: "#ABCDEF" }],
+  ["속성 이름만 있는 조각", "color;text-align;background", {}],
+  ["속성 이름과 공백만 있는 조각", "color   ;  text-align  ", {}],
+  ["콜론만 있는 조각", ":;:::;color:#ff0000", { color: "#FF0000" }],
+  ["숫자 뒤 콜론", "12:34;color:#ff0000", { color: "#FF0000" }],
+  ["하이픈만 있는 속성", "-:red;--:x;color:#ff0000", { color: "#FF0000" }],
+  ["background 축약형", "background:#FFFF00", { backgroundColor: "#FFFF00" }],
+  [
+    "background rgb 축약형",
+    "background: rgb(255, 255, 0)",
+    { backgroundColor: "#FFFF00" },
+  ],
   [
     "background 뒤 background-color",
     "background:#111111;background-color:#222222",
+    { backgroundColor: "#222222" },
   ],
   [
     "background-color 뒤 background",
     "background-color:#222222;background:#111111",
+    { backgroundColor: "#111111" },
   ],
   [
     "url data 값 안 세미콜론",
     "background:url(data:image/png;base64,AAAA);color:#ff0000",
+    { color: "#FF0000" },
   ],
   [
     "url data 뒤 색",
     "background-image:url(data:image/png;base64,AAAA) ;color:#00ff00",
+    { color: "#00FF00" },
   ],
-  ["rgb 범위 초과", "color:rgb(300, 0, 0)"],
-  ["알 수 없는 선언", "font-family: Arial; mso-number-format:'0';"],
-  ["정렬 허용 밖 값", "text-align: justify"],
-  ["나중 선언이 이김", "color:#111111;color:#222222"],
-  ["줄바꿈이 낀 선언", "color:\n#ff0000\n;\ntext-align\n:\nright"],
-  ["속성과 콜론 사이 줄바꿈", "color\n\n:#ff0000"],
-  ["NBSP가 낀 선언", "color\u00a0:\u00a0#ff0000"],
-  ["BOM이 낀 선언", "\ufeffcolor:#ff0000"],
-  ["비ASCII 글자가 낀 속성", "é color:#ff0000;éolor:#00ff00"],
-  ["속성 뒤 쓰레기 뒤 콜론", "color x:#ff0000"],
-  ["공백 뒤 숫자 뒤 콜론", "color 1:#ff0000;text-align 1 :left"],
-  ["콜론 직전 선언 끝", "text-align:left;color :"],
+  ["rgb 범위 초과", "color:rgb(300, 0, 0)", { color: "#FF0000" }],
+  ["알 수 없는 선언", "font-family: Arial; mso-number-format:'0';", {}],
+  ["정렬 허용 밖 값", "text-align: justify", {}],
+  ["나중 선언이 이김", "color:#111111;color:#222222", { color: "#222222" }],
+  [
+    "줄바꿈이 낀 선언",
+    "color:\n#ff0000\n;\ntext-align\n:\nright",
+    { color: "#FF0000", align: "right" },
+  ],
+  ["속성과 콜론 사이 줄바꿈", "color\n\n:#ff0000", { color: "#FF0000" }],
+  ["NBSP가 낀 선언", "color : #ff0000", {}],
+  ["BOM이 낀 선언", "﻿color:#ff0000", {}],
+  ["비ASCII 글자가 낀 속성", "é color:#ff0000;éolor:#00ff00", {}],
+  ["속성 뒤 쓰레기 뒤 콜론", "color x:#ff0000", {}],
+  ["공백 뒤 숫자 뒤 콜론", "color 1:#ff0000;text-align 1 :left", {}],
+  ["콜론 직전 선언 끝", "text-align:left;color :", { align: "left" }],
 ];
 
-describe("parseStyleDeclarations 오라클 대조", () => {
-  it.each(oracleCorpus)(
-    "%s은 기존 정규식 구현과 결과가 같다",
-    (_name, style) => {
-      expect(parseStyleDeclarations(style)).toEqual(
-        legacyParseStyleDeclarations(style),
-      );
+describe("parseStyleDeclarations 경계 입력 Chromium 대조 (Issue #368)", () => {
+  it.each(chromiumCorpus)(
+    "%s(%j)은 Chromium처럼 %j다",
+    (_name, style, expected) => {
+      expect(parseStyleDeclarations(style)).toEqual(expected);
     },
   );
 
-  it("모든 UTF-16 코드 유닛에 대해 속성 앞뒤 공백 판정이 정규식 \\s와 같다", () => {
-    // 코드 유닛 65,536개 × 3모양을 도는 테스트다. 케이스마다 expect를 부르면
-    // 병렬 실행에서 기본 timeout에 가까워져 불일치만 모아 한 번에 단언한다.
+  // Chromium 153.0.8010.12 실측(2026-10-12). 코드 유닛 65,536개를 세 모양에
+  // 넣고 선언이 남는지 봤다. CSS 공백은 TAB·LF·FF·CR·SP다. 속성 앞에서는 `;`(빈
+  // 선언 뒤)와 `\`(`\t`가 이스케이프된 t)도 선언을 남긴다.
+  it("모든 UTF-16 코드 유닛에 대해 속성 앞뒤 공백 판정이 Chromium과 같다", () => {
+    // 케이스마다 expect를 부르면 병렬 실행에서 기본 timeout에 가까워져
+    // 불일치만 모아 한 번에 단언한다.
+    const cssWhitespace = new Set([0x09, 0x0a, 0x0c, 0x0d, 0x20]);
+    const beforePropertyKept = new Set([...cssWhitespace, 0x3b, 0x5c]);
     const mismatches: string[] = [];
     for (let unit = 0; unit < 0x10000; unit += 1) {
       const character = String.fromCharCode(unit);
-      const beforeColon = `color${character}:#ff0000`;
-      const afterColon = `color:${character}#ff0000`;
-      const beforeProperty = `${character}text-align:left`;
-      for (const style of [beforeColon, afterColon, beforeProperty]) {
-        const actual = JSON.stringify(parseStyleDeclarations(style));
-        const expected = JSON.stringify(legacyParseStyleDeclarations(style));
-        if (actual !== expected) {
-          mismatches.push(`U+${unit.toString(16)} ${JSON.stringify(style)}`);
-        }
+      const shapes: Array<[string, boolean, boolean]> = [
+        [
+          `color${character}:#ff0000`,
+          parseStyleDeclarations(`color${character}:#ff0000`).color !==
+            undefined,
+          cssWhitespace.has(unit),
+        ],
+        [
+          `color:${character}#ff0000`,
+          parseStyleDeclarations(`color:${character}#ff0000`).color !==
+            undefined,
+          cssWhitespace.has(unit),
+        ],
+        [
+          `${character}text-align:left`,
+          parseStyleDeclarations(`${character}text-align:left`).align !==
+            undefined,
+          beforePropertyKept.has(unit),
+        ],
+      ];
+      for (const [style, actual, expected] of shapes) {
+        if (actual !== expected) mismatches.push(JSON.stringify(style));
       }
     }
-    expect(mismatches).toEqual([]);
+    expect(mismatches.slice(0, 10)).toEqual([]);
   });
 });
 
@@ -1088,7 +1078,7 @@ describe("readDumpAuthorDeclarations", () => {
 
   it("마지막 text-decoration* 선언 뒤의 선언만 돌려준다", () => {
     const style = `color: rgb(36, 41, 47); ${DUMP}; white-space: normal; background-color: rgb(255, 255, 255); ${DECORATION}; color: rgb(255, 0, 0)`;
-    expect(readDumpAuthorDeclarations(style)).toBe(" color: rgb(255, 0, 0)");
+    expect(readDumpAuthorDeclarations(style)).toBe("color:rgb(255, 0, 0)");
     expect(statesOfAuthorPart(style)).toEqual({
       color: { kind: "color", color: "#FF0000" },
       backgroundColor: { kind: "unset" },
@@ -1172,7 +1162,7 @@ describe("readDumpAuthorDeclarations", () => {
 
   it("표식 앞 text-decoration이 있어도 표식 뒤 앵커 뒤 선언을 돌려준다", () => {
     const style = `text-decoration: underline; color: blue; ${DUMP}; text-decoration-color: initial; color: red`;
-    expect(readDumpAuthorDeclarations(style)).toBe(" color: red");
+    expect(readDumpAuthorDeclarations(style)).toBe("color:red");
   });
 
   it("표식이 여러 개면 마지막 표식 뒤만 센다", () => {
@@ -1185,7 +1175,7 @@ describe("readDumpAuthorDeclarations", () => {
       readDumpAuthorDeclarations(
         `${DUMP}; color: blue; ${DUMP}; text-decoration: none; background: yellow`,
       ),
-    ).toBe(" background: yellow");
+    ).toBe("background:yellow");
   });
 });
 
@@ -1660,7 +1650,7 @@ describe("따옴표 없는 `url(` 토큰 (Issue #364)", () => {
       const style =
         "-webkit-text-stroke-width:0px;text-decoration:none;/*c*/x:url(a\\)b);color:red";
 
-      expect(readDumpAuthorDeclarations(style)).toBe(" x:url(a\\)b);color:red");
+      expect(readDumpAuthorDeclarations(style)).toBe("x:url(a\\)b);color:red");
     });
   });
 
@@ -1686,5 +1676,40 @@ describe("따옴표 없는 `url(` 토큰 (Issue #364)", () => {
         ).color,
       ).toBe("#FF0000");
     });
+  });
+});
+
+// Issue #368 재현의 선언 단계 행이다. 기대값은 Chromium 153.0.8010.12 실측
+// (2026-10-11)이다. `div`에 style을 걸고 계산 스타일을 읽었다.
+describe("선언 단계 Chromium 동등성 (Issue #368)", () => {
+  it.each<[string, string, StyleDeclarations]>([
+    [
+      "1",
+      "color:red;background-color:blue;background:url(it's.png)",
+      { color: "#FF0000", backgroundColor: "#0000FF" },
+    ],
+    ["2", "background:url(a b.png) red", {}],
+    [
+      "3",
+      "color:red;background:\\75rl(it's.png);color:blue",
+      { color: "#0000FF" },
+    ],
+    ["4", "x color:red", {}],
+    ["5", "x1color:red", {}],
+    ["6", " color:red", {}],
+    ["12", "text-align:center !important", { align: "center" }],
+    ["12", "text-align:center !important;text-align:left", { align: "center" }],
+  ])("재현 %s행 %j은 Chromium처럼 %j다", (_row, style, expected) => {
+    expect(parseStyleDeclarations(style)).toEqual(expected);
+  });
+
+  it("재현 8행 `x font-weight:bold`는 굵기를 정하지 않는다", () => {
+    expect(parseInlineStyleMarks("x font-weight:bold").fontWeight).toBe(
+      undefined,
+    );
+  });
+
+  it("재현 9행 `_white-space:pre`는 공백 모드를 정하지 않는다", () => {
+    expect(parseWhiteSpaceMode("_white-space:pre")).toBe(undefined);
   });
 });

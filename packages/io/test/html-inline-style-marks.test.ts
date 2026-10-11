@@ -28,11 +28,9 @@
 import type { InlineContent, TextMark } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
-import {
-  type InlineStyleMarks,
-  parseInlineStyleMarks,
-} from "../src/clipboard/style-declarations.js";
+import type { InlineStyleMarks } from "../src/clipboard/style-declarations.js";
 import { importHtml } from "../src/index.js";
+import { parseInlineStyleMarks } from "./style-declarations-support.js";
 
 const importedValue = (html: string) => {
   const result = importHtml(html);
@@ -1554,22 +1552,29 @@ describe("text-decoration이 사용자 정의 함수 호출을 꺼짐으로 읽�
   );
 
   // 의도한 차이다. Chromium은 아래 값을 무효로 버린다. 따옴표 안 문자열이거나
-  // `{}` 블록 안이거나 `url(`의 인자라서다. 우리는 호출 탐색이 따옴표·블록·
-  // `url(`을 구분하지 않아 꺼짐이다. 치환 함수 탐색(`hasSubstitutionFunction`)과
+  // `{}` 블록 안이라서다. 우리는 호출 탐색이 따옴표·블록을 구분하지 않아
+  // 꺼짐이다. 치환 함수 탐색(`hasSubstitutionFunction`)과
   // 같은 한계다. `env(`·`attr(` 인자의 호출은 Chromium이 무효로 보지만 우리는
   // 꺼짐이다. 이전에는 치환 토큰으로 읽어 밑줄만 남았다.
   it.each([
     'underline "a --f(1px)"',
     "underline 'a --f(1px)'",
     "underline {a --f(1px)}",
-    "underline url(--f(1px))",
-    "underline url( --f(1px) )",
     "underline env(--f(1))",
     "underline attr(--f(1))",
   ])(
     "text-decoration:%s는 Chromium은 무효지만 따옴표·블록·url 인자를 구분하지 않아 꺼짐이다",
     (value) => {
       expectBothPriors("text-decoration", value, NO_LINE);
+    },
+  );
+
+  // 따옴표 없는 url 안의 `(`·공백은 bad url이다. 선언 단계가 그 선언을
+  // 버리므로 Chromium처럼 무효다(Issue #368).
+  it.each(["underline url(--f(1px))", "underline url( --f(1px) )"])(
+    "text-decoration:%s는 bad url 선언이라 Chromium처럼 무효다",
+    (value) => {
+      expectInvalid("text-decoration", value);
     },
   );
 
@@ -1719,5 +1724,31 @@ describe("인라인 서식 선언 분리", () => {
     expect(
       spanContent('font-family:"a;font-style:normal";font-style:italic'),
     ).toEqual(markedText([{ type: "italic" }]));
+  });
+});
+
+// Issue #368 재현 3·4·9행의 importHtml 결과다. 기대값은 Chromium 153.0.8010.12
+// 실측(2026-10-11)이다.
+describe("span style의 선언 단계 Chromium 동등성 (Issue #368)", () => {
+  it("재현 3행: 이름에 이스케이프가 든 url 함수의 bad url 선언만 버리고 뒤 color를 읽는다", () => {
+    expect(
+      paragraphContent(
+        `<span style="color:red;background:\\75rl(it's.png);color:blue">a</span>`,
+      ),
+    ).toEqual([
+      { text: "a", marks: [{ type: "textColor", color: "#0000FF" }] },
+    ]);
+  });
+
+  it("재현 4행: 속성 이름 앞 쓰레기 글자가 있는 선언은 버린다", () => {
+    expect(paragraphContent(`<span style="x color:red">a</span>`)).toEqual([
+      { text: "a" },
+    ]);
+  });
+
+  it("재현 9행: 이름이 `_white-space`인 선언은 공백 모드를 정하지 않는다", () => {
+    expect(
+      paragraphContent(`<span style="_white-space:pre">a  b</span>`),
+    ).toEqual([{ text: "a b" }]);
   });
 });

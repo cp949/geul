@@ -67,7 +67,8 @@ import type {
   ClipboardContent,
   ClipboardContentBlock,
 } from "./clipboard-content.js";
-import { parseStyleDeclarations } from "./style-declarations.js";
+import { parseCssDeclarations } from "../css/declarations.js";
+import { readStyleDeclarations } from "./style-declarations.js";
 import {
   type TabularCell,
   type TabularData,
@@ -142,7 +143,9 @@ const cellStyleFields = (
 ): Pick<TabularCell, "textColor" | "backgroundColor" | "align"> => {
   const styleAttribute = propertyString(element, "style");
   const parsedStyle =
-    styleAttribute === undefined ? {} : parseStyleDeclarations(styleAttribute);
+    styleAttribute === undefined
+      ? {}
+      : readStyleDeclarations(parseCssDeclarations(styleAttribute));
 
   // data-geul-*도 style과 똑같이 model의 정규 형식을 통과해야 한다. 그냥
   // 통과시키면 클립보드 HTML이 임의 값을 문서로 밀어넣어 parseDocument가

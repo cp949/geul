@@ -34,9 +34,9 @@ import type { Document, DocumentBlock, InlineContent } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import { parseClipboardTable } from "../src/clipboard/clipboard-table-parser.js";
-import { hasComputedStyleDump } from "../src/clipboard/style-declarations.js";
 import { importHtml } from "../src/index.js";
 import { expectSingleTable } from "./clipboard-table-support.js";
+import { hasComputedStyleDump } from "./style-declarations-support.js";
 
 const CHROME_H1 =
   '<h1 style="margin: 0px; color: rgb(36, 41, 47); font-family: Arial; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; background-color: rgb(255, 255, 255); text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial;">Title</h1>';

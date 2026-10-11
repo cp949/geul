@@ -239,7 +239,10 @@ describe("collapseSourceWhitespace의 선형 시간", () => {
       // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
       expect(small.nodeAccesses).toBeGreaterThan(0);
       expect(small.calls).toBeGreaterThan(0);
-      expect(small.chars).toBeGreaterThanOrEqual(BASE_SIZE);
+      // style 속성은 대괄호로만 읽어(Issue #368) 처리 문자 수가 입력 크기를 따르지
+      // 않는다. 하한은 0 초과로 둔다. style 읽기의 선형성은
+      // style-declarations-complexity.test.ts의 대괄호 읽기 축이 맡는다.
+      expect(small.chars).toBeGreaterThan(0);
 
       expect(
         large.nodeAccesses / small.nodeAccesses,
