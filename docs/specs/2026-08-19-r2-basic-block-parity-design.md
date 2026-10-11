@@ -310,7 +310,7 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
   - 한계: 시작이 codeBlock 안인 범위와 캐럿이 codeBlock 안인 붙여넣기는 현행 PM 기본 처리를 유지한다. 시작이 codeBlock 안인 범위는 `fooX`·`Yil`처럼 나뉜다. 정정(2026-10-07, Issue #296): 유효한 평문은 이 서술 그대로다. 무효 문자가 섞인 평문은 정리본을 `view.pasteText`로 넣는다(아래 #296 문단).
   - 한계: `text/html`이 없으면 이 예외가 없다. codeBlock에 걸친 범위의 Markdown 평문은 감지하지 않고 리터럴 문단으로 넣는다. 시작이 codeBlock 밖인 범위의 여러 줄 평문은 아래 #285 직접 삽입이다.
 - html이 블록을 만들지 못할 때의 평문 폴백(정정 2026-10-07, Issue #287). `text/html`이 있어도 블록이 생기지 않으면 같은 클립보드의 `text/plain`을 붙인다. 우선순위는 `text/html` → Markdown → `text/plain`이다. html이 블록을 못 만들면 그 단계만 건너뛴다. 이전에는 붙여넣기가 조용히 사라졌다. `<meta charset='utf-8'>`만 담긴 클립보드가 대표 사례다. 정정(2026-10-09, Issue #316): drop은 이 폴백이 없어 같은 클립보드의 평문이 사라졌다. 해소했다. 아래 "빈 slice html이 동반된 평문 drop" 문단이 정한다.
-  - 폴백 대상은 블록 0개인 결과와 import 실패다. 블록 0개는 `modelToTiptap`이 `DOCUMENT_INVALID`로 거절한다. import 실패는 위험 URL(`<img src='javascript:x'>`)이 대표다(정정 2026-10-10, Issue #352: 이전 예 `<pre>`의 `\u0001`은 이제 import 성공이다. 정정 2026-10-11, Issue #353: 이전 예 무효 `data-language`(`<pre data-language="bad&#x7f;">`)도 이제 import 성공이다. 7.1).
+  - 폴백 대상은 블록 0개인 결과와 import 실패다. 블록 0개는 `modelToTiptap`이 `DOCUMENT_INVALID`로 거절한다. import 실패는 위험 URL(`<img src='javascript:x'>`)이 대표다(정정 2026-10-10, Issue #352: 이전 예 `<pre>`의 `\u0001`은 이제 import 성공이다. 정정 2026-10-11, Issue #353: 이전 예 무효 `data-language`(`<pre data-language="bad&#x7f;">`)도 이제 import 성공이다. 7.1. 정정 2026-10-11, Issue #358: 이전 예 위험 URL `<img src='javascript:x'>`도 이제 import 성공이다. 그 `img` 블록만 빠지고 `UNSAFE_URL_REMOVED`를 반환한다. 남은 import 실패는 중복 `data-geul-block-id`, 중첩 깊이 초과, 표 격자 위반 같은 구조 위반이다).
   - 위험 입력은 여전히 import하지 않는다. 문서에는 평문만 들어온다.
   - 빈 문단 1개 이상은 폴백하지 않는다. `<p></p>`·`<p><br></p>`·`<p> </p>`는 html 우선이고 평문은 쓰지 않는다. 빈 줄 복사가 빈 문단을 넣는 동작을 지킨다.
   - 폴백 후 규칙은 `text/plain`만 있는 클립보드와 같다. Markdown 감지, 여러 줄 직접 배치(#284), `sanitizeInlineText` 순서다.
@@ -638,6 +638,8 @@ R0/R1과 동일한 strict/lossy 계약을 그대로 적용한다(새 규칙을 �
 - GFM `CODE_BLOCK_META_DROPPED` — mdast code `meta`를 저장 모델이 표현하지 못해 제거
 
 HTML CodeBlock의 language 후보 문자 위반은 거절하지 않는다. 그 후보를 없는 것으로 보고 빠진 후보마다 `UNSAFE_ATTRIBUTE_REMOVED` warning을 반환한다(7.1, Issue #353). source 문자 위반은 무효 문자를 지우고 `UNSAFE_CODE_POINT_REMOVED` warning을 반환한다(7.1, Issue #352).
+
+HTML import는 무효 미디어 url과 무효 `data-geul-*` 선택 표시 값으로 문서를 거절하지 않는다(7.1, Issue #358). `image`·`video`·`audio`의 `src`가 미디어 url 정책을 통과하지 못하면 그 블록을 버리고 `UNSAFE_URL_REMOVED`(`element`는 `img`·`video`·`audio`, `attribute`는 `src`)를 반환한다. 색·정렬·`icon`·시작 번호·미디어 폭·`aspectRatio`·표 셀 색·정렬·열 폭의 무효 값은 그 필드만 버리고 `UNSAFE_ATTRIBUTE_REMOVED`를 반환한다. 판정은 model 검증 함수가 소유한다. 중복 id, 중첩 깊이 초과, 표 격자 위반 같은 구조 위반은 계속 `HTML_DOCUMENT_INVALID`다.
 
 ## 9. 검증 전략
 

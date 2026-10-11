@@ -205,9 +205,10 @@ export const parseClipboardTable = (input: {
 `importHtml`과 다른 점:
 
 - 경고를 내지 않는다(Issue #356 Q14). 경고 수집기와 보존 속성 감사를 부르지 않는다.
-- `importHtml`이 문서 전체를 거절하는 값은 표 붙여넣기를 막지 않는다(Issue #356 Q1). 비표 블록마다 children을 뗀 모양을 `parseDocument`로 프로브한다.
-  - 무효 선택 필드(`textColor`, `backgroundColor`, `textAlignment`, `icon`, `collapsed`, `startNumber`, `language`, `wrap`, `caption`, `name`, `showPreview`, `previewWidth`, `aspectRatio`)는 그 필드만 뺀다. `data-geul-text-color="red"`는 문단만 남는다.
-  - 미디어 `url`처럼 뺄 수 없는 필드가 무효이면 블록을 버린다. 버린 블록의 children은 같은 자리 형제로 올린다. Word의 `file:///` `img`와 Outlook의 `cid:` `img`는 표 붙여넣기를 막지 않고 빠진다.
+- `importHtml`이 문서 전체를 거절하던 값은 표 붙여넣기를 막지 않는다(Issue #356 Q1). Issue #358 이후 변환기가 그 값을 직접 거르므로 클립보드가 다시 프로브하지 않는다.
+  - 무효 선택 필드(`textColor`, `backgroundColor`, `textAlignment`, `icon`, `startNumber`, `previewWidth`, `aspectRatio` 등)는 변환기가 그 필드만 뺀다. `data-geul-text-color="red"`는 문단만 남는다.
+  - 무효 미디어 `url`은 변환기가 블록을 버린다. Word의 `file:///` `img`와 Outlook의 `cid:` `img`는 표 붙여넣기를 막지 않고 빠진다.
+  - 이 클립보드 경로의 차이는 경고를 내지 않는 것뿐이다. 버린 값은 `importHtml`과 같다.
 - iframe 설정은 `{}`다. 호스트의 `iframeEmbed`를 받지 않아 `iframe` 블록이 url 없이 붙는다(`importHtml`을 설정 없이 부른 결과와 같다). 일반 html 붙여넣기는 `deps.iframeEmbed`를 넘긴다. 같은 `iframe`이 표 유무에 따라 다르게 판정된다. 공개 API를 늘리지 않으려는 선택이다.
 - id: 변환기가 `data-geul-block-id`를 쓰고 없으면 `clipboard-1`부터 붙인다. 이미 나온 id나 빈 id는 새로 발급한다. 호출 안에서 비어 있지 않고 유일하다(RD-004). 편집기 안 복사의 id는 core가 재발급한다.
 

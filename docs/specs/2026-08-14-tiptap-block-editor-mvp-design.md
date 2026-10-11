@@ -408,7 +408,7 @@ Markdown `strict` export가 GFM으로 표현 불가능한 요소를 만나면 `E
 
 - `DEEP_TREE_FLATTENED`와 `NESTED_CHILDREN_FLATTENED`는 구조 절단이라 `element` 필드가 없다.
 - `CODE_BLOCK_LANGUAGE_METADATA_IGNORED`는 `element` 대신 `blockId`를 담는다.
-- `UNSAFE_ATTRIBUTE_REMOVED`는 `attribute`를 더 담는다. `UNSAFE_URL_REMOVED`는 `element`가 `a`, `attribute`가 `href`로 고정이다.
+- `UNSAFE_ATTRIBUTE_REMOVED`는 `attribute`를 더 담는다. `UNSAFE_URL_REMOVED`는 `element`가 `a`면 `attribute`가 `href`이고, `img`·`video`·`audio`면 `attribute`가 `src`다(Issue #358).
 - 경고를 내는 쪽(경고 수집기와 변환기)과 순서는 ADR-0003, G-CNV-002, R2 스펙 7.1이 소유한다.
 
 ### 11.3 core (`packages/core/src/errors.ts`, `table-grid.ts`)
