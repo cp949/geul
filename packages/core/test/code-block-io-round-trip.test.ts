@@ -127,7 +127,11 @@ describe("CodeBlock importer와 production core 왕복", () => {
   });
 
   it("HTML/GFM invalid import는 structured Result 실패로 끝나 core를 호출하지 않는다", () => {
-    const invalidHtml = importHtml("<img src='javascript:x'>");
+    // 구조 위반(중복 id)은 계속 문서 전체 거절이다. 무효 미디어 url은 더 이상
+    // 거절이 아니다(Issue #358).
+    const invalidHtml = importHtml(
+      '<p data-geul-block-id="a">x</p><p data-geul-block-id="a">y</p>',
+    );
     const invalidMarkdown = importMarkdown("```\n\ud800\n```\n");
 
     expect(invalidHtml).toMatchObject({

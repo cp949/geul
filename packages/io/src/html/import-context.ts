@@ -55,6 +55,14 @@ export type PreservedAttributes = {
 
 export type HtmlImportContext = {
   warnings: HtmlImportWarning[];
+  // 변환기가 값을 버린 경고를 노드·키 단위로 한 번만 낸다(Issue #358). children
+  // wrapper의 own-content는 wrapper 인식 취소 때 같은 노드를 두 번 변환한다.
+  // 두 번째 변환이 같은 경고를 다시 내지 않게 한다.
+  warnOnce: (
+    node: HtmlElementNode,
+    key: string,
+    warning: HtmlImportWarning,
+  ) => void;
   codePoints: CodePointReporter;
   preserved: PreservedAttributes;
 };
@@ -99,9 +107,19 @@ export const createImportContext = (
   };
 
   const preserved = new WeakMap<object, Set<string>>();
+  // 표시 키처럼 properties 객체를 키로 쓴다. 세그먼트 복제본이 원본과 같은
+  // 객체를 공유하므로 복제본을 거쳐도 한 번만 난다.
+  const reported = new WeakMap<object, Set<string>>();
 
   return {
     warnings,
+    warnOnce: (node, key, warning) => {
+      const keys = reported.get(node.properties) ?? new Set<string>();
+      if (keys.has(key)) return;
+      keys.add(key);
+      reported.set(node.properties, keys);
+      warnings.push(warning);
+    },
     codePoints: {
       inlineText: (node) => check(node, sanitizeInlineText),
       inlineTextIn: (nodes) => checkIn(nodes, sanitizeInlineText),

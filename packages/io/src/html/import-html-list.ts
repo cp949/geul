@@ -13,7 +13,10 @@ import {
 
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
-import { paragraphContentFromNodes } from "./import-html-helpers.js";
+import {
+  paragraphContentFromNodes,
+  validOptionalValue,
+} from "./import-html-helpers.js";
 import type { HtmlElementNode } from "./inline-content.js";
 
 // RD-003이 편입하는 목록류 4종. toggleListItem은 ListItemBlock 유니온
@@ -76,16 +79,27 @@ export const buildProductionListItemBlock = (
   const content = paragraphContentFromNodes(ownNode.children, context);
   switch (type) {
     case "numberedListItem": {
-      const startNumber = propertyInteger(
+      // 정수가 아닌 값은 이전처럼 조용히 없는 값이다. 정수인데 model 범위를
+      // 벗어난 값은 버리고 경고한다(Issue #358).
+      const parsedStartNumber = propertyInteger(
         ownNode,
         "dataGeulStartNumber",
         Number.NaN,
       );
+      const startNumber = Number.isNaN(parsedStartNumber)
+        ? undefined
+        : validOptionalValue(
+            context,
+            ownNode,
+            "dataGeulStartNumber",
+            parsedStartNumber,
+            isStartNumberInRange,
+          );
       return {
         id,
         type,
         content,
-        ...(Number.isNaN(startNumber) ? {} : { startNumber }),
+        ...(startNumber === undefined ? {} : { startNumber }),
       };
     }
     case "checkListItem":

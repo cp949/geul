@@ -7,13 +7,22 @@ import {
   type Document,
   type IdFactory,
   type IframeEmbedConfig,
+  isCanonicalCellAlign,
+  isCanonicalCellColor,
+  isSupportedMediaUrl,
+  isValidMediaPreviewWidth,
   resolveIframeEmbedDecision,
   sanitizeInlineText,
 } from "@cp949/geul-model";
 
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
-import { isElementNode, textValue } from "./import-html-helpers.js";
+import {
+  isElementNode,
+  textValue,
+  validOptionalValue,
+} from "./import-html-helpers.js";
+import { unsafeMediaUrlRemovedWarning } from "./import-warnings.js";
 import type { HtmlElementNode } from "./inline-content.js";
 
 // 5종 미디어 블록 판별 타입(export-html.ts의 MediaBlock과 동형, spec §3.1,
@@ -148,12 +157,22 @@ const resolvedIframeUrl = (
 // figure의 자식을 segmentBlocks로 재귀 분할하지 않고 여기서 직접 들여다봐야
 // 중복 생성 방지 가드가 성립한다(RD-001 완료 조건 2 — block-segmenter.ts의
 // media 세그먼트가 안쪽으로 재귀하지 않는 이유와 대칭).
+//
+// 무효 미디어 url은 블록째 버린다(Issue #358). image·video·audio의 시각 태그
+// src가 미디어 url 정책(isSupportedMediaUrl)을 통과하지 못하면 빈 블록을 남기지
+// 않고 undefined를 돌려준다. 경고는 UNSAFE_URL_REMOVED 한 건이고 버린 블록의
+// alt·캡션은 따로 경고하지 않는다. id도 발급하지 않는다. file(href는 수집기가
+// 알리고 url 없는 블록이 남는다)과 iframe(정책 불허 시 빈 블록)은 바뀌지 않는다.
+// 다만 file 마커가 붙은 figure의 시각 태그가 img·video·audio이면 src가 url이라
+// 같은 규칙으로 블록째 버린다.
+// 선택 표시 필드(backgroundColor·textAlignment·previewWidth·aspectRatio)의 무효
+// 값은 그 필드만 버리고 경고한다.
 export const mediaBlockFromNode = (
   node: HtmlElementNode,
   createId: IdFactory,
   context: HtmlImportContext,
   iframeEmbedConfig: IframeEmbedConfig,
-): MediaBlock => {
+): MediaBlock | undefined => {
   const isFigure = node.tagName === "figure";
   const isEmptyPlaceholder = node.tagName === "div";
   const wrapperChildren =
@@ -179,37 +198,6 @@ export const mediaBlockFromNode = (
   }
 
   const mediaType = mediaTypeFromNode(node) ?? "file";
-  const id = propertyString(node, "dataGeulBlockId") ?? createId();
-  const name = propertyString(node, "dataGeulName");
-  const backgroundColor = propertyString(node, "dataGeulBackgroundColor");
-  const showPreviewRaw = propertyString(node, "dataGeulShowPreview");
-  const previewWidthRaw = propertyInteger(
-    node,
-    "dataGeulPreviewWidth",
-    Number.NaN,
-  );
-  const previewWidth = Number.isNaN(previewWidthRaw)
-    ? undefined
-    : previewWidthRaw;
-  const textAlignment = propertyString(node, "dataGeulTextAlignment") as
-    "left" | "center" | "right" | undefined;
-  // iframe(CUS-001~004) 전용 필드 — 다른 4종은 이 값을 싣지 않는다(model
-  // IframeBlock.aspectRatio, spec §2). textAlignment와 동일하게 별도 검증
-  // 없이 캐스트만 하고 최종 검증은 parseDocument에 위임한다.
-  const aspectRatio = propertyString(node, "dataGeulAspectRatio") as
-    "16:9" | undefined;
-  // caption은 plain string이다(rich text 아님, spec §3.1) — 인라인 mark를
-  // 보존할 필요가 없어 textValue로 평탄화한다. sanitizeInlineText로 지운
-  // 글자는 정제하는 이 자리에서 UNSAFE_CODE_POINT_REMOVED로 경고한다
-  // (RD-001, G-CNV-002) — data-geul-name은 속성값이라 검사하지 않는다(표 셀
-  // 속성값과 동일 관례).
-  if (figcaptionNode !== undefined) {
-    context.codePoints.inlineTextIn(figcaptionNode.children);
-  }
-  const caption =
-    figcaptionNode === undefined
-      ? undefined
-      : sanitizeInlineText(textValue(figcaptionNode.children));
   // iframe(CUS-001~004)은 내부 <iframe> 태그가 sanitize에서 항상 제거되므로
   // visualNode를 거치지 않고 wrapper(node) 자신의 data-geul-src를 유일한
   // src 공급원으로 읽는다 — 4종처럼 시각 태그 자신의 src/href를 읽지 않는다.
@@ -228,6 +216,85 @@ export const mediaBlockFromNode = (
         : visualNode.tagName === "a"
           ? propertyString(visualNode, "href")
           : propertyString(visualNode, "src");
+  const visualTag = visualNode?.tagName;
+  if (
+    mediaType !== "iframe" &&
+    visualNode !== undefined &&
+    (visualTag === "img" || visualTag === "video" || visualTag === "audio") &&
+    url !== undefined &&
+    !isSupportedMediaUrl(url)
+  ) {
+    context.warnOnce(
+      visualNode,
+      "src",
+      unsafeMediaUrlRemovedWarning(visualTag),
+    );
+    return undefined;
+  }
+
+  const id = propertyString(node, "dataGeulBlockId") ?? createId();
+  const name = propertyString(node, "dataGeulName");
+  const backgroundColor = validOptionalValue(
+    context,
+    node,
+    "dataGeulBackgroundColor",
+    propertyString(node, "dataGeulBackgroundColor"),
+    isCanonicalCellColor,
+  );
+  const showPreviewRaw = propertyString(node, "dataGeulShowPreview");
+  // 아래 세 필드는 image·video·iframe만 싣는다. 다른 타입은 읽지도 경고하지도
+  // 않는다. previewWidth는 정수가 아니면 이전처럼 조용히 없는 값이고, 정수인데
+  // 양수가 아니면 버리고 경고한다.
+  const readsLayoutFields =
+    mediaType === "image" || mediaType === "video" || mediaType === "iframe";
+  const previewWidthRaw = propertyInteger(
+    node,
+    "dataGeulPreviewWidth",
+    Number.NaN,
+  );
+  const previewWidth =
+    !readsLayoutFields || Number.isNaN(previewWidthRaw)
+      ? undefined
+      : validOptionalValue(
+          context,
+          node,
+          "dataGeulPreviewWidth",
+          previewWidthRaw,
+          isValidMediaPreviewWidth,
+        );
+  const textAlignment = readsLayoutFields
+    ? (validOptionalValue(
+        context,
+        node,
+        "dataGeulTextAlignment",
+        propertyString(node, "dataGeulTextAlignment"),
+        isCanonicalCellAlign,
+      ) as "left" | "center" | "right" | undefined)
+    : undefined;
+  // iframe(CUS-001~004) 전용 필드 — 다른 4종은 이 값을 싣지 않는다(model
+  // IframeBlock.aspectRatio, spec §2). v1은 "16:9" 리터럴 하나만 허용한다.
+  const aspectRatio =
+    mediaType === "iframe"
+      ? (validOptionalValue(
+          context,
+          node,
+          "dataGeulAspectRatio",
+          propertyString(node, "dataGeulAspectRatio"),
+          (value) => value === "16:9",
+        ) as "16:9" | undefined)
+      : undefined;
+  // caption은 plain string이다(rich text 아님, spec §3.1) — 인라인 mark를
+  // 보존할 필요가 없어 textValue로 평탄화한다. sanitizeInlineText로 지운
+  // 글자는 정제하는 이 자리에서 UNSAFE_CODE_POINT_REMOVED로 경고한다
+  // (RD-001, G-CNV-002) — data-geul-name은 속성값이라 검사하지 않는다(표 셀
+  // 속성값과 동일 관례).
+  if (figcaptionNode !== undefined) {
+    context.codePoints.inlineTextIn(figcaptionNode.children);
+  }
+  const caption =
+    figcaptionNode === undefined
+      ? undefined
+      : sanitizeInlineText(textValue(figcaptionNode.children));
 
   const common = {
     id,

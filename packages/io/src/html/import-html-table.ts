@@ -3,7 +3,11 @@
 // 명시 속성이 없을 때 셀 구조로 추론한다(inferHeaderRows/inferHeaderColumns).
 import {
   type IdFactory,
+  isCanonicalCellAlign,
+  isCanonicalCellColor,
+  MAX_COLUMN_WIDTH,
   MAX_TABLE_COLUMNS,
+  MIN_COLUMN_WIDTH,
   type TableBlock,
   tableSizeViolationMessage,
   validateTableSize,
@@ -16,6 +20,7 @@ import {
   HtmlDocumentInvalidError,
   propertyHeaderFlag,
   sanitizeInlineContentText,
+  validOptionalValue,
 } from "./import-html-helpers.js";
 import {
   type HtmlElementNode,
@@ -36,6 +41,34 @@ import {
 } from "./table-layout.js";
 
 const DEFAULT_COLUMN_WIDTH = 160;
+
+// 열 폭 판정이다. model 열 폭 검증과 같은 상수를 쓴다(G-CNV-001).
+const isValidColumnWidth = (width: number): boolean =>
+  Number.isInteger(width) &&
+  width >= MIN_COLUMN_WIDTH &&
+  width <= MAX_COLUMN_WIDTH;
+
+// col의 폭을 읽는다. data-geul-width가 우선이고 없을 때만 width 속성을 본다.
+// 값이 있는데 무효이면(정수 아님, 범위 밖) 그 속성만 버리고 경고한 뒤 다음
+// 후보로 넘어간다. 후보가 모두 없거나 무효이면 기본 폭이다(Issue #358).
+const columnWidthFrom = (
+  col: HtmlElementNode,
+  context: HtmlImportContext,
+): number => {
+  for (const property of ["dataGeulWidth", "width"]) {
+    const raw = col.properties[property];
+    if (raw === undefined || raw === null || raw === "") continue;
+    const width = validOptionalValue(
+      context,
+      col,
+      property,
+      propertyInteger(col, property, Number.NaN),
+      isValidColumnWidth,
+    );
+    if (width !== undefined) return width;
+  }
+  return DEFAULT_COLUMN_WIDTH;
+};
 
 const inferHeaderRows = (
   rows: TableRowSource[],
@@ -150,11 +183,7 @@ export const parseTable = (
       const width =
         col === undefined
           ? DEFAULT_COLUMN_WIDTH
-          : propertyInteger(
-              col,
-              "dataGeulWidth",
-              propertyInteger(col, "width", DEFAULT_COLUMN_WIDTH),
-            );
+          : columnWidthFrom(col, context);
       return { id, width };
     },
   );
@@ -167,20 +196,44 @@ export const parseTable = (
         propertyString(layout.element, "dataGeulColumnId") ??
         column?.id ??
         createId();
-      // data-geul-*는 원시 문자열 그대로 통과시킨다(parseDocument가 최종
-      // 검증한다). 없는 필드만 style·bgcolor에서 td·th → tr → table 순으로
-      // 채운다(Issue #334). tr은 이 셀이 시작하는 행이다(rowspan 셀도 같다).
-      const dataTextColor = propertyString(layout.element, "dataGeulTextColor");
-      const dataBackgroundColor = propertyString(
+      // data-geul-*는 model 판정으로 거른다. 무효 값은 그 필드만 버리고
+      // 경고하며 style로 되살리지 않는다(Issue #358). 없는 필드만
+      // style·bgcolor에서 td·th → tr → table 순으로 채운다(Issue #334). tr은
+      // 이 셀이 시작하는 행이다(rowspan 셀도 같다).
+      const rawTextColor = propertyString(layout.element, "dataGeulTextColor");
+      const rawBackgroundColor = propertyString(
         layout.element,
         "dataGeulBackgroundColor",
       );
+      const dataTextColor = validOptionalValue(
+        context,
+        layout.element,
+        "dataGeulTextColor",
+        rawTextColor,
+        isCanonicalCellColor,
+      );
+      const dataBackgroundColor = validOptionalValue(
+        context,
+        layout.element,
+        "dataGeulBackgroundColor",
+        rawBackgroundColor,
+        isCanonicalCellColor,
+      );
       // 서식은 data-geul-* 색과 독립이라 항상 읽는다.
       const styled = cellPresentation(layout.element, row.element, element);
-      const textColor = dataTextColor ?? styled.textColor;
-      const backgroundColor = dataBackgroundColor ?? styled.backgroundColor;
-      const align = propertyString(layout.element, "dataGeulAlign") as
-        TableBlock["rows"][number]["cells"][number]["align"] | undefined;
+      const textColor =
+        rawTextColor === undefined ? styled.textColor : dataTextColor;
+      const backgroundColor =
+        rawBackgroundColor === undefined
+          ? styled.backgroundColor
+          : dataBackgroundColor;
+      const align = validOptionalValue(
+        context,
+        layout.element,
+        "dataGeulAlign",
+        propertyString(layout.element, "dataGeulAlign"),
+        isCanonicalCellAlign,
+      ) as TableBlock["rows"][number]["cells"][number]["align"] | undefined;
 
       return {
         id: propertyString(layout.element, "dataGeulCellId") ?? createId(),

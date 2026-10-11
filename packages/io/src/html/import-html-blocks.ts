@@ -10,6 +10,7 @@ import {
   type HeadingBlock,
   type IdFactory,
   type IframeEmbedConfig,
+  isValidInlineText,
   type ListItemBlock,
   MAX_NESTING_DEPTH,
   sanitizeCodeBlockSource,
@@ -27,6 +28,7 @@ import {
   selectCodeBlockLanguage,
   textBlockPropsFromElement,
   textValue,
+  validOptionalValue,
 } from "./import-html-helpers.js";
 import {
   buildProductionListItemBlock,
@@ -151,7 +153,9 @@ const blocksFromSegments = (
         const originProps =
           segment.origin === undefined
             ? {}
-            : textBlockPropsFromElement(segment.origin, { styleOnly: true });
+            : textBlockPropsFromElement(segment.origin, context, {
+                styleOnly: true,
+              });
         blocks.push({
           id: createId(),
           type: "paragraph",
@@ -175,7 +179,7 @@ const blocksFromSegments = (
       // isOwnEchoStyle이 raw 노드 하나만 보고 판정한다(Issue #179 리뷰
       // 수정 — 여기서 존재 여부만으로 소비하면 서로 다른 노드의 warning이
       // 뒤바뀔 수 있었다).
-      const paragraphProps = textBlockPropsFromElement(segment.node);
+      const paragraphProps = textBlockPropsFromElement(segment.node, context);
       blocks.push({
         id: propertyString(segment.node, "dataGeulBlockId") ?? createId(),
         type: "paragraph",
@@ -195,7 +199,7 @@ const blocksFromSegments = (
       // 관례).
       // style 오탐 억제는 위 paragraph와 동일하게 import-warnings.ts의
       // isOwnEchoStyle이 raw 노드 단위로 판정한다(Issue #179 리뷰 수정).
-      const headingProps = textBlockPropsFromElement(segment.node);
+      const headingProps = textBlockPropsFromElement(segment.node, context);
       blocks.push({
         id: propertyString(segment.node, "dataGeulBlockId") ?? createId(),
         type: "heading",
@@ -227,9 +231,15 @@ const blocksFromSegments = (
       // 여기서 재귀하지 않는다(segment.node 자체가 이미 완결된 leaf다) —
       // 중복 생성 방지 가드는 block-segmenter.ts의 media 세그먼트가 안쪽을
       // 재귀하지 않는다는 사실과 대칭이다.
-      blocks.push(
-        mediaBlockFromNode(segment.node, createId, context, iframeEmbedConfig),
+      // 무효 미디어 url이면 블록이 없다. 경고는 변환기가 이미 냈고 형제 블록은
+      // 그대로 이어진다(Issue #358).
+      const media = mediaBlockFromNode(
+        segment.node,
+        createId,
+        context,
+        iframeEmbedConfig,
       );
+      if (media !== undefined) blocks.push(media);
       continue;
     }
     if (segment.kind === "blockquote") {
@@ -256,7 +266,9 @@ const blocksFromSegments = (
       // style 오탐 억제는 위 paragraph/heading과 동일하게
       // import-warnings.ts의 isOwnEchoStyle이 raw 노드 단위로 판정한다
       // (Issue #179 리뷰 수정).
-      const quoteProps = textBlockPropsFromElement(segment.node, { promoted });
+      const quoteProps = textBlockPropsFromElement(segment.node, context, {
+        promoted,
+      });
       if (depth >= MAX_NESTING_DEPTH) {
         const flattened = blocksFromNodes(
           childrenNodes,
@@ -305,10 +317,18 @@ const blocksFromSegments = (
         context,
         promotedFormat(segment.node, promoted),
       );
-      const calloutProps = textBlockPropsFromElement(segment.node, {
+      const calloutProps = textBlockPropsFromElement(segment.node, context, {
         promoted,
       });
-      const icon = propertyString(segment.node, "dataGeulIcon");
+      // 제어문자 등 인라인 텍스트 불변식을 어기는 icon은 버리고 경고한다(Issue
+      // #358). 빈 값은 propertyString이 이미 없는 값으로 만든다.
+      const icon = validOptionalValue(
+        context,
+        segment.node,
+        "dataGeulIcon",
+        propertyString(segment.node, "dataGeulIcon"),
+        isValidInlineText,
+      );
       if (depth >= MAX_NESTING_DEPTH) {
         const flattened = blocksFromNodes(
           childrenNodes,
@@ -511,7 +531,9 @@ const blocksFromListItem = (
     context,
     promotedFormat(node, promoted),
   );
-  const listItemProps = textBlockPropsFromElement(node, { promoted });
+  const listItemProps = textBlockPropsFromElement(node, context, {
+    promoted,
+  });
   const ownBlock: ListItemBlock =
     listType === "numberedListItem"
       ? {
@@ -791,7 +813,7 @@ const blocksFromNodes = (
         ...(details.collapsed === undefined
           ? {}
           : { collapsed: details.collapsed }),
-        ...textBlockPropsFromElement(details.summaryNode),
+        ...textBlockPropsFromElement(details.summaryNode, context),
         ...(children.length > 0 ? { children } : {}),
       });
       continue;

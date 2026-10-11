@@ -7,8 +7,9 @@
  *   쓴다.
  * - `importHtml`과 `parseClipboardTable`이 같은 입력에서 같은 셀 색을 낸다.
  *   `data-geul-*`가 없는 입력이다.
- * - `data-geul-*`는 필드별로 이긴다. `importHtml`은 원시 문자열을 그대로
- *   통과시키고, 클립보드는 정규형일 때만 쓴다.
+ * - `data-geul-*`는 필드별로 이긴다. `importHtml`과 클립보드 모두 정규형일 때만
+ *   쓴다. 비정규형은 필드를 버리고 style로 되살리지 않는다. `importHtml`은
+ *   경고한다(Issue #358).
  * - 셀의 `tr`은 그 셀이 시작하는 행이다. rowspan 셀도 시작 행 기준이다.
  * - 셀 안 블록 요소의 `style` 색은 단계 B가 텍스트 마크로 읽는다. 셀 속성과
  *   마크가 겹쳐 반영되지 않는다.
@@ -490,13 +491,32 @@ describe("data-geul-*가 셀 style·bgcolor보다 필드별로 우선한다", ()
     ]);
   });
 
-  it("importHtml은 비정규형 data-geul 값을 원시 문자열 그대로 통과시켜 문서 검증이 거절한다", () => {
-    const result = importHtml(
-      table("", ' style="color:#00ff00"', ' data-geul-text-color="red"'),
+  it("importHtml은 비정규형 data-geul 값을 버리고 경고한다 (Issue #358)", () => {
+    const html = table(
+      "",
+      ' style="color:#00ff00"',
+      ' data-geul-text-color="red"',
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe("HTML_DOCUMENT_INVALID");
+    const result = importHtml(html);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(importedColors(html)).toEqual([[{}]]);
+    // 수집기의 tr style 제거 경고가 먼저, 변환기의 값 제거 경고가 뒤다.
+    expect(result.value.warnings).toEqual([
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "tr",
+        attribute: "style",
+        message: "Unsupported style attribute was removed from tr",
+      },
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "td",
+        attribute: "data-geul-text-color",
+        message:
+          "Unsupported data-geul-text-color attribute was removed from td",
+      },
+    ]);
   });
 
   it("클립보드는 비정규형 data-geul 값을 버리고 tr·table 값을 쓴다", () => {

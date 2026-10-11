@@ -7,6 +7,8 @@ import {
   appendOrMergeInlineItem,
   type IdFactory,
   type InlineContent,
+  isCanonicalCellAlign,
+  isCanonicalCellColor,
   isValidCodeBlockLanguage,
   sanitizeInlineText,
   type TextBlockProps,
@@ -16,6 +18,7 @@ import {
 import { blockPresentation, type TextFormat } from "./element-presentation.js";
 import { propertyInteger, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
+import { unsafeAttributeRemovedWarning } from "./import-warnings.js";
 import {
   type HtmlElementNode,
   type HtmlNode,
@@ -23,22 +26,50 @@ import {
   inlineContentFromNodes,
 } from "./inline-content.js";
 
+// hast 속성 이름(dataGeulTextColor)을 HTML 속성 이름(data-geul-text-color)으로
+// 바꾼다. 경고의 attribute는 HTML 이름이다.
+const htmlAttributeName = (property: string): string =>
+  property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+
+// 선택 표시 속성 값 하나를 model 판정(isValid)으로 거른다(Issue #358). 유효하면
+// 값을, 무효하면 undefined를 돌려주고 UNSAFE_ATTRIBUTE_REMOVED를 낸다.
+// - 판정 규칙은 호출자가 model export로 넘긴다. 여기서 복제하지 않는다.
+// - 값이 없으면(undefined) 경고 없이 undefined다.
+// - 버린 속성도 읽은 것으로 표시한다. 변환 뒤 감사가 같은 속성을 한 번 더
+//   경고하지 않는다.
+export const validOptionalValue = <T extends string | number>(
+  context: HtmlImportContext,
+  element: HtmlElementNode,
+  property: string,
+  value: T | undefined,
+  isValid: (value: T) => boolean,
+): T | undefined => {
+  if (value === undefined || isValid(value)) return value;
+  context.preserved.mark(element, property);
+  context.warnOnce(
+    element,
+    property,
+    unsafeAttributeRemovedWarning(element.tagName, htmlAttributeName(property)),
+  );
+  return undefined;
+};
+
 // TextBlockProps(RD-001) 3필드를 data-geul-*에서 읽는다. 표 셀 import의
 // textColor/backgroundColor/align 읽기(import-html-table.ts의 modelRows
-// 구성부)와 같은 전략 — 정규형 검증은 하지 않고 원시 문자열을 그대로
-// 통과시킨다. 최종 검증은 importHtml 끝의 parseDocument 한 곳(G-CNV-001)이
-// 한다.
+// 구성부)와 같은 전략이다. 값은 model 판정(isCanonicalCellColor,
+// isCanonicalCellAlign)으로 거른다(G-CNV-001). 무효 값은 그 필드만 버리고
+// 경고한다(Issue #358). 버린 필드는 style로 되살리지 않는다.
 // data-geul-*가 없는 textColor/backgroundColor는 style의 color·
 // background-color에서 채운다(Issue #334 단계 B, 외부 HTML). 필드별로 따진다 —
 // data-geul-*가 있는 필드는 style을 보지 않고, 없는 필드만 style이 채운다. style
 // 값은 canonical #RRGGBB 대문자로만 낸다(반투명·무효는 값 없음).
 // textAlignment는 data-geul-*만 읽는다.
 // styleOnly는 평범한 문단 div용이다 — data-geul-*는 p·h1~h6·blockquote·li·
-// callout의 계약이라 div에서는 읽지 않고(정렬 포함) style만 읽는다. 읽으면
-// 잘못된 data-geul-* 값이 parseDocument 거절로 문서 전체를 막는다(Issue #334
-// 리뷰 MINOR-2, #334 전에는 무시됐다).
+// callout의 계약이라 div에서는 읽지 않고(정렬 포함) style만 읽는다(Issue #334
+// 리뷰 MINOR-2).
 export const textBlockPropsFromElement = (
   element: HtmlElementNode,
+  context: HtmlImportContext,
   options?: {
     styleOnly?: boolean;
     promoted?: HtmlElementNode | undefined;
@@ -47,17 +78,32 @@ export const textBlockPropsFromElement = (
   Pick<TextBlockProps, "textColor" | "backgroundColor" | "textAlignment">
 > => {
   const styleOnly = options?.styleOnly === true;
-  const dataTextColor = styleOnly
+  const rawTextColor = styleOnly
     ? undefined
     : propertyString(element, "dataGeulTextColor");
-  const dataBackgroundColor = styleOnly
+  const rawBackgroundColor = styleOnly
     ? undefined
     : propertyString(element, "dataGeulBackgroundColor");
+  const dataTextColor = validOptionalValue(
+    context,
+    element,
+    "dataGeulTextColor",
+    rawTextColor,
+    isCanonicalCellColor,
+  );
+  const dataBackgroundColor = validOptionalValue(
+    context,
+    element,
+    "dataGeulBackgroundColor",
+    rawBackgroundColor,
+    isCanonicalCellColor,
+  );
   // 두 필드가 모두 data-geul-*로 정해졌으면 style을 읽지 않는다(자기 export
-  // 에코가 이 경우다). 덤프가 붙은 style은 표식 뒤 text-decoration* 선언 뒤의
-  // 작성자 선언만 색으로 읽는다(blockPresentation).
+  // 에코가 이 경우다). 무효라 버린 필드도 정해진 것으로 본다. 덤프가 붙은
+  // style은 표식 뒤 text-decoration* 선언 뒤의 작성자 선언만 색으로 읽는다
+  // (blockPresentation).
   const styled =
-    dataTextColor !== undefined && dataBackgroundColor !== undefined
+    rawTextColor !== undefined && rawBackgroundColor !== undefined
       ? undefined
       : blockPresentation(element).colors;
   // li·blockquote가 content로 승격한 p는 element 안쪽이라 element의 style 색을
@@ -66,13 +112,23 @@ export const textBlockPropsFromElement = (
     styled === undefined || options?.promoted === undefined
       ? undefined
       : blockPresentation(options.promoted).colors;
-  const textColor = dataTextColor ?? promoted?.textColor ?? styled?.textColor;
+  const textColor =
+    rawTextColor === undefined
+      ? (promoted?.textColor ?? styled?.textColor)
+      : dataTextColor;
   const backgroundColor =
-    dataBackgroundColor ?? promoted?.backgroundColor ?? styled?.backgroundColor;
+    rawBackgroundColor === undefined
+      ? (promoted?.backgroundColor ?? styled?.backgroundColor)
+      : dataBackgroundColor;
   const textAlignment = styleOnly
     ? undefined
-    : (propertyString(element, "dataGeulTextAlignment") as
-        TextBlockProps["textAlignment"] | undefined);
+    : (validOptionalValue(
+        context,
+        element,
+        "dataGeulTextAlignment",
+        propertyString(element, "dataGeulTextAlignment"),
+        isCanonicalCellAlign,
+      ) as TextBlockProps["textAlignment"] | undefined);
   return {
     ...(textColor === undefined ? {} : { textColor }),
     ...(backgroundColor === undefined ? {} : { backgroundColor }),

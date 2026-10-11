@@ -342,14 +342,26 @@ describe("HTML 왕복 변환", () => {
     expect(table?.type).toBe("table");
   });
 
-  it("허용 목록 밖 data-geul-align 값은 import 전체를 HTML_DOCUMENT_INVALID로 거절한다", () => {
+  it("허용 목록 밖 data-geul-align 값은 align만 버리고 경고한다 (Issue #358)", () => {
     const html =
       '<table data-geul-block-id="table-1"><colgroup><col data-geul-column-id="column-1" data-geul-width="160"></colgroup><tbody><tr data-geul-row-id="row-1"><td data-geul-cell-id="cell-1" data-geul-column-id="column-1" rowspan="1" colspan="1" data-geul-align="justify"></td></tr></tbody></table>';
 
     const result = importHtml(html);
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe("HTML_DOCUMENT_INVALID");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    const table = result.value.document.blocks[0];
+    if (table?.type !== "table" || !("rows" in table)) {
+      throw new Error("Expected table");
+    }
+    expect(table.rows[0]?.cells[0]).not.toHaveProperty("align");
+    expect(result.value.warnings).toEqual([
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "td",
+        attribute: "data-geul-align",
+        message: "Unsupported data-geul-align attribute was removed from td",
+      },
+    ]);
   });
 });

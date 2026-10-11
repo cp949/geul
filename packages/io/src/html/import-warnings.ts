@@ -34,10 +34,11 @@ export type HtmlImportWarning =
       attribute: string;
       message: string;
     }
+  // a의 href는 수집기가, 미디어 시각 태그의 src는 변환기가 낸다(Issue #358).
   | {
       kind: "UNSAFE_URL_REMOVED";
-      element: "a";
-      attribute: "href";
+      element: "a" | "img" | "video" | "audio";
+      attribute: "href" | "src";
       message: string;
     }
   | {
@@ -98,7 +99,8 @@ export const codeBlockLanguageMetadataIgnoredWarning = (
   message: `Conflicting CodeBlock language metadata was ignored for block ${blockId}`,
 });
 
-const unsafeAttributeRemovedWarning = (
+// 변환기가 무효 값을 버릴 때도 수집기·감사와 같은 문안을 쓴다(Issue #358).
+export const unsafeAttributeRemovedWarning = (
   element: string,
   attribute: string,
 ): HtmlImportWarning => ({
@@ -106,6 +108,17 @@ const unsafeAttributeRemovedWarning = (
   element,
   attribute,
   message: `Unsupported ${attribute} attribute was removed from ${element}`,
+});
+
+// 변환기가 무효 미디어 url을 만나 블록째 버릴 때 낸다(Issue #358). a의 href는
+// 수집기가 따로 알린다. element는 src를 가진 시각 태그다.
+export const unsafeMediaUrlRemovedWarning = (
+  element: "img" | "video" | "audio",
+): HtmlImportWarning => ({
+  kind: "UNSAFE_URL_REMOVED",
+  element,
+  attribute: "src",
+  message: `Unsafe media URL was removed from ${element}`,
 });
 
 // font의 color는 허용 속성이지만 값을 읽지 못하면 색이 사라진다. 수집기가

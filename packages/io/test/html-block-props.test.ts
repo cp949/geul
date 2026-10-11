@@ -127,13 +127,24 @@ describe("블록 props HTML import", () => {
     });
   });
 
-  it("허용 목록 밖 data-geul-text-alignment 값은 import 전체를 HTML_DOCUMENT_INVALID로 거절한다", () => {
+  it("허용 목록 밖 data-geul-text-alignment 값은 textAlignment만 버리고 경고한다 (Issue #358)", () => {
     const result = importHtml(
       '<p data-geul-block-id="paragraph-1" data-geul-text-alignment="justify">x</p>',
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe("HTML_DOCUMENT_INVALID");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.document.blocks).toEqual([
+      { id: "paragraph-1", type: "paragraph", content: [{ text: "x" }] },
+    ]);
+    expect(result.value.warnings).toEqual([
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "p",
+        attribute: "data-geul-text-alignment",
+        message:
+          "Unsupported data-geul-text-alignment attribute was removed from p",
+      },
+    ]);
   });
 });
 

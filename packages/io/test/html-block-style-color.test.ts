@@ -259,14 +259,31 @@ describe("data-geul-*가 블록 style보다 필드별로 우선한다", () => {
     ).toEqual({ backgroundColor: "#112233", textColor: "#0000FF" });
   });
 
-  it("data-geul 값은 원시 문자열 그대로 통과해 style로 보정되지 않는다", () => {
-    // 비정규형 값은 style이 유효해도 살리지 않고, 문서 검증이 거절한다.
+  it("비정규형 data-geul 값은 style로 보정되지 않고 필드만 버려지며 경고한다 (Issue #358)", () => {
+    // 비정규형 값은 style이 유효해도 살리지 않는다. 필드를 버리고 경고한다.
     const result = importHtml(
       '<p data-geul-text-color="red" style="color:#ff0000">x</p>',
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe("HTML_DOCUMENT_INVALID");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.document.blocks).toHaveLength(1);
+    expect(result.value.document.blocks[0]).not.toHaveProperty("textColor");
+    // 수집기의 style 제거 경고가 먼저, 변환기의 값 제거 경고가 뒤다.
+    expect(result.value.warnings).toEqual([
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "p",
+        attribute: "style",
+        message: "Unsupported style attribute was removed from p",
+      },
+      {
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "p",
+        attribute: "data-geul-text-color",
+        message:
+          "Unsupported data-geul-text-color attribute was removed from p",
+      },
+    ]);
   });
 });
 
@@ -550,7 +567,8 @@ describe("블록 자식이 없는 div만 문단으로 읽는다", () => {
         textColor: "#112233",
       });
     }
-    expect(importHtml('<p data-geul-text-color="#abc">x</p>').ok).toBe(false);
+    // 비정규형 값은 문서를 거절하지 않고 필드만 버린다(Issue #358).
+    expect(importHtml('<p data-geul-text-color="#abc">x</p>').ok).toBe(true);
   });
 
   it("br로 나뉜 줄도 한 문단이다", () => {
