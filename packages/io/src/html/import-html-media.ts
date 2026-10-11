@@ -9,6 +9,7 @@ import {
   type IframeEmbedConfig,
   isCanonicalCellAlign,
   isCanonicalCellColor,
+  isSupportedLinkHref,
   isSupportedMediaUrl,
   isValidMediaPreviewWidth,
   resolveIframeEmbedDecision,
@@ -22,7 +23,10 @@ import {
   textValue,
   validOptionalValue,
 } from "./import-html-helpers.js";
-import { unsafeMediaUrlRemovedWarning } from "./import-warnings.js";
+import {
+  unsafeIframeUrlRemovedWarning,
+  unsafeMediaUrlRemovedWarning,
+} from "./import-warnings.js";
 import type { HtmlElementNode } from "./inline-content.js";
 
 // 5종 미디어 블록 판별 타입(export-html.ts의 MediaBlock과 동형, spec §3.1,
@@ -165,6 +169,9 @@ const resolvedIframeUrl = (
 // 알리고 url 없는 블록이 남는다)과 iframe(정책 불허 시 빈 블록)은 바뀌지 않는다.
 // 다만 file 마커가 붙은 figure의 시각 태그가 img·video·audio이면 src가 url이라
 // 같은 규칙으로 블록째 버린다.
+// iframe의 data-geul-src가 정책을 통과하고도 isSupportedLinkHref에 막히면 url만
+// 버리고 블록은 남긴다(Issue #360). 경고는 wrapper 하나당 UNSAFE_URL_REMOVED 한 건
+// (element는 wrapper 태그, attribute는 data-geul-src)이다.
 // 선택 표시 필드(backgroundColor·textAlignment·previewWidth·aspectRatio)의 무효
 // 값은 그 필드만 버리고 경고한다.
 export const mediaBlockFromNode = (
@@ -208,9 +215,33 @@ export const mediaBlockFromNode = (
   // 대칭이라 이쪽도 경고를 내지 않는다.
   const rawIframeSrc =
     mediaType === "iframe" ? propertyString(node, "dataGeulSrc") : undefined;
-  const url =
+  // 정책을 통과해도 model의 정적 url 검증(isSupportedLinkHref)이 막는 값(공백·
+  // 제어문자 등, allowCustomUrl에서 가능)은 문서 전체를 거절시킨다. 정책 불허와
+  // 같이 url 없는 빈 iframe으로 남기되, 이쪽은 사용자가 의도한 값이 사라지므로
+  // 경고한다(Issue #360, G-CNV-002). 정책 불허는 이전처럼 경고하지 않는다.
+  const policyUrl =
     mediaType === "iframe"
       ? resolvedIframeUrl(rawIframeSrc, iframeEmbedConfig)
+      : undefined;
+  const iframeUrlIsSupported =
+    policyUrl === undefined || isSupportedLinkHref(policyUrl);
+  if (
+    !iframeUrlIsSupported &&
+    (node.tagName === "a" ||
+      node.tagName === "div" ||
+      node.tagName === "figure")
+  ) {
+    context.warnOnce(
+      node,
+      "data-geul-src",
+      unsafeIframeUrlRemovedWarning(node.tagName),
+    );
+  }
+  const url =
+    mediaType === "iframe"
+      ? iframeUrlIsSupported
+        ? policyUrl
+        : undefined
       : visualNode === undefined
         ? undefined
         : visualNode.tagName === "a"

@@ -35,10 +35,12 @@ export type HtmlImportWarning =
       message: string;
     }
   // a의 href는 수집기가, 미디어 시각 태그의 src는 변환기가 낸다(Issue #358).
+  // iframe wrapper의 data-geul-src도 변환기가 낸다(Issue #360). 이때 element는
+  // wrapper 태그(a·div·figure)다.
   | {
       kind: "UNSAFE_URL_REMOVED";
-      element: "a" | "img" | "video" | "audio";
-      attribute: "href" | "src";
+      element: "a" | "img" | "video" | "audio" | "div" | "figure";
+      attribute: "href" | "src" | "data-geul-src";
       message: string;
     }
   | {
@@ -119,6 +121,18 @@ export const unsafeMediaUrlRemovedWarning = (
   element,
   attribute: "src",
   message: `Unsafe media URL was removed from ${element}`,
+});
+
+// 변환기가 iframe wrapper의 data-geul-src를 url 없이 비울 때 낸다(Issue #360).
+// 정책은 통과했지만 isSupportedLinkHref가 막은 경우만 대상이다. element는
+// wrapper 태그다.
+export const unsafeIframeUrlRemovedWarning = (
+  element: "a" | "div" | "figure",
+): HtmlImportWarning => ({
+  kind: "UNSAFE_URL_REMOVED",
+  element,
+  attribute: "data-geul-src",
+  message: `Unsafe iframe URL was removed from ${element}`,
 });
 
 // font의 color는 허용 속성이지만 값을 읽지 못하면 색이 사라진다. 수집기가

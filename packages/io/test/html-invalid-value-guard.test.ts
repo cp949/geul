@@ -569,6 +569,117 @@ describe("무효 미디어 url은 블록째 버린다", () => {
   });
 });
 
+describe("iframe data-geul-src 무효 url은 url 없는 빈 블록으로 남긴다 (Issue #360)", () => {
+  it.each([
+    ["공백이", "https://e.com/a b"],
+    ["제어문자가", "https://e.com/a&#1;b"],
+    // 아래 둘은 isSupportedMediaUrl도 거절해 판정 함수가 갈리지 않는다. 정책을
+    // 통과하는 입력을 넓힌다.
+    ["백슬래시가", "https://e.com/a\\b"],
+    ["프로토콜 상대 형태가", "//e.com/x"],
+  ])(
+    "allowCustomUrl에서 %s 든 url은 문서를 거절하지 않고 url만 버린다",
+    (_name, src) => {
+      const { document, warnings } = imported(
+        `<p>a</p><div data-geul-block-id="i1" data-geul-media-type="iframe" data-geul-src="${src}"></div>`,
+        PERMISSIVE,
+      );
+      expect(document.blocks).toMatchObject([
+        { type: "paragraph" },
+        { id: "i1", type: "iframe" },
+      ]);
+      expect(document.blocks[1]).not.toHaveProperty("url");
+      expect(warnings).toEqual([urlWarning("div", "data-geul-src")]);
+      expectModelAccepts(document);
+    },
+  );
+
+  it("정책이 data:를 허용해도 링크 판정이 막으면 url만 버린다", () => {
+    // isSupportedMediaUrl은 data:를 받는다. iframe은 isSupportedLinkHref라
+    // 판정 함수가 바뀌면 이 입력이 갈린다(IMPL-REVIEW-01 F2).
+    const { document, warnings } = imported(
+      '<div data-geul-block-id="i1" data-geul-media-type="iframe" data-geul-src="data:text/html,hi"></div>',
+      { allowCustomUrl: true, allowedProtocols: ["https:", "data:"] },
+    );
+    expect(document.blocks).toEqual([{ id: "i1", type: "iframe" }]);
+    expect(warnings).toEqual([urlWarning("div", "data-geul-src")]);
+  });
+
+  it("figure wrapper의 name·caption·표시 필드·id는 남고 경고는 1건이다", () => {
+    const { document, warnings } = imported(
+      '<figure data-geul-block-id="i1" data-geul-media-type="iframe" data-geul-src="https://e.com/a b" data-geul-name="n" data-geul-preview-width="480" data-geul-text-alignment="right" data-geul-aspect-ratio="16:9" data-geul-background-color="#112233"><figcaption>cap</figcaption></figure>',
+      PERMISSIVE,
+    );
+    expect(document.blocks).toEqual([
+      {
+        id: "i1",
+        type: "iframe",
+        name: "n",
+        caption: "cap",
+        previewWidth: 480,
+        textAlignment: "right",
+        aspectRatio: "16:9",
+        backgroundColor: "#112233",
+      },
+    ]);
+    expect(warnings).toEqual([urlWarning("figure", "data-geul-src")]);
+    expectModelAccepts(document);
+  });
+
+  it("a wrapper이면 경고 element가 a다", () => {
+    const { document, warnings } = imported(
+      '<a data-geul-block-id="i1" data-geul-media-type="iframe" data-geul-src="https://e.com/a b"></a>',
+      PERMISSIVE,
+    );
+    expect(document.blocks).toEqual([{ id: "i1", type: "iframe" }]);
+    // 루트 인라인 a는 수집기가 SAFE_BLOCK_DOWNGRADED도 따로 낸다. 이 테스트는 url 경고만 본다.
+    expect(
+      warnings.filter((warning) => warning.kind === "UNSAFE_URL_REMOVED"),
+    ).toEqual([urlWarning("a", "data-geul-src")]);
+  });
+
+  it("정상 url은 그대로 남고 경고가 없다", () => {
+    const { document, warnings } = imported(
+      '<div data-geul-block-id="i1" data-geul-media-type="iframe" data-geul-src="https://e.com/embed"></div>',
+      PERMISSIVE,
+    );
+    expect(document.blocks).toEqual([
+      { id: "i1", type: "iframe", url: "https://e.com/embed" },
+    ]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("기본 설정에서는 정책 불허가 먼저라 무효 url도 경고 없이 빈 블록이다", () => {
+    const { document, warnings } = imported(
+      '<div data-geul-block-id="i1" data-geul-media-type="iframe" data-geul-src="https://e.com/a b"></div>',
+    );
+    expect(document.blocks).toEqual([{ id: "i1", type: "iframe" }]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("변환을 두 번 거치는 h2 안 iframe도 경고는 1건이다", () => {
+    // wrapper 인식을 취소하고 평면으로 다시 변환하는 경로라 같은 노드를 두 번
+    // 읽는다. warnOnce가 합치지 않으면 2건이다(IMPL-REVIEW-01 F1).
+    const { warnings } = imported(
+      '<div data-geul-block-id="w"><h2><div data-geul-block-id="i1" data-geul-media-type="iframe" data-geul-src="https://e.com/a b"></div></h2></div>',
+      PERMISSIVE,
+    );
+    expect(
+      warnings.filter((warning) => warning.kind === "UNSAFE_URL_REMOVED"),
+    ).toHaveLength(1);
+  });
+
+  it("children wrapper 안 own iframe이어도 경고는 1건이다", () => {
+    const { warnings } = imported(
+      '<div data-geul-block-container="true" data-geul-block-id="w"><div data-geul-block-id="i1" data-geul-media-type="iframe" data-geul-src="https://e.com/a b"></div><div data-geul-children="true"><p>c</p></div></div>',
+      PERMISSIVE,
+    );
+    expect(
+      warnings.filter((warning) => warning.kind === "UNSAFE_URL_REMOVED"),
+    ).toHaveLength(1);
+  });
+});
+
 const TABLE =
   "<table><tr><td>1</td><td>2</td></tr><tr><td>3</td><td>4</td></tr></table>";
 
