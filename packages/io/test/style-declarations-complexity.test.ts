@@ -460,7 +460,15 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
   // 80,000개가 각각 입력 끝까지 훑는다. 정상 구현은 단독 실행 테스트 시간 7ms다.
   // 대괄호 루프는 String 메서드 계측에 보이지 않는다. 같은 변이를
   // `piece.indexOf(")", index)`로 쓰면 위 작업량 모양 "닫는 `)` 없는 `url(`이 아주
-  // 많은 입력"이 처리 문자 수 증가율 3.998–3.999로 잡는다(상한 2).
+  // 많은 입력"이 처리 문자 수 증가율 3.998–3.999로 잡는다(Issue #364, 상한 2).
+  // Issue #368이 선언 분리를 `css/` 토크나이저로 옮겨 치환 토큰 두 행의 단독 실행
+  // 시간이 늘었다(실측 Node, 2026-10-12, 80,000개: 276–294ms. 위에 적은 옛 시간
+  // 46–55ms는 옛 분할기 시점이다). 토큰마다 객체와 원문을 만들기 때문이다. 부하가
+  // 큰 `verify` 첫 실행에서 1117ms가 나와 상한 1초를 넘었다. 그래서 두 행은 개수를
+  // 40,000개로 줄였다.
+  // 변이로 확인한 RED다(2026-10-12, 40,000개). `readDecoration`의 토큰 루프 안에서
+  // `hasStrayCloseParen(value)`를 토큰마다 다시 부르는 변이는 두 행이 41.0초와
+  // 40.8초로 잡는다.
   it.each([
     [
       "괄호 안 세미콜론",
@@ -483,12 +491,12 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
       `text-decoration:underline foo ${"avar(".repeat(80_000)}`,
     ],
     [
-      "치환 토큰이 아주 많고 끝이 무효",
-      `text-decoration:underline ${"var(--x) ".repeat(80_000)}foo`,
+      "치환 토큰 40,000개가 있고 끝이 무효",
+      `text-decoration:underline ${"var(--x) ".repeat(40_000)}foo`,
     ],
     [
-      "치환 토큰이 아주 많고 끝이 잉여 글자",
-      `text-decoration:underline ${"var(--x) ".repeat(80_000)}var(--y)foo`,
+      "치환 토큰 40,000개가 있고 끝이 잉여 글자",
+      `text-decoration:underline ${"var(--x) ".repeat(40_000)}var(--y)foo`,
     ],
     [
       "호출 없이 `--` 이름 run이 아주 많은 입력",
@@ -498,7 +506,7 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
       "호출 없이 `-` 글자만 이어지는 이름 run 하나의 글자",
       `text-decoration:underline ${"-".repeat(80_000)}`,
     ],
-  ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
+  ])("%s 입력을 1초 안에 읽는다", (_name, style) => {
     const started = performance.now();
     parseInlineStyleMarks(style);
     const elapsed = performance.now() - started;
