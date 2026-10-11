@@ -1033,12 +1033,58 @@ const DECORATION_COLOR_IDENTIFIERS: ReadonlySet<string> = new Set([
 // 치환 결과로 계산 시점에 장식 여부를 정한다.
 const SUBSTITUTION_FUNCTIONS: readonly string[] = ["var", "env", "attr", "if"];
 
-// 함수 토큰의 이름이다. 토큰이 `)`로 끝나고 첫 `(`가 맨 앞이 아니면 함수
-// 토큰이다. 안쪽은 읽지 않는다. 함수 토큰이 아니면 undefined다.
+// 첫 `(`가 `text[open]`인 토큰 `[open, end)`의 괄호 짝 상태다. `open`부터
+// `valueTokenEnd`와 같은 규칙으로 깊이를 센다(따옴표·이스케이프 안의 괄호도
+// 센다). 깊이가 0으로 돌아오는 첫 `)`를 보고 가른다.
+// - closed: 그 `)`가 토큰의 마지막 글자다.
+// - extra: 그 `)` 뒤에 글자가 남는다.
+// - open: 깊이가 0으로 돌아오지 못한다. 값 끝에서 닫은 것으로 읽는다. 열린
+//   괄호는 값 끝까지 한 토큰이라 이 토큰이 값의 마지막 토큰이다.
+// 글자를 대괄호로 읽고 토큰 구간 밖은 읽지 않는다. 함수 토큰 판정과 치환 토큰
+// 판정이 이 함수 하나를 쓴다.
+type ParenPairing = "closed" | "extra" | "open";
+
+const pairParens = (text: string, open: number, end: number): ParenPairing => {
+  let depth = 0;
+  for (let index = open; index < end; index += 1) {
+    const character = text[index];
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      depth -= 1;
+      if (depth === 0) return index === end - 1 ? "closed" : "extra";
+    }
+  }
+  return "open";
+};
+
+// 값에 깊이 0의 `)`가 있는지 본다. 깊이는 `valueTokenEnd`와 같은 규칙으로
+// 센다. 값마다 한 번 훑는다.
+const hasStrayCloseParen = (value: string): boolean => {
+  let depth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      if (depth === 0) return true;
+      depth -= 1;
+    }
+  }
+  return false;
+};
+
+// 함수 토큰의 이름이다. 첫 `(`가 맨 앞이 아니고 괄호 짝이 닫힘이거나 열림이면
+// 함수 토큰이다. `)` 뒤에 글자가 남으면 함수 토큰이 아니다. 그 글자가 유효
+// 토큰(`calc(1px)red`)이어도 같다. Chromium은 받지만 토큰을 `)`에서 끊으려면
+// `valueTokenEnd`를 바꿔야 해서 범위 밖이다. 안쪽은 읽지 않는다. 함수 토큰이
+// 아니면 undefined다.
 const functionTokenName = (token: string): string | undefined => {
-  if (!token.endsWith(")")) return undefined;
   const open = token.indexOf("(");
-  return open > 0 ? token.slice(0, open) : undefined;
+  if (open <= 0) return undefined;
+  return pairParens(token, open, token.length) === "extra"
+    ? undefined
+    : token.slice(0, open);
 };
 
 const isNameCharacter = (character: string): boolean =>
@@ -1077,7 +1123,8 @@ const isSubstitutionCallAt = (
 };
 
 // `[start, end)` 토큰이 `var(…)`처럼 치환 함수 호출 하나인지 본다. 이름 앞에
-// 다른 글자가 없고 토큰이 `)`로 끝나야 한다. 토큰을 자르지 않고 대괄호로
+// 다른 글자가 없고 괄호 짝이 닫혀야 한다. 열린 `var(--x`와 `)` 뒤에 글자가
+// 남은 `var(--x)foo`는 치환 토큰이 아니다. 토큰을 자르지 않고 대괄호로
 // 읽는다. 치환 토큰은 개수 제한이 없어, 토큰마다 긴 값에 `slice`를 부르면
 // 처리 문자 수가 입력 길이의 제곱으로 뛴다.
 const isSubstitutionToken = (
@@ -1088,8 +1135,8 @@ const isSubstitutionToken = (
   const runEnd = nameRunEnd(value, start);
   return (
     runEnd < end &&
-    value[end - 1] === ")" &&
-    isSubstitutionCallAt(value, start, runEnd)
+    isSubstitutionCallAt(value, start, runEnd) &&
+    pairParens(value, runEnd, end) === "closed"
   );
 };
 
@@ -1124,13 +1171,17 @@ const hasSubstitutionFunction = (value: string): boolean => {
 //   round·mod·rem·abs·hypot·-webkit-calc)다. 색은 css-color.ts가 읽는 색,
 //   색 함수 14개와 색 식별자 45개(시스템 색 등)다. 함수 토큰은 이름만 보고
 //   안쪽은 검증하지 않는다. Chromium은 `calc(1)`·`lab(foo)`를 무효로 보지만
-//   여기서는 받는다.
-// - 치환 함수(var·env·attr·if) 토큰은 칸을 차지하지 않고 건너뛴다. line 낱말
-//   연속을 끊는다. Chromium은 값 어디에든 인자가 정상인 치환 함수가 있으면
-//   선언을 버리지 않고 항상 앞 선언을 덮는다. 인자가 비었거나 잘못된 호출은
-//   Chromium이 버리지만 여기서는 이름만 본다. 치환 결과를 알 수 없으므로 무효를 만났을 때
-//   값에 치환 함수가 있으면 장식을 끈다. 끝까지 유효해도 line 낱말도 단독
-//   낱말도 못 봤다면 line 값을 알 수 없어 선언을 버린다.
+//   여기서는 받는다. 괄호 짝은 본다: 닫힌 토큰과 값 끝에서 닫은 것으로 읽는
+//   열린 토큰만 함수 토큰이고, `)` 뒤에 글자가 남은 토큰은 무효다.
+// - 깊이 0의 바깥 `)`가 값 어디에 있든 무효다. 치환 함수가 있어도 꺼짐이
+//   아니라 무효다(Chromium 실측). 값 맨 앞에서 한 번 훑어 거른다.
+// - 치환 함수(var·env·attr·if) 토큰은 닫혔을 때만 치환 토큰이다. 칸을 차지하지
+//   않고 건너뛴다. line 낱말 연속을 끊는다. Chromium은 값 어디에든 인자가
+//   정상인 치환 함수가 있으면 선언을 버리지 않고 항상 앞 선언을 덮는다.
+//   인자가 비었거나 잘못된 호출은 Chromium이 버리지만 여기서는 이름만 본다.
+//   치환 결과를 알 수 없으므로 무효를 만났을 때 값에 치환 함수가 있으면
+//   장식을 끈다. 끝까지 유효해도 line 낱말도 단독 낱말도 못 봤다면 line 값을
+//   알 수 없어 선언을 버린다.
 // 무효를 찾는 즉시 끝낸다. 치환 함수 탐색은 무효를 찾았을 때 값마다 한 번이다.
 // 토큰마다 일정한 일만 하므로 값 길이에 선형이다.
 const readDecoration = (
@@ -1148,6 +1199,8 @@ const readDecoration = (
   let sawSubstitution = false;
   let tokenCount = 0;
   let index = skipCssSpace(value, 0);
+
+  if (hasStrayCloseParen(value)) return undefined;
 
   // 무효를 만났을 때의 결과다. 치환 함수가 있으면 치환 결과를 알 수 없어 꺼짐이다.
   const invalid = (): LineMarks | undefined =>
@@ -1253,6 +1306,7 @@ const applyMark = <T>(
 //   text-decoration(-line)은 색 함수·수식 함수·시스템 색을 이름만 보고 받고
 //   치환 함수(`var()` 등)는 건너뛴다(`readDecoration`). 남은 한계가 있다.
 //   - 함수 안쪽 인자를 검증하지 않는다(Chromium은 `calc(1)`을 무효로 본다).
+//   - 괄호 짝은 따옴표와 `\` 이스케이프 안의 괄호도 센다.
 //   - 치환 결과를 추적하지 않는다. `<style>`과 조상의 `--x` 정의를 읽지 않는다.
 //   - font 경로의 수식 함수는 `calc`·`min`·`max`·`clamp` 넷뿐이다.
 //   - `oblique` 각도 범위를 검사하지 않는다.

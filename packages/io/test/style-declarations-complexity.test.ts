@@ -15,7 +15,7 @@
  * 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력, 공백·토큰이 긴
  * 입력과 font 줄임, 선언 분리(닫히지 않은 따옴표·괄호, 개행이 끝내는
  * 따옴표, `[`·`{` 블록 스택), text-decoration·font-style 값 판정(토큰이
- * 많거나 긴 값, 치환 함수·함수 토큰)이 만드는 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
+ * 많거나 긴 값, 치환 함수·함수 토큰·괄호 짝)이 만드는 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
  * `parseInlineStyleMarks`와 `parseWhiteSpaceMode`(Issue #361)는
  * `parseStyleDeclarations`와 같은 흐름이다.
@@ -35,6 +35,8 @@
  *   각각에 둔다.
  * - 치환 함수 탐색(`hasSubstitutionFunction`)의 대괄호 읽기도
  *   `parseInlineStyleMarks` 시간 상한 테스트만 덮는다(Issue #363).
+ * - 괄호 짝 판정(`pairParens`)과 바깥 `)` 사전 검사(`hasStrayCloseParen`)의
+ *   대괄호 읽기도 같다(Issue #366).
  * `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳 run에서 이차
  * 시간이었지만 `matchAll` 호출 1회라 이 계측의 증가율이 2로 보였다. 그래서
  * `parseStyleDeclarations`에는 이 작업량 테스트에 더해 시간 상한 테스트를 하나
@@ -196,6 +198,36 @@ const inputShapes: Array<[string, (size: number) => string]> = [
     "text-decoration 치환 함수 이름과 비슷한 글자가 많은 입력",
     (size) => `text-decoration:underline ${"avar(".repeat(size)}`,
   ],
+  // 아래는 함수 토큰의 괄호 짝(Issue #366)이 만든 입력 모양이다. 짝 판정
+  // (`pairParens`)과 바깥 `)` 사전 검사(`hasStrayCloseParen`)는 글자를 대괄호로
+  // 읽어서 이 계측에 보이지 않는다. 이 모양들은 짝 판정이 닫힘·잉여 글자·열림
+  // 각 분기에서 String 메서드를 반복해 부르지 않는지 센다. 재순회 변이는 아래
+  // 시간 상한의 치환 토큰 행이 잡는다.
+  [
+    "text-decoration 열린 괄호가 아주 많은 함수 토큰 하나인 입력",
+    (size) => `text-decoration:underline calc${"(".repeat(size)}`,
+  ],
+  [
+    "text-decoration 닫히지 않은 함수 토큰의 인자가 긴 입력",
+    (size) => `text-decoration:underline lab(${"1 ".repeat(size)}`,
+  ],
+  [
+    "text-decoration 닫힌 뒤 잉여 글자가 긴 입력",
+    (size) => `text-decoration:underline calc(1px)${"a".repeat(size * 16)}`,
+  ],
+  [
+    "text-decoration 짝 맞는 중첩이 깊은 함수 토큰 하나인 입력",
+    (size) =>
+      `text-decoration:underline calc(${"(".repeat(size)}1px${")".repeat(size)})`,
+  ],
+  [
+    "text-decoration 바깥 `)`가 값 끝에 있는 긴 입력",
+    (size) => `text-decoration:underline ${"red ".repeat(size)})`,
+  ],
+  [
+    "text-decoration 닫힌 뒤 잉여 글자가 붙은 치환 토큰이 긴 입력",
+    (size) => `text-decoration:underline var(--x)${"a".repeat(size * 16)}`,
+  ],
   [
     "font-style 긴 각도 토큰 하나인 입력",
     (size) => `font-style:oblique ${"1".repeat(size * 16)}deg`,
@@ -311,6 +343,18 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
   // 정상 구현은 단독 실행 테스트 시간 18–19ms와 41–42ms다. 상한 1초는 그보다
   // 약 24배 이상 크고 변이보다 작아 둘이 겹치지 않는다. 변이 RED는 오래 걸리므로
   // 이 두 행이 깨지면 실행이 수 분 걸릴 수 있다.
+  // "치환 토큰이 아주 많고 끝이 잉여 글자" 행은 Issue #366이 더했다. 짝 판정
+  // (`pairParens`)과 바깥 `)` 사전 검사(`hasStrayCloseParen`)는 글자를 대괄호로
+  // 읽어서 위 String 메서드 계측에 보이지 않는다.
+  // 변이로 확인한 RED다(Issue #366, 실측 Node, 2026-10-11, 80,000개).
+  // - 사전 검사를 토큰마다 값 처음부터 다시 도는 변이는 이 행이 134.8초,
+  //   "끝이 무효" 행이 135.1초로 잡는다. "치환 토큰이 아주 많은 입력" 모양도
+  //   46.9초로 5초 제한 초과다.
+  // - 짝 판정이 닫는 `)`를 찾은 뒤 토큰 끝이 아니라 값 끝까지 계속 읽는 변이는
+  //   이 행이 72.0초, "끝이 무효" 행이 73.2초로 잡는다. 같은 모양이 22.6초로
+  //   5초 제한 초과다.
+  // 정상 구현은 단독 실행 테스트 시간 46–55ms다. 상한 1초는 그보다 약 18배
+  // 크고 변이보다 작아 둘이 겹치지 않는다.
   it.each([
     [
       "괄호 안 세미콜론",
@@ -331,6 +375,10 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
     [
       "치환 토큰이 아주 많고 끝이 무효",
       `text-decoration:underline ${"var(--x) ".repeat(80_000)}foo`,
+    ],
+    [
+      "치환 토큰이 아주 많고 끝이 잉여 글자",
+      `text-decoration:underline ${"var(--x) ".repeat(80_000)}var(--y)foo`,
     ],
   ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
     const started = performance.now();

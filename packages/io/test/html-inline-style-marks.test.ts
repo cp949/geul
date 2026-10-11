@@ -20,6 +20,8 @@
  * - Issue #363: `text-decoration`·`text-decoration-line`이 함수 토큰(색 함수,
  *   thickness 함수)과 색 식별자를 이름으로 읽는다. `var()` 같은 치환 함수는
  *   칸을 차지하지 않고, 무효를 만났을 때 값에 있으면 장식을 끈다.
+ * - Issue #366: 함수 토큰이 괄호 짝을 본다. 바깥 `)`와 `)` 뒤 잉여 글자는
+ *   무효이고, 닫히지 않은 함수 토큰은 값 끝에서 닫은 것으로 읽는다.
  */
 import type { InlineContent, TextMark } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -830,7 +832,6 @@ describe("text-decoration 값 판정", () => {
     "underline currentcolor currentcolor",
     "underline transparent red",
     "underline rgb(0,0,0) rgb(0,0,0)",
-    "underline rgb(0, 0",
     "underline #ggg",
     "underline #12",
     "underline inherit",
@@ -1192,6 +1193,196 @@ describe("text-decoration이 읽는 함수·식별자 토큰 (Issue #363)", () =
     "underline color-mix(in srgb, red)",
   ])(
     "text-decoration:%s는 Chromium은 무효지만 함수 안쪽을 검증하지 않아 밑줄이다",
+    (value) => {
+      expectBothPriors("text-decoration", value, UNDERLINE);
+    },
+  );
+});
+
+// Issue #366: 함수 토큰의 괄호 짝이다. 판정은 Chromium 153.0.8010.12 실측이다
+// (조상 `--x: red` 아래, `underline line-through; text-decoration: <값>`).
+// - 깊이 0의 바깥 `)`가 값 어디에 있든 무효다. 치환 함수가 있어도 꺼짐이
+//   아니라 무효라 앞 값을 지킨다.
+// - 토큰의 첫 `(`가 닫힌 뒤 글자가 더 남으면 함수 토큰이 아니다.
+// - 닫히지 않은 함수 토큰은 값 끝에서 닫은 것으로 읽는다. 열린 괄호는 값
+//   끝까지 한 토큰이라 이 토큰이 값의 마지막이다.
+// - 치환 토큰은 닫혔을 때만 치환 토큰이다. 열린 치환과 잉여 글자가 붙은 치환은
+//   분류에 못 들어가 무효이고, 값에 치환 함수가 있으므로 꺼짐이다.
+describe("text-decoration 함수 토큰의 괄호 짝 (Issue #366)", () => {
+  const expectBothPriors = (
+    property: string,
+    value: string,
+    expected: Decoration,
+  ) => {
+    for (const result of decorationAfterPriors(property, value)) {
+      expect(result).toEqual(expected);
+    }
+  };
+
+  const expectInvalid = (property: string, value: string) => {
+    const [afterUnderlineStrike, afterBlink] = decorationAfterPriors(
+      property,
+      value,
+    );
+    expect(afterUnderlineStrike).toEqual(UNDERLINE_STRIKE);
+    expect(afterBlink).toEqual(NO_LINE);
+  };
+
+  // 이슈 일곱 입력이다. 앞 다섯은 #363 뒤 밑줄이 켜졌고 Chromium은 무효다.
+  it.each([
+    "underline calc(1px))",
+    "underline lab(50 20 20))",
+    "underline calc(1px)foo(2px)",
+    "underline calc(1px)calc(2px)",
+    "underline rgb(0,0,0))",
+  ])("이슈 입력 text-decoration:%s는 무효라 앞의 값을 지킨다", (value) => {
+    expectInvalid("text-decoration", value);
+  });
+
+  it.each(["underline lab(50 20 20", "underline calc(1px"])(
+    "이슈 입력 text-decoration:%s는 닫히지 않아도 밑줄이다",
+    (value) => {
+      expectBothPriors("text-decoration", value, UNDERLINE);
+    },
+  );
+
+  it("importHtml이 무효 선언 뒤에도 앞의 밑줄·취소선 마크를 유지한다", () => {
+    expect(
+      paragraphContent(
+        '<span style="text-decoration:underline line-through;text-decoration:underline calc(1px))">x</span>',
+      ),
+    ).toEqual(markedText([{ type: "strike" }, { type: "underline" }]));
+  });
+
+  it("importHtml이 닫히지 않은 lab(을 밑줄 마크로 읽는다", () => {
+    expect(spanContent("text-decoration:underline lab(50 20 20")).toEqual(
+      markedText([{ type: "underline" }]),
+    );
+  });
+
+  // 열린 함수 토큰은 값 끝에서 닫은 것으로 읽는다.
+  it.each([
+    "underline calc((1px)",
+    "underline calc((1px))",
+    "underline color-mix(in srgb, red, blue",
+    "underline min(1px, 2px",
+    "underline calc(1px) lab(50 20 20",
+    "wavy underline lab(1 2 3",
+    // 안쪽 끝 공백은 토큰을 끊지 않는다.
+    "underline lab(50 20 20 )",
+  ])("열린 함수 text-decoration:%s는 밑줄이다", (value) => {
+    expectBothPriors("text-decoration", value, UNDERLINE);
+  });
+
+  // 치환 함수가 없는 무효다.
+  it.each([
+    // 열려도 모르는 이름은 무효다.
+    "underline foo(1px",
+    "underline calc(1px)(2px)",
+    "underline lab(50 20 20) )",
+    "underline ) lab(1 2 3)",
+    "underline )",
+    "underline lab(1 2 3))  red",
+  ])("text-decoration:%s는 무효라 앞의 값을 지킨다", (value) => {
+    expectInvalid("text-decoration", value);
+  });
+
+  // 치환 함수가 있어도 깊이 0의 바깥 `)`는 꺼짐이 아니라 무효다. Chromium은
+  // `--x`가 정의돼 있어도 앞 선언을 덮지 않는다.
+  it.each([
+    "underline var(--x))",
+    "underline var(--x) )",
+    "underline foo(var(--x)))",
+    "underline red var(--x))",
+    "underline env(x))",
+    "underline VAR(--x))",
+    "underline calc(1px)) red var(--x)",
+  ])("바깥 )가 있는 text-decoration:%s는 무효라 앞의 값을 지킨다", (value) => {
+    expectInvalid("text-decoration", value);
+  });
+
+  // 치환 함수 호출이 있지만 닫힌 치환 토큰이 아니면 분류에 못 들어간다. 그래서
+  // 무효이고 값에 치환 함수가 있으므로 꺼짐이다.
+  it.each([
+    "underline var(--x)foo(1)",
+    "underline var(--x)var(--y)",
+    "underline var(--x)(",
+    "underline foo var(--x",
+    "underline attr(x",
+  ])(
+    "text-decoration:%s는 치환 토큰이 아니라 분류에 못 들어가 꺼짐이다",
+    (value) => {
+      expectBothPriors("text-decoration", value, NO_LINE);
+    },
+  );
+
+  it.each([
+    "underline calc(1px))",
+    "underline lab(1 2 3",
+    "underline var(--x))",
+  ])("text-decoration-line:%s는 무효라 앞의 값을 지킨다", (value) => {
+    expectInvalid("text-decoration-line", value);
+  });
+
+  it("text-decoration-line:underline var(--x)foo(1)은 꺼짐이다", () => {
+    expectBothPriors(
+      "text-decoration-line",
+      "underline var(--x)foo(1)",
+      NO_LINE,
+    );
+  });
+
+  // 닫힌 형태는 #363 그대로다.
+  it.each<[string, Decoration]>([
+    ["underline calc(1px)", UNDERLINE],
+    ["underline lab(50 20 20)", UNDERLINE],
+    ["underline var(--x)", UNDERLINE],
+    ["underline foo(var(--x))", NO_LINE],
+    ["underline foo((var(--x)))", NO_LINE],
+  ])("닫힌 text-decoration:%s는 그대로다", (value, expected) => {
+    expectBothPriors("text-decoration", value, expected);
+  });
+
+  // 의도한 차이다. Chromium은 함수 안쪽 인자를 검증해 아래 값을 무효로 버린다.
+  // 우리는 함수 이름만 보고 열린 괄호를 값 끝에서 닫은 것으로 읽으므로 밑줄이다.
+  // 인자 개수와 열린 괄호 안 낱말까지 읽으려면 색·수식 문법 전체가 필요해 범위
+  // 밖이다. `underline rgb(0, 0`은 #366 전에는 `)`로 끝나지 않아 무효였다.
+  it.each(["underline rgb(0, 0", "underline calc(1px) lab(50 20 20 wavy"])(
+    "text-decoration:%s는 Chromium은 무효지만 함수 안쪽을 검증하지 않아 밑줄이다",
+    (value) => {
+      expectBothPriors("text-decoration", value, UNDERLINE);
+    },
+  );
+
+  // 의도한 차이다. `)` 바로 뒤에 공백 없이 붙은 유효 토큰을 Chromium은 새
+  // 토큰으로 받아 밑줄로 읽는다. 우리는 토큰을 공백과 깊이 0에서만 끊어
+  // `)` 뒤 글자가 남은 토큰을 무효로 본다. `valueTokenEnd`를 바꿔야 해서 범위
+  // 밖이다. #363 구현도 같았다.
+  it.each([
+    "underline calc(1px)red",
+    "underline calc(1px)solid",
+    "underline rgb(0,0,0)2px",
+    "calc(1px)underline",
+  ])(
+    "text-decoration:%s는 Chromium은 밑줄이지만 ) 뒤 글자가 붙어 무효라 앞의 값을 지킨다",
+    (value) => {
+      expectInvalid("text-decoration", value);
+    },
+  );
+
+  // 의도한 차이다. 열린 치환 함수는 치환 결과를 추적하지 않아 닫힌 형태와 같은
+  // 규칙으로 읽는다. 닫힌 `underline var(--x)`는 밑줄이고 열린 `var(--x`는
+  // 치환 토큰이 아니라 꺼짐이다. Chromium은 `--x`가 정의돼 있으면 밑줄이고 없으면
+  // 꺼짐이다.
+  it("text-decoration:underline var(--x는 Chromium은 --x 정의에 따라 갈리지만 치환 토큰이 아니라 꺼짐이다", () => {
+    expectBothPriors("text-decoration", "underline var(--x", NO_LINE);
+  });
+
+  // 의도한 차이다. 열린 `calc(`은 함수 토큰이라 안쪽 치환 함수를 이름으로 본다.
+  // 닫힌 `underline calc(var(--x))`가 이미 밑줄인 것과 같다. Chromium은
+  // 치환 결과를 알아야 해서 꺼짐으로 읽는다.
+  it.each(["underline calc(var(--x)", "underline calc(var(--x))"])(
+    "text-decoration:%s는 Chromium은 꺼짐이지만 함수 안 치환 함수를 이름으로만 봐 밑줄이다",
     (value) => {
       expectBothPriors("text-decoration", value, UNDERLINE);
     },
