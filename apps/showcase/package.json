@@ -15,20 +15,20 @@
     "@cp949/geul-react": "workspace:*",
     "core-js": "3.50.0",
     "prism-react-renderer": "2.4.1",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "react-router": "8.3.1"
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "8.4.0"
   },
   "devDependencies": {
-    "@lezer/highlight": "1.2.3",
-    "@lezer/javascript": "1.5.4",
-    "@testing-library/react": "16.3.0",
+    "@lezer/highlight": "1.2.5",
+    "@lezer/javascript": "1.5.6",
+    "@testing-library/react": "16.3.3",
     "@testing-library/user-event": "14.6.7",
     "highlight.js": "11.12.0",
     "lowlight": "3.3.0",
     "prismjs": "1.30.0",
     "refractor": "5.0.0",
-    "shiki": "4.4.3",
-    "sugar-high": "2.3.1"
+    "shiki": "4.5.0",
+    "sugar-high": "2.6.0"
   }
 }
