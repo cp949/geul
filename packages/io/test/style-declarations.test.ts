@@ -15,7 +15,7 @@ import type {
   InlineFontStyle,
   InlineFontWeight,
   StyleDeclarations,
-} from "../src/clipboard/style-declarations.js";
+} from "../src/css/style-declarations.js";
 import {
   parseInlineStyleMarks,
   parseStyleColorStates,

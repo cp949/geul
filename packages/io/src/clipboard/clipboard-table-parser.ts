@@ -68,7 +68,7 @@ import type {
   ClipboardContentBlock,
 } from "./clipboard-content.js";
 import { parseCssDeclarations } from "../css/declarations.js";
-import { readStyleDeclarations } from "./style-declarations.js";
+import { readStyleDeclarations } from "../css/style-declarations.js";
 import {
   type TabularCell,
   type TabularData,

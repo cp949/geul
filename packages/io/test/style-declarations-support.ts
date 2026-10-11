@@ -13,7 +13,7 @@ import {
   readStyleColorStates,
   readStyleDeclarations,
   readWhiteSpaceMode,
-} from "../src/clipboard/style-declarations.js";
+} from "../src/css/style-declarations.js";
 import {
   type CssDeclaration,
   parseCssDeclarations,

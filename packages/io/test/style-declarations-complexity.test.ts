@@ -41,7 +41,7 @@ import {
   readInlineStyleMarks,
   readStyleDeclarations,
   readWhiteSpaceMode,
-} from "../src/clipboard/style-declarations.js";
+} from "../src/css/style-declarations.js";
 import type { CssComponentValue } from "../src/css/component-values.js";
 import {
   type CssDeclaration,

@@ -1,7 +1,7 @@
 import {
   readWhiteSpaceMode,
   type WhiteSpaceMode,
-} from "../clipboard/style-declarations.js";
+} from "../css/style-declarations.js";
 import { parseCssDeclarations } from "../css/declarations.js";
 import type {
   HtmlElementNode,

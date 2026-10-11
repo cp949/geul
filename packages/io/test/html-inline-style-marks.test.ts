@@ -28,7 +28,7 @@
 import type { InlineContent, TextMark } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
-import type { InlineStyleMarks } from "../src/clipboard/style-declarations.js";
+import type { InlineStyleMarks } from "../src/css/style-declarations.js";
 import { importHtml } from "../src/index.js";
 import { parseInlineStyleMarks } from "./style-declarations-support.js";
 

@@ -19,7 +19,7 @@ import {
   readBackgroundShorthand,
   readCssColor,
   readLegacyAttributeColor,
-} from "../src/clipboard/css-color.js";
+} from "../src/css/css-color.js";
 import { parseCssComponentValues } from "../src/css/component-values.js";
 import { tokenizeCss } from "../src/css/tokens.js";
 

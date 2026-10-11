@@ -15,11 +15,8 @@
 // value 묶기가 문자열·괄호·이스케이프·주석 규칙을 이미 처리한다. 판독기는 글자를
 // 훑지 않고 component만 읽는다. 공백 토큰은 component 사이에 남아 있어 먼저
 // 걸러 센다. 키워드는 ASCII 대소문자만 같게 본다.
-import type {
-  CssComponentValue,
-  CssFunction,
-} from "../css/component-values.js";
-import { asciiLowerCase } from "../css/tokens.js";
+import type { CssComponentValue, CssFunction } from "./component-values.js";
+import { asciiLowerCase } from "./tokens.js";
 
 export type CssColorResult =
   { kind: "color"; color: string } | { kind: "clear" } | { kind: "invalid" };

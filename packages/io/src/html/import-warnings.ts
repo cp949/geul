@@ -10,7 +10,7 @@ import {
   type HtmlNode,
   type HtmlRoot,
 } from "./inline-content.js";
-import { readLegacyAttributeColor } from "../clipboard/css-color.js";
+import { readLegacyAttributeColor } from "../css/css-color.js";
 import { INLINE_PRESENTATION_TAG_NAMES } from "./element-presentation.js";
 import { isAuditedAttribute } from "./import-html-sanitize-schema.js";
 import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";

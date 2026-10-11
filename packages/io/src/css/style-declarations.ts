@@ -1,8 +1,8 @@
 import { isCanonicalCellAlign, isCanonicalCellColor } from "@cp949/geul-model";
 
-import type { CssComponentValue } from "../css/component-values.js";
-import type { CssDeclaration } from "../css/declarations.js";
-import { asciiLowerCase } from "../css/tokens.js";
+import type { CssComponentValue } from "./component-values.js";
+import type { CssDeclaration } from "./declarations.js";
+import { asciiLowerCase } from "./tokens.js";
 import {
   type CssColorResult,
   isCssLengthUnit,

@@ -13,14 +13,14 @@
 // 아니다.
 import type { TextMark } from "@cp949/geul-model";
 
-import { readLegacyAttributeColor } from "../clipboard/css-color.js";
+import { readLegacyAttributeColor } from "../css/css-color.js";
 import {
   type ColorState,
   type InlineStyleMarks,
   readDumpAuthorDeclarations,
   readInlineStyleMarks,
   readStyleColorStates,
-} from "../clipboard/style-declarations.js";
+} from "../css/style-declarations.js";
 import {
   type CssDeclaration,
   parseCssDeclarations,
