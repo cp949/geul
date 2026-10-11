@@ -127,6 +127,40 @@ type ImportEnv = {
   tableSeam: HtmlTableSeam;
 };
 
+// 깊이 상한(MAX_NESTING_DEPTH)에서 quote·callout·list item의 children 자리
+// 노드를 같은 depth의 형제 블록으로 평탄화한다. children 배열을 만들 수 없어서다.
+// 블록이 실제로 나왔을 때만 NESTED_CHILDREN_FLATTENED를 경고한다. 공백뿐이면
+// 잃는 구조가 없다(Issue #132, G-CNV-002). 같은 depth 재귀는 HTML 트리 한 단계를
+// 소비하므로 MAX_HTML_TREE_DEPTH로 유계다.
+const flattenChildrenAtCap = (
+  childrenNodes: readonly HtmlNode[],
+  env: ImportEnv,
+  depth: number,
+): Block[] => {
+  const flattened = blocksFromNodes(childrenNodes, env, depth);
+  if (flattened.length > 0) {
+    env.context.warnings.push(nestedChildrenFlattenedWarning());
+  }
+  return flattened;
+};
+
+// 깊이 상한에서 wrapper·details를 plainRun으로 넘길 때 children 컨테이너가
+// 잃는 구조를 경고한다. 평탄화가 flush 때 일어나 결과를 볼 수 없으므로 원본
+// 노드로 판정한다: 요소가 있거나 실질 텍스트(hasSubstantialText)가 있으면 경고한다.
+// 한계: 요소가 있어도 블록이 0개 나오는 입력(빈 span·div, 무효 img)은 경고한다.
+// flattenChildrenAtCap은 그런 입력에 경고하지 않는다.
+const warnIfChildrenLost = (
+  childrenNodes: readonly HtmlNode[],
+  context: HtmlImportContext,
+): void => {
+  const lostStructure = childrenNodes.some(
+    (child) =>
+      child.type === "element" ||
+      (child.type === "text" && hasSubstantialText(child.value)),
+  );
+  if (lostStructure) context.warnings.push(nestedChildrenFlattenedWarning());
+};
+
 // segmentBlocks의 경계 판정을 실제 Block으로 옮기는 변환 하나만 한다(재귀
 // unwrap은 다루지 않는다 — blocksFromNodes가 감싼다). documentFromRoot의
 // 기존 루프 그대로이고, DELTA-04는 이 함수를 두 자리에서 재사용한다: (1)
@@ -277,9 +311,7 @@ const blocksFromSegments = (
         promoted,
       });
       if (depth >= MAX_NESTING_DEPTH) {
-        const flattened = blocksFromNodes(childrenNodes, env, depth);
-        if (flattened.length > 0)
-          context.warnings.push(nestedChildrenFlattenedWarning());
+        const flattened = flattenChildrenAtCap(childrenNodes, env, depth);
         blocks.push(
           { id, type: "quote", content, ...quoteProps },
           ...flattened,
@@ -323,9 +355,7 @@ const blocksFromSegments = (
         isValidInlineText,
       );
       if (depth >= MAX_NESTING_DEPTH) {
-        const flattened = blocksFromNodes(childrenNodes, env, depth);
-        if (flattened.length > 0)
-          context.warnings.push(nestedChildrenFlattenedWarning());
+        const flattened = flattenChildrenAtCap(childrenNodes, env, depth);
         blocks.push(
           {
             id,
@@ -521,11 +551,7 @@ const blocksFromListItem = (
         : { id, type: "bulletListItem", content, ...listItemProps };
 
   if (depth >= MAX_NESTING_DEPTH) {
-    const flattened = blocksFromNodes(childrenNodes, env, depth);
-    if (flattened.length > 0) {
-      context.warnings.push(nestedChildrenFlattenedWarning());
-    }
-    return [ownBlock, ...flattened];
+    return [ownBlock, ...flattenChildrenAtCap(childrenNodes, env, depth)];
   }
 
   const children = blocksFromNodes(childrenNodes, env, depth + 1);
@@ -643,7 +669,7 @@ const blocksFromListElement = (
 // 뒤이은 parseDocument의 DOCUMENT_LIMIT_EXCEEDED 거절에 기대지 않는다.
 // 상한에 걸린 wrapper(depth >= MAX_NESTING_DEPTH에서 인식된 것)는 전면
 // 거절하는 대신 그 자리 노드를 plainRun으로 넘겨 segmentBlocks 평면
-// 처리로 평탄화하고, 실제로 잃는 구조(비어 있지 않은 children 컨테이너)가
+// 처리로 평탄화하고, 실제로 잃는 구조(공백뿐이 아닌 children 컨테이너, warnIfChildrenLost)가
 // 있을 때만 NESTED_CHILDREN_FLATTENED를 경고한다(Issue #132, G-CNV-002 —
 // 보이는 텍스트는 형제 문단으로 보존된다).
 //
@@ -701,9 +727,7 @@ const blocksFromNodes = (
       if (depth >= MAX_NESTING_DEPTH) {
         // findChildrenWrapper의 depth 가드와 동일 원칙(63행 부근) — 정확히
         // 상한 깊이로 끝나는 체인은 경고하지 않는다.
-        if (details.childrenNodes.length > 0) {
-          context.warnings.push(nestedChildrenFlattenedWarning());
-        }
+        warnIfChildrenLost(details.childrenNodes, context);
         plainRun.push(node);
         continue;
       }
@@ -754,12 +778,10 @@ const blocksFromNodes = (
       continue;
     }
     if (depth >= MAX_NESTING_DEPTH) {
-      // children 컨테이너가 비어 있으면(정확히 상한 깊이로 끝나는 체인)
-      // 평탄화 결과가 wrapper를 인식했을 때와 동일하므로 경고하지 않는다 —
+      // children 컨테이너가 비어 있거나 공백뿐이면(정확히 상한 깊이로 끝나는
+      // 체인) 평탄화 결과가 wrapper를 인식했을 때와 동일하므로 경고하지 않는다 —
       // 64단 입력의 기존 산출·경고를 그대로 유지한다.
-      if (wrapper.childrenNodes.length > 0) {
-        context.warnings.push(nestedChildrenFlattenedWarning());
-      }
+      warnIfChildrenLost(wrapper.childrenNodes, context);
       plainRun.push(node);
       continue;
     }
