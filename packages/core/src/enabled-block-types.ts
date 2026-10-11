@@ -27,7 +27,7 @@ export const isBlockTypeEnabled = (
 
 // enabledBlockTypes(RD-002-DELTA-12)로 비활성화한 알려진 타입이 입력
 // 어디에라도(최상위든 임의 깊이 중첩 children이든) 있으면 그 블록을
-// 반환한다 — 7개 nestable 타입(paragraph/heading/quote/목록 4종 등)은
+// 반환한다 — 8개 nestable 타입(paragraph/heading/quote/callout/목록 4종)은
 // 자식을 가질 수 있어 top-level만으로는 부족하다(CustomBlock 거절과 다른
 // 이유, CustomBlock은 leaf·top-level 전용). PM 스키마에 없는 노드
 // 타입으로 Editor를 만들거나 insertContent하면 PM이 예외를 던지므로

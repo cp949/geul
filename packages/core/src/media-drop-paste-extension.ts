@@ -77,7 +77,7 @@ const isEmptyParagraphContainer = (container: ProseMirrorNode): boolean => {
   );
 };
 
-// enabledBlockTypes(CreateEditorOptions, model-to-tiptap.ts)로 kind가
+// enabledBlockTypes(CreateEditorOptions, enabled-block-types.ts)로 kind가
 // deny되면 스키마에 이 노드가 없다 — 그릴링 2026-09-14 발견. HTML
 // 붙여넣기가 비활성 타입을 조용히 무시하는 기존 정책(enabled-block-
 // types.test.ts characterization)과 같은 선상에서, handlePaste·handleDrop이

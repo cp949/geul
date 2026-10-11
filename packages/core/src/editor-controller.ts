@@ -45,7 +45,7 @@ import {
 } from "./selection-query-helpers.js";
 import { createTableCommands } from "./table-command-glue.js";
 
-// model-to-tiptap.ts가 정의한 타입이다 — createEditor를 이 파일에서
+// enabled-block-types.ts가 정의한 타입이다 — createEditor를 이 파일에서
 // 내보내므로(RD-002-DELTA-12), index.ts가 같은 파일에서 함께 재수출할 수
 // 있도록 여기서도 내보낸다.
 export type { EnabledBlockTypes };

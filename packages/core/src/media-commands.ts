@@ -42,7 +42,7 @@ import { planTriggerBlockInsert } from "./trigger-block-insert.js";
 export type InsertMediaBlockError =
   | { code: "BLOCK_NOT_FOUND"; blockId: string }
   | { code: "TRANSACTION_REJECTED" }
-  // enabledBlockTypes(CreateEditorOptions, model-to-tiptap.ts)로 kind가
+  // enabledBlockTypes(CreateEditorOptions, enabled-block-types.ts)로 kind가
   // deny되면 실제로 도달한다(그릴링 2026-09-14) — SlashMenu "/video" 클릭,
   // EditorController.insertMediaBlock 직접 호출 둘 다 이 경로를 탄다.
   // 문서 로드 거절(model-to-tiptap.ts)과 같은 코드를 재사용한다.
