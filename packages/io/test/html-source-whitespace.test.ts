@@ -704,6 +704,16 @@ describe("div·span의 white-space 모드", () => {
         ),
       ).toEqual([[{ text: "a  \n  b" }]]);
     });
+
+    // Issue #362: parse5는 `&#13;`를 CR로 남긴다. CR은 닫히지 않은 따옴표를
+    // 끝내고 그 선언을 버린다. 기대값은 Chromium 153.0.8010.12 실측이다.
+    it("CR 문자 참조에서 끝난 따옴표 뒤의 white-space:pre를 읽는다", () => {
+      expect(
+        blockContents(
+          `<div style="white-space:pre-line"><span style="font-family:'a&#13;;white-space:pre">a  \n  b</span></div>`,
+        ),
+      ).toEqual([[{ text: "a  \n  b" }]]);
+    });
   });
 
   describe("div 보존", () => {

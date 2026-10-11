@@ -1188,3 +1188,128 @@ describe("readDumpAuthorDeclarations", () => {
     ).toBe(" background: yellow");
   });
 });
+
+/*
+ * 아래는 Issue #362가 더한 규칙이다. 닫히지 않은 따옴표는 개행(LF·CR·FF,
+ * CRLF는 개행 하나)에서 끝난다. 그 선언은 bad라 버리고, 다음 `;`부터 선언을
+ * 다시 읽는다. 백슬래시 뒤 개행은 문자열을 잇는다. 기대값은 Chromium
+ * 153.0.8010.12 실측이다(setAttribute·DOMParser 두 경로 같음, getComputedStyle).
+ */
+const LINE_SEPARATOR = String.fromCodePoint(0x2028);
+
+describe("닫히지 않은 따옴표와 개행 (Issue #362)", () => {
+  it.each([
+    "font-family:'a\n;font-weight:bold",
+    "font-family:Arial's\n;font-weight:bold",
+  ])("parseInlineStyleMarks는 %j를 굵게 읽는다", (style) => {
+    expect(parseInlineStyleMarks(style).fontWeight).toBe("bold");
+  });
+
+  it.each([
+    [
+      "font-family:'a\n;background-color:yellow",
+      { backgroundColor: "#FFFF00" },
+    ],
+    ["font-family:Arial's\n;color:red", { color: "#FF0000" }],
+  ] as const)(
+    "parseStyleDeclarations는 %j에서 뒤 선언을 읽는다",
+    (style, expected) => {
+      expect(parseStyleDeclarations(style)).toEqual(expected);
+    },
+  );
+
+  it.each([
+    'font-family:"a\n;white-space:pre',
+    "font-family:'a\n;white-space:pre",
+  ])("parseWhiteSpaceMode는 %j를 preserve로 읽는다", (style) => {
+    expect(parseWhiteSpaceMode(style)).toBe("preserve");
+  });
+
+  it.each([
+    ["CR", "\r"],
+    ["FF", "\f"],
+    ["CRLF", "\r\n"],
+  ])("%s도 따옴표를 끝낸다", (_name, newline) => {
+    expect(
+      parseInlineStyleMarks(`font-family:'a${newline};font-weight:bold`)
+        .fontWeight,
+    ).toBe("bold");
+  });
+
+  it.each([
+    ["VT", "\v"],
+    ["U+2028", LINE_SEPARATOR],
+    ["백슬래시 뒤 LF", "\\\n"],
+    ["백슬래시 뒤 CR", "\\\r"],
+    ["백슬래시 뒤 FF", "\\\f"],
+    ["백슬래시 뒤 CRLF", "\\\r\n"],
+  ])("%s는 따옴표를 끝내지 않아 뒤 선언을 삼킨다", (_name, glyph) => {
+    expect(
+      parseInlineStyleMarks(`font-family:'a${glyph};font-weight:bold`)
+        .fontWeight,
+    ).toBeUndefined();
+  });
+
+  it("백슬래시 뒤 개행 다음의 닫는 따옴표는 문자열을 닫는다", () => {
+    expect(
+      parseInlineStyleMarks("font-family:'a\\\nb';font-weight:bold").fontWeight,
+    ).toBe("bold");
+  });
+
+  // 값 안 판독기(isFamilyList·splitBackgroundLayers)는 bad 선언을 받지 않는다.
+  it("개행에서 끝난 font 줄임은 버려 앞 굵게를 지우지 않고 기울이지 않는다", () => {
+    const style = "font-weight:bold;font:italic 12px 'a\n;color:red";
+    const marks = parseInlineStyleMarks(style);
+
+    expect(marks.fontWeight).toBe("bold");
+    expect(marks.fontStyle).toBeUndefined();
+    expect(parseStyleDeclarations(style)).toEqual({ color: "#FF0000" });
+  });
+
+  it.each([
+    ["color:red;color:'a\n", { color: "#FF0000" }],
+    ['color:red;color:"blue\n;color:green', { color: "#008000" }],
+    ['background:url("a\n") red', {}],
+    [
+      'background-color:red;background:url("a\n") blue',
+      { backgroundColor: "#FF0000" },
+    ],
+  ] as const)(
+    "parseStyleDeclarations는 %j의 bad 선언을 버린다",
+    (style, expected) => {
+      expect(parseStyleDeclarations(style)).toEqual(expected);
+    },
+  );
+
+  // bad 표시는 `;`로 잘린 조각을 넘어 선언 끝까지 남는다. 괄호 안 `;` 뒤에서
+  // 선언이 끝나도 그 선언을 버린다.
+  it("괄호 안 ; 너머에서 끝난 bad 선언도 버린다", () => {
+    const font = parseInlineStyleMarks(
+      "font-weight:bold;font:italic 12px 'a\n(;)",
+    );
+
+    expect(font.fontWeight).toBe("bold");
+    expect(font.fontStyle).toBeUndefined();
+    expect(
+      parseStyleDeclarations('color:red;background:url("a\n(;)") blue'),
+    ).toEqual({ color: "#FF0000" });
+  });
+
+  it("괄호 안에서 개행으로 끝난 따옴표는 괄호가 닫혀야 선언이 끝난다", () => {
+    expect(
+      parseInlineStyleMarks("color:rgb('a\n);font-weight:bold").fontWeight,
+    ).toBe("bold");
+    expect(
+      parseInlineStyleMarks("color:rgb('a\n;font-weight:bold").fontWeight,
+    ).toBeUndefined();
+  });
+
+  it("개행 뒤의 따옴표는 새 문자열을 열어 뒤 선언을 삼킨다", () => {
+    expect(
+      parseInlineStyleMarks('font-family:"a\nb";font-weight:bold').fontWeight,
+    ).toBeUndefined();
+    expect(
+      parseWhiteSpaceMode('font-family:"a\nb";white-space:pre'),
+    ).toBeUndefined();
+  });
+});

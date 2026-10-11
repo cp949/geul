@@ -13,9 +13,9 @@
  *
  * 크기 N과 2N 입력의 작업량 증가율이 2 이하여야 한다. 입력 모양은 선언이 아주
  * 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력, 공백·토큰이 긴
- * 입력과 font 줄임, 선언 분리(닫히지 않은 따옴표·괄호), text-decoration·
- * font-style 값 판정(토큰이 많거나 긴 값)이 만드는 모양이다. 기계 속도와 동시
- * 실행 부하에 의존하지 않는다.
+ * 입력과 font 줄임, 선언 분리(닫히지 않은 따옴표·괄호, 개행이 끝내는
+ * 따옴표), text-decoration·font-style 값 판정(토큰이 많거나 긴 값)이 만드는
+ * 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
  * `parseInlineStyleMarks`와 `parseWhiteSpaceMode`(Issue #361)는
  * `parseStyleDeclarations`와 같은 흐름이다.
@@ -97,6 +97,23 @@ const inputShapes: Array<[string, (size: number) => string]> = [
     (size) => `font-weight:bold;font-family:url(${";".repeat(size)}) red`,
   ],
   ["주석이 많은 입력", (size) => `${"/**/".repeat(size)}font-weight:bold`],
+  // 아래는 개행이 끝내는 따옴표(Issue #362)가 만든 입력 모양이다. bad 선언은
+  // 조각마다 끝나고, 이스케이프된 개행은 열린 따옴표를 끝까지 잇는다.
+  // 변이로 확인한 RED다(Issue #362, 실측 2026-10-11). 두 변이 모두 기존
+  // 모양은 통과하고 새 모양만 처리 문자 수 증가율 3.999로 잡는다. 다섯 함수
+  // 묶음이 모두 잡는다.
+  // - bad 선언을 버릴 때마다 입력 전체에 `style.lastIndexOf("'")`를 부르는
+  //   변이는 "개행에서 끝나는 따옴표가 아주 많은 입력"이 잡는다.
+  // - 열린 따옴표 조각이 개행으로 끝날 때마다 `pending.trimEnd()`를 부르는
+  //   변이는 "닫히지 않은 따옴표 뒤 이스케이프된 개행이 아주 많은 입력"이 잡는다.
+  [
+    "개행에서 끝나는 따옴표가 아주 많은 입력",
+    (size) => `font-weight:bold;font-family:${"'a\n;".repeat(size)}`,
+  ],
+  [
+    "닫히지 않은 따옴표 뒤 이스케이프된 개행이 아주 많은 입력",
+    (size) => `font-weight:bold;font-family:'${"\\\n;\\\r\n;".repeat(size)}`,
+  ],
   [
     "text-decoration 토큰이 아주 많은 입력",
     (size) => `text-decoration:${"underline ".repeat(size)}`,
@@ -417,6 +434,14 @@ const declarationInputShapes: Array<[string, (size: number) => string]> = [
     (size) => `color:red;background:url("${"a;(".repeat(size)}`,
   ],
   [
+    "개행에서 끝나는 따옴표가 아주 많은 입력",
+    (size) => `color:red;color:${"'a\n;".repeat(size)}`,
+  ],
+  [
+    "닫히지 않은 따옴표 뒤 이스케이프된 개행이 아주 많은 입력",
+    (size) => `color:red;background:'${"\\\n;\\\r\n;".repeat(size)}`,
+  ],
+  [
     "선언이 많고 !important가 반복된 입력",
     (size) => `color:red${" !important".repeat(size)};`.repeat(2),
   ],
@@ -515,6 +540,14 @@ const whiteSpaceInputShapes: Array<[string, (size: number) => string]> = [
       `white-space:pre;font-family:'${"a;white-space:normal;".repeat(size)}`,
   ],
   ["주석이 많은 입력", (size) => `${"/**/".repeat(size)}white-space:pre`],
+  [
+    "개행에서 끝나는 따옴표가 아주 많은 입력",
+    (size) => `white-space:pre;font-family:${"'a\n;".repeat(size)}`,
+  ],
+  [
+    "닫히지 않은 따옴표 뒤 이스케이프된 개행이 아주 많은 입력",
+    (size) => `white-space:pre;font-family:'${"\\\n;\\\r\n;".repeat(size)}`,
+  ],
   [
     "!important 선언이 아주 많은 입력",
     (size) => "white-space:pre !important;".repeat(size),

@@ -94,17 +94,31 @@ const readDeclaration = (
 
 // `;`로 선언을 자르고 `/* */` 주석을 공백 하나로 바꾼다. 괄호 `()`와 따옴표
 // 안의 `;`에서는 자르지 않는다(`url(data:image/png;base64,...)`). 닫히지 않은
-// 괄호·따옴표는 입력 끝까지 한 선언이고, 닫히지 않은 주석은 끝까지 주석이다.
+// 괄호는 입력 끝까지 한 선언이고, 닫히지 않은 주석은 끝까지 주석이다.
+// 따옴표는 CSS 문자열 토큰 규칙을 따른다(Issue #362).
+// - 개행(LF·CR·FF)이 닫히지 않은 따옴표를 끝낸다. CRLF는 개행 하나다.
+// - 그렇게 끝난 문자열은 bad다. bad 문자열이 든 선언은 결과에 넣지 않는다.
+//   Chromium처럼 그 선언을 버리고 괄호 밖 다음 `;`부터 다시 읽는다.
+// - 백슬래시 뒤 개행(CRLF 포함)은 문자열을 잇는다.
+// - VT·U+2028 같은 다른 글자는 개행이 아니다. 문자열이 이어진다.
+// - 개행 없이 닫히지 않은 따옴표는 입력 끝까지 한 선언이다.
+// 한계: `[`·`{` 블록은 세지 않아 그 안의 `;`에서도 자른다. Chromium은 자르지
+// 않는다. 개행이 따옴표를 끝낸 뒤의 `[;`도 같다.
 // 계측 테스트(G-TST-004)가 큰 문자열의 String 메서드 호출을 세므로 큰 문자열
 // 메서드는 `split(";")` 한 번만 부른다. 이어 붙일 조각과 주석 치환은 조각
 // 단위로, 글자를 대괄호로 읽고 `+=`로 쌓는다.
 // escaped는 조각이 따옴표 밖 `\\`로 끝났다는 표시다. 다음 `;`가 이스케이프된다.
+// bad는 지금 쌓는 선언에 개행으로 끝난 문자열이 있다는 표시다.
 type ScanState = {
   quote: string;
   depth: number;
   inComment: boolean;
   escaped: boolean;
+  bad: boolean;
 };
+
+const isCssNewline = (character: string | undefined): boolean =>
+  character === "\n" || character === "\r" || character === "\f";
 
 const scanPiece = (piece: string, state: ScanState): string => {
   // 주석을 만나기 전에는 조각을 그대로 쓴다. out이 정해지면 글자를 쌓는다.
@@ -126,8 +140,16 @@ const scanPiece = (piece: string, state: ScanState): string => {
       if (character === "\\") {
         index += 1;
         keep(piece[index] ?? "");
+        // 백슬래시 뒤 CRLF는 개행 하나라 LF까지 건너뛴다.
+        if (piece[index] === "\r" && piece[index + 1] === "\n") {
+          index += 1;
+          keep("\n");
+        }
       } else if (character === state.quote) {
         state.quote = "";
+      } else if (isCssNewline(character)) {
+        state.quote = "";
+        state.bad = true;
       }
     } else if (character === "/" && piece[index + 1] === "*") {
       if (out === undefined) {
@@ -162,6 +184,7 @@ const splitDeclarations = (style: string): string[] => {
     depth: 0,
     inComment: false,
     escaped: false,
+    bad: false,
   };
   let pending: string | undefined;
 
@@ -176,11 +199,12 @@ const splitDeclarations = (style: string): string[] => {
       !state.inComment &&
       !state.escaped
     ) {
-      declarations.push(pending);
+      if (!state.bad) declarations.push(pending);
       pending = undefined;
+      state.bad = false;
     }
   }
-  if (pending !== undefined) declarations.push(pending);
+  if (pending !== undefined && !state.bad) declarations.push(pending);
 
   return declarations;
 };
@@ -1140,8 +1164,8 @@ const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
 //   `x white-space:pre`·`_white-space:pre`·`*white-space:pre`를 preserve로
 //   읽는다. `white-space:pre;_white-space:normal`은 normal이다. Chromium은
 //   이런 선언을 버린다.
-// - 닫히지 않은 따옴표가 개행을 넘는다(#362). 따옴표 없는 `url(` 안의 `'`와
-//   `/*`도 따옴표·주석으로 읽는다. 둘 다 뒤 선언을 삼킨다.
+// - 따옴표 없는 `url(` 안의 `'`와 `/*`도 따옴표·주석으로 읽는다(#364). 뒤
+//   선언을 삼킨다.
 export const parseWhiteSpaceMode = (
   style: string,
 ): WhiteSpaceMode | undefined => {
