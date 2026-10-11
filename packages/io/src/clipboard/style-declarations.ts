@@ -102,7 +102,7 @@ const readDeclaration = (
 // - 블록 안에서도 따옴표·주석·이스케이프는 그대로 읽는다.
 // - 스택이 비었을 때만 `;`가 선언을 끝낸다.
 // 따옴표 없는 `url(`은 CSS url 토큰이다(Issue #364). `)`까지 한 덩어리로 읽는다.
-// - 따옴표·주석·블록 밖의 `(` 바로 앞 세 글자가 `url`(대소문자 무시)이고 그 앞
+// - 따옴표·주석 밖의 `(` 바로 앞 세 글자가 `url`(대소문자 무시)이고 그 앞
 //   글자가 이름 글자(a–z, A–Z, 0–9, `-`, `_`, 비ASCII)·`#`·`@`가 아니면 url
 //   함수다. `)`를 스택에 넣고 url을 pending으로 둔다.
 // - pending에서 공백은 건너뛴다. 다음 글자가 따옴표면 보통 함수 블록이다.
@@ -115,10 +115,11 @@ const readDeclaration = (
 // - 한계: 값 판독기는 bad url을 모른다. Chromium은 `url(it's.png)`처럼
 //   따옴표·`(`·가운데 공백이 든 url을 bad-url로 보고 그 선언을 버린다. 판독기는
 //   유효 이미지로 읽는다. `color:red;background-color:blue;background:url(it's.png)`
-//   는 Chromium이 배경 파랑이고 우리는 배경을 지운다. `background:url(it's.png) red`
+//   는 Chromium이 배경 파랑이고 우리는 배경을 지운다. `background:url(a b.png) red`
 //   는 Chromium이 배경 없음이고 우리는 빨강이다.
 // - 앞 글자가 이스케이프된 글자이거나 NUL이면 이름의 일부라 url 함수가
-//   아니다(`a\ url(`·`a\url(`). `\url(` 단독은 url 함수다.
+//   아니다(`a\ url(`·`a\url(`). `\url(` 단독은 url 함수다. `\`+개행은
+//   이스케이프가 아니라 `a\⏎url(`은 url 함수다.
 // - 한계: 이름 안의 이스케이프는 읽지 않는다. `\75rl(it's)`·`u\rl(it's)`는
 //   Chromium이 url로 읽고 우리는 아니다. 헥스 이스케이프 뒤 공백도 이름의
 //   일부로 세지 않는다. `\31 url(it's)`는 Chromium이 url이 아니고 우리는 url로
@@ -264,8 +265,12 @@ const scanPiece = (piece: string, state: ScanState): string => {
       keep(character);
       index += 1;
       keep(piece[index] ?? "");
-      prevEscapedAt = escapedAt;
-      escapedAt = index;
+      // `\`+개행은 유효 이스케이프가 아니다. 개행은 이름의 일부가 아니라
+      // 위치를 남기지 않는다(`a\⏎url(`은 url 함수다).
+      if (!isCssNewline(piece[index])) {
+        prevEscapedAt = escapedAt;
+        escapedAt = index;
+      }
       if (index >= piece.length) state.escaped = true;
     } else {
       keep(character);

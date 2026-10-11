@@ -1598,6 +1598,19 @@ describe("따옴표 없는 `url(` 토큰 (Issue #364)", () => {
           .fontWeight,
       ).toBe("bold");
     });
+
+    // `\`+개행은 유효 이스케이프가 아니다. `\`는 delim이고 개행은 공백이라
+    // 뒤 `url(`은 새 이름의 시작이다. Chromium은 url 함수로 읽는다.
+    it.each([
+      ["`\\`+LF", "font-family:a\\\nurl(it's);color:red"],
+      ["`\\`+CR", "font-family:a\\\rurl(it's);color:red"],
+      ["`\\`+FF", "font-family:a\\\furl(it's);color:red"],
+      ["`\\`+CRLF", "font-family:a\\\r\nurl(it's);color:red"],
+      ["값 맨 앞 `\\`+LF", "x:\\\nurl(it's);color:red"],
+      ["`\\`+LF 뒤 `\\u`", "font-family:\\\n\\url(it's);color:red"],
+    ])("%s 뒤 url(은 url 함수다: %j의 color는 빨강이다", (_name, style) => {
+      expect(parseStyleDeclarations(style).color).toBe("#FF0000");
+    });
   });
 
   // 분기 판별 행이다. 각 행은 해당 분기를 지운 변이를 잡는다.
@@ -1606,6 +1619,11 @@ describe("따옴표 없는 `url(` 토큰 (Issue #364)", () => {
       ["url( 바로 뒤 따옴표 안 )", "x:url('a)b');font-weight:bold"],
       ["url( 공백 뒤 따옴표 안 )", "x:url( 'a)b');font-weight:bold"],
       ["조각 경계를 넘는 pending", "x:url(;'a);font-weight:bold"],
+      ["url( TAB 뒤 따옴표 안 )", "x:url(\t'a)b');font-weight:bold"],
+      ["url( LF 뒤 따옴표 안 )", "x:url(\n'a)b');font-weight:bold"],
+      ["url( CR 뒤 따옴표 안 )", "x:url(\r'a)b');font-weight:bold"],
+      ["url( FF 뒤 따옴표 안 )", "x:url(\f'a)b');font-weight:bold"],
+      ["url( CRLF 뒤 따옴표 안 )", "x:url(\r\n'a)b');font-weight:bold"],
     ])("%s: %j는 굵게다", (_name, style) => {
       expect(parseInlineStyleMarks(style).fontWeight).toBe("bold");
     });
@@ -1614,12 +1632,22 @@ describe("따옴표 없는 `url(` 토큰 (Issue #364)", () => {
       ["_", "background:_url(it's);color:red"],
       ["대문자", "background:Aurl(it's);color:red"],
       ["비ASCII", "background:éurl(it's);color:red"],
+      ["비ASCII 첫 글자 U+0080", "font-family:\u0080url(it's);color:red"],
+      ["비ASCII U+00BF", "font-family:¿url(it's);color:red"],
       ["NUL", "background:a\u0000url(it's);color:red"],
       ["u가 아닌 첫 글자", "background:xrl(it's);color:red"],
       ["r이 아닌 둘째 글자", "background:uxl(it's);color:red"],
       ["l이 아닌 셋째 글자", "background:urx(it's);color:red"],
     ])("앞 글자·이름 글자 규칙 %s: %j의 color는 없다", (_name, style) => {
       expect(parseStyleDeclarations(style).color).toBeUndefined();
+    });
+
+    it.each([
+      ["url( 바로 뒤 이스케이프", "background:url(\\)a'b);color:red"],
+      ["url( 바로 뒤 /*", "background:url(/*a);color:red"],
+      ["url( 공백 뒤 /*", "background:url( /*a);color:red"],
+    ])("pending에서 토큰이 되는 %s: %j의 color는 빨강이다", (_name, style) => {
+      expect(parseStyleDeclarations(style).color).toBe("#FF0000");
     });
 
     it("주석이 있는 조각에서 토큰 안 이스케이프된 )를 보존한다", () => {
