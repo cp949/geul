@@ -14,11 +14,17 @@
  *   인라인 태그의 style은 Issue #334부터 읽는다(`html-inline-element-style`).
  * - 파서 단위 계약(`parseInlineStyleMarks`)과 `UNSAFE_ATTRIBUTE_REMOVED`
  *   경고 계약이 이전과 같은지도 함께 본다.
+ * - Issue #339: 선언을 색 경로와 같은 흐름(선언 분리, 속성 읽기, `!important`,
+ *   칸)으로 읽는다. 이슈 여섯 입력, 우선순위 칸, 값 판정 경계, 선언 분리를
+ *   고정한다. 경계 표의 판정은 Chromium 153.0.8010.12 실측이다.
  */
 import type { InlineContent, TextMark } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
-import { parseInlineStyleMarks } from "../src/clipboard/style-declarations.js";
+import {
+  type InlineStyleMarks,
+  parseInlineStyleMarks,
+} from "../src/clipboard/style-declarations.js";
 import { importHtml } from "../src/index.js";
 
 const importedValue = (html: string) => {
@@ -52,6 +58,10 @@ describe("span의 font-weight 스타일", () => {
     ["FONT-WEIGHT : BOLD", "대소문자와 콜론 앞 공백"],
     ["font-weight:700 !important", "!important"],
     ["font-family:Arial;font-weight:700;", "다른 선언과 함께"],
+    [
+      "font-weight:bold !important;font-weight:400",
+      "!important 선언이 뒤의 일반 선언을 이긴다",
+    ],
   ])("%s(%s)는 bold다", (style) => {
     expect(paragraphContent(`<span style="${style}">x</span>`)).toEqual(
       markedText([{ type: "bold" }]),
@@ -64,7 +74,6 @@ describe("span의 font-weight 스타일", () => {
     ["font-weight:500", "500"],
     ["font-weight:lighter", "lighter"],
     ["font-weight:700;font-weight:normal", "마지막 선언이 normal"],
-    ["font-weight:bold !important;font-weight:400", "마지막 선언이 400"],
     ["font-weight:", "값 없음"],
     ["font-weight", "콜론 없음"],
   ])("%s(%s)는 마크가 없다", (style) => {
@@ -467,12 +476,23 @@ describe("parseInlineStyleMarks", () => {
     });
   });
 
-  it("font-weight는 bold·normal·other로 분류한다", () => {
+  it("font-weight는 bold·normal·light로 분류하고 무효 값은 정하지 않는다", () => {
     expect(parseInlineStyleMarks("font-weight:700").fontWeight).toBe("bold");
     expect(parseInlineStyleMarks("font-weight:400").fontWeight).toBe("normal");
     expect(parseInlineStyleMarks("font-weight:500").fontWeight).toBe("light");
-    expect(parseInlineStyleMarks("font-weight:foo").fontWeight).toBe("other");
-    expect(parseInlineStyleMarks("font-weight:1200").fontWeight).toBe("other");
+    expect(parseInlineStyleMarks("font-weight:foo").fontWeight).toBeUndefined();
+    expect(
+      parseInlineStyleMarks("font-weight:1200").fontWeight,
+    ).toBeUndefined();
+  });
+
+  it("font-weight revert·revert-layer는 other다", () => {
+    expect(parseInlineStyleMarks("font-weight:revert").fontWeight).toBe(
+      "other",
+    );
+    expect(parseInlineStyleMarks("font-weight:revert-layer").fontWeight).toBe(
+      "other",
+    );
   });
 
   it("font-weight inherit·unset은 부모를 따르는 값으로 분류한다", () => {
@@ -527,5 +547,472 @@ describe("parseInlineStyleMarks", () => {
         "text-decoration:underline;text-decoration-line:line-through",
       ),
     ).toMatchObject({ underline: false, strike: true });
+  });
+});
+
+const NO_MARKS: InlineStyleMarks = {
+  fontWeight: undefined,
+  fontStyle: undefined,
+  underline: false,
+  strike: false,
+};
+
+const marksWith = (marks: Partial<InlineStyleMarks>): InlineStyleMarks => ({
+  ...NO_MARKS,
+  ...marks,
+});
+
+/** 단일 속성 하나의 속성 이름·값을 실은 style을 `<span>`으로 읽은 content다. */
+const spanContent = (style: string): InlineContent =>
+  paragraphContent(`<span style="${style.replaceAll('"', "&quot;")}">x</span>`);
+
+// 이슈 #339의 여섯 입력이다. 각 줄은 importHtml 결과와 parseInlineStyleMarks
+// 값 양쪽을 본다. 판정은 Chromium 153 실측이다: 무효 선언은 앞의 유효 값을
+// 지우지 않고, `!important` 선언은 일반 선언이 덮지 못하고, 따옴표 안 `;`는
+// 선언을 끝내지 않는다.
+describe("이슈 #339 선언 읽기", () => {
+  it.each<[string, string, InlineStyleMarks, TextMark[]]>([
+    [
+      "font-style:italic;font-style:foo",
+      "무효 font-style은 앞의 italic을 지우지 않는다",
+      marksWith({ fontStyle: "italic" }),
+      [{ type: "italic" }],
+    ],
+    [
+      "text-decoration:underline;text-decoration:foo",
+      "무효 text-decoration은 앞의 밑줄을 지우지 않는다",
+      marksWith({ underline: true }),
+      [{ type: "underline" }],
+    ],
+    [
+      "font-weight:normal !important;font-weight:bold",
+      "!important normal을 일반 bold가 덮지 못한다",
+      marksWith({ fontWeight: "normal" }),
+      [],
+    ],
+    [
+      "text-decoration:underline !important;text-decoration:none",
+      "!important 밑줄을 일반 none이 덮지 못한다",
+      marksWith({ underline: true }),
+      [{ type: "underline" }],
+    ],
+    [
+      "font-weight:bold ! important",
+      "!와 important 사이 공백을 허용한다",
+      marksWith({ fontWeight: "bold" }),
+      [{ type: "bold" }],
+    ],
+    [
+      "font-family:'a;font-style:italic '",
+      "따옴표 안 ;는 선언을 끝내지 않는다",
+      NO_MARKS,
+      [],
+    ],
+  ])("%s: %s", (style, _name, parsed, marks) => {
+    expect(parseInlineStyleMarks(style)).toEqual(parsed);
+    expect(spanContent(style)).toEqual(
+      marks.length === 0 ? [{ text: "x" }] : markedText(marks),
+    );
+  });
+});
+
+// 굵기·기울임·장식은 각각 칸 하나다. `!important` 선언이 칸을 차지하면 일반
+// 선언은 못 덮고 같은 중요도끼리는 뒤가 이긴다. 무효 선언은 `!important`가
+// 붙어도 칸을 건드리지 않는다. 줄임 `font`는 굵기·기울임 두 칸에 쓰고
+// `text-decoration`과 `text-decoration-line`은 장식 칸 하나를 공유한다.
+describe("인라인 서식 우선순위 칸", () => {
+  it.each<[string, Partial<InlineStyleMarks>]>([
+    ["font-weight:bold !important;font-weight:400", { fontWeight: "bold" }],
+    [
+      "font-weight:bold !important;font-weight:400 !important",
+      { fontWeight: "normal" },
+    ],
+    ["font-weight:bold;font-weight:foo !important", { fontWeight: "bold" }],
+    ["font-weight:foo !important;font-weight:bold", { fontWeight: "bold" }],
+    ["font-weight:bold !important;font-weight:revert", { fontWeight: "bold" }],
+    ["font-weight:bold;font-weight:revert", { fontWeight: "other" }],
+    [
+      "font:bold 12px a !important;font-weight:normal",
+      { fontWeight: "bold", fontStyle: "normal" },
+    ],
+    [
+      "font-weight:bold !important;font:12px a",
+      { fontWeight: "bold", fontStyle: "normal" },
+    ],
+    ["font-weight:bold;font:foo !important", { fontWeight: "bold" }],
+    [
+      "font-style:italic !important;font:12px a",
+      { fontWeight: "normal", fontStyle: "italic" },
+    ],
+    [
+      "font:italic 12px a !important;font-style:normal",
+      { fontWeight: "normal", fontStyle: "italic" },
+    ],
+    ["font-style:italic;font:foo !important", { fontStyle: "italic" }],
+    ["font-style:italic !important;font-style:revert", { fontStyle: "italic" }],
+    ["font-style:italic;font-style:revert", {}],
+    ["font-style:italic !important;font-style:normal", { fontStyle: "italic" }],
+    [
+      "font-style:italic !important;font-style:normal !important",
+      { fontStyle: "normal" },
+    ],
+    [
+      "text-decoration:underline !important;text-decoration-line:none",
+      { underline: true },
+    ],
+    [
+      "text-decoration-line:underline !important;text-decoration:line-through",
+      { underline: true },
+    ],
+    [
+      "text-decoration:underline;text-decoration-line:line-through",
+      { strike: true },
+    ],
+    [
+      "text-decoration-line:line-through;text-decoration:underline",
+      { underline: true },
+    ],
+    [
+      "text-decoration:underline !important;text-decoration:foo",
+      { underline: true },
+    ],
+    [
+      "text-decoration:underline;text-decoration:none !important;text-decoration:line-through",
+      {},
+    ],
+    [
+      "text-decoration:underline !important;text-decoration:line-through !important",
+      { strike: true },
+    ],
+    ["text-decoration:underline;text-decoration:red", {}],
+    ["text-decoration:underline;text-decoration:blink", {}],
+    ["text-decoration:underline;text-decoration:revert", {}],
+  ])("%s", (style, expected) => {
+    expect(parseInlineStyleMarks(style)).toEqual(marksWith(expected));
+  });
+});
+
+type Decoration = Pick<InlineStyleMarks, "underline" | "strike">;
+const NO_LINE: Decoration = { underline: false, strike: false };
+const UNDERLINE: Decoration = { underline: true, strike: false };
+const STRIKE: Decoration = { underline: false, strike: true };
+const UNDERLINE_STRIKE: Decoration = { underline: true, strike: true };
+
+const decorationOf = (style: string): Decoration => {
+  const { underline, strike } = parseInlineStyleMarks(style);
+  return { underline, strike };
+};
+
+// 유효 선언이 앞의 어떤 값도 덮고, 무효 선언은 앞의 값을 그대로 남기는지
+// 서로 다른 앞 값 둘에 덧대어 본다. 앞 값의 결과가 달라야 판정이 갈린다.
+const DECORATION_PRIORS = [
+  [": underline line-through", UNDERLINE_STRIKE],
+  [": blink", NO_LINE],
+] as const;
+
+const decorationAfterPriors = (property: string, value: string): Decoration[] =>
+  DECORATION_PRIORS.map(([prior]) =>
+    decorationOf(`${property}${prior};${property}:${value}`),
+  );
+
+// Chromium 153.0.8010.12 실측이다. line 낱말(underline·overline·line-through·
+// blink)은 붙어 있어야 하고 한 번씩만 쓴다. none·spelling-error·grammar-error는
+// 다른 line 낱말과 못 섞인다. style 낱말·thickness·색은 각각 한 번이다.
+describe("text-decoration 값 판정", () => {
+  it("공백만 있는 값은 무효라 앞의 밑줄을 지우지 않는다", () => {
+    expect(
+      parseInlineStyleMarks("text-decoration:underline;text-decoration: ;"),
+    ).toMatchObject({ underline: true, strike: false });
+    expect(
+      parseInlineStyleMarks(
+        "text-decoration:underline;text-decoration-line:  ;",
+      ),
+    ).toMatchObject({ underline: true, strike: false });
+  });
+
+  it.each<[string, Decoration]>([
+    ["underline", UNDERLINE],
+    ["line-through", STRIKE],
+    ["underline line-through", UNDERLINE_STRIKE],
+    ["line-through underline", UNDERLINE_STRIKE],
+    ["underline  line-through", UNDERLINE_STRIKE],
+    ["overline underline", UNDERLINE],
+    ["underline overline line-through", UNDERLINE_STRIKE],
+    ["underline blink overline line-through", UNDERLINE_STRIKE],
+    ["underline blink", UNDERLINE],
+    ["UNDERLINE", UNDERLINE],
+    ["Underline WAVY", UNDERLINE],
+    ["blink", NO_LINE],
+    ["overline", NO_LINE],
+    ["none", NO_LINE],
+    ["spelling-error", NO_LINE],
+    ["grammar-error", NO_LINE],
+    ["spelling-error red", NO_LINE],
+    ["red spelling-error", NO_LINE],
+    ["grammar-error wavy", NO_LINE],
+    ["underline red wavy", UNDERLINE],
+    ["underline wavy red", UNDERLINE],
+    ["red underline", UNDERLINE],
+    ["dotted underline", UNDERLINE],
+    ["2px underline", UNDERLINE],
+    ["from-font underline", UNDERLINE],
+    ["underline red 2px dotted", UNDERLINE],
+    ["underline from-font wavy red", UNDERLINE],
+    ["underline overline red", UNDERLINE],
+    ["red underline overline", UNDERLINE],
+    ["underline 2px", UNDERLINE],
+    ["underline -2px", UNDERLINE],
+    ["underline +2px", UNDERLINE],
+    ["underline .5px", UNDERLINE],
+    ["underline 1e1px", UNDERLINE],
+    ["underline 10PX", UNDERLINE],
+    ["underline 1em", UNDERLINE],
+    ["underline 1rem", UNDERLINE],
+    ["underline 0", UNDERLINE],
+    ["underline -0", UNDERLINE],
+    ["underline 0px", UNDERLINE],
+    ["underline 10%", UNDERLINE],
+    ["underline -5%", UNDERLINE],
+    ["underline auto", UNDERLINE],
+    ["underline from-font", UNDERLINE],
+    ["underline currentcolor", UNDERLINE],
+    ["underline currentColor", UNDERLINE],
+    ["underline rgb(0, 0, 0)", UNDERLINE],
+    ["underline rgb(0,0,0)", UNDERLINE],
+    ["underline rgb(0 0 0 / 50%)", UNDERLINE],
+    ["underline #f00", UNDERLINE],
+    ["underline transparent", UNDERLINE],
+    ["red", NO_LINE],
+    ["wavy", NO_LINE],
+    ["solid", NO_LINE],
+    ["none red", NO_LINE],
+    ["none 2px", NO_LINE],
+    ["none wavy", NO_LINE],
+    ["none solid red", NO_LINE],
+    ["inherit", NO_LINE],
+    ["initial", NO_LINE],
+    ["unset", NO_LINE],
+    ["revert", NO_LINE],
+    ["revert-layer", NO_LINE],
+  ])("text-decoration:%s는 유효하다", (value, expected) => {
+    for (const result of decorationAfterPriors("text-decoration", value)) {
+      expect(result).toEqual(expected);
+    }
+  });
+
+  it.each([
+    "underline wavy line-through",
+    "underline red overline",
+    "underline red blink",
+    "blink red underline",
+    "underline underline",
+    "underline line-through underline",
+    "none underline",
+    "underline none",
+    "line-through none",
+    "none none",
+    "underline spelling-error",
+    "underline foo",
+    "foo",
+    "underline solid double",
+    "underline dotted dashed",
+    "wavy wavy",
+    "underline auto auto",
+    "from-font from-font",
+    "underline 2px 3px",
+    "underline 1",
+    "underline 1foo",
+    "underline 5.px",
+    "underline red red",
+    "underline currentcolor currentcolor",
+    "underline transparent red",
+    "underline rgb(0,0,0) rgb(0,0,0)",
+    "underline rgb(0, 0",
+    "underline #ggg",
+    "underline #12",
+    "underline inherit",
+    "underline initial",
+    "underline revert",
+    "inherit underline",
+    "underline / red",
+    "underline 'x'",
+    "underline url(a)",
+    "",
+  ])("text-decoration:%s는 무효라 앞의 값을 지킨다", (value) => {
+    const [afterUnderlineStrike, afterBlink] = decorationAfterPriors(
+      "text-decoration",
+      value,
+    );
+    expect(afterUnderlineStrike).toEqual(UNDERLINE_STRIKE);
+    expect(afterBlink).toEqual(NO_LINE);
+  });
+
+  it.each<[string, Decoration]>([
+    ["underline", UNDERLINE],
+    ["line-through", STRIKE],
+    ["underline line-through", UNDERLINE_STRIKE],
+    ["line-through underline overline", UNDERLINE_STRIKE],
+    ["underline  line-through", UNDERLINE_STRIKE],
+    ["underline overline blink", UNDERLINE],
+    ["blink underline", UNDERLINE],
+    ["UNDERLINE", UNDERLINE],
+    ["underline overline", UNDERLINE],
+    ["blink", NO_LINE],
+    ["none", NO_LINE],
+    ["spelling-error", NO_LINE],
+    ["grammar-error", NO_LINE],
+    ["inherit", NO_LINE],
+    ["initial", NO_LINE],
+    ["unset", NO_LINE],
+    ["revert", NO_LINE],
+    ["revert-layer", NO_LINE],
+  ])("text-decoration-line:%s는 유효하다", (value, expected) => {
+    for (const result of decorationAfterPriors("text-decoration-line", value)) {
+      expect(result).toEqual(expected);
+    }
+  });
+
+  it.each([
+    "underline underline",
+    "none underline",
+    "underline spelling-error",
+    "underline foo",
+    "underline red",
+    "underline wavy",
+    "underline 2px",
+    "underline inherit",
+    "red",
+    "",
+  ])("text-decoration-line:%s는 무효라 앞의 값을 지킨다", (value) => {
+    const [afterUnderlineStrike, afterBlink] = decorationAfterPriors(
+      "text-decoration-line",
+      value,
+    );
+    expect(afterUnderlineStrike).toEqual(UNDERLINE_STRIKE);
+    expect(afterBlink).toEqual(NO_LINE);
+  });
+});
+
+// Chromium 153.0.8010.12 실측이다. 값 전체가 문법이다: 한 낱말(`normal`·
+// `italic`·`oblique`·전역 키워드) 또는 `oblique <angle>`이다. 각도는
+// deg·grad·rad·turn 단위가 있어야 한다. 단위 없는 숫자는 `0`도 무효다.
+// Chromium은 `oblique 91deg`를 무효로 보지만 여기서는 각도 범위를 검사하지
+// 않는다(Issue #339 결정). 그 행은 두지 않는다.
+describe("font-style 값 판정", () => {
+  const fontStyleAfterPriors = (value: string) =>
+    ["font-style:italic", "font-style:normal"].map(
+      (prior) =>
+        parseInlineStyleMarks(`${prior};font-style:${value}`).fontStyle,
+    );
+
+  it.each<[string, InlineStyleMarks["fontStyle"]]>([
+    ["italic", "italic"],
+    ["ITALIC", "italic"],
+    ["italic  ", "italic"],
+    ["oblique", "italic"],
+    ["oblique 10deg", "italic"],
+    ["oblique  10deg", "italic"],
+    ["oblique 10DEG", "italic"],
+    ["Oblique 10DEG", "italic"],
+    ["oblique 0deg", "italic"],
+    ["oblique 90deg", "italic"],
+    ["oblique -90deg", "italic"],
+    ["oblique +10deg", "italic"],
+    ["oblique 10.5deg", "italic"],
+    ["oblique .5deg", "italic"],
+    ["oblique 1e1deg", "italic"],
+    ["oblique 1rad", "italic"],
+    ["oblique 1turn", "italic"],
+    ["oblique -1grad", "italic"],
+    ["normal", "normal"],
+    ["initial", "normal"],
+    ["inherit", "inherit"],
+    ["unset", "inherit"],
+    ["revert", undefined],
+    ["revert-layer", undefined],
+  ])("font-style:%s는 유효하다", (value, expected) => {
+    for (const result of fontStyleAfterPriors(value)) {
+      expect(result).toBe(expected);
+    }
+  });
+
+  it.each([
+    "oblique 10",
+    "oblique 0",
+    "oblique 10px",
+    "oblique 10%",
+    "oblique 10 deg",
+    "oblique deg",
+    "oblique 5.deg",
+    "oblique 10deg 20deg",
+    "oblique 10deg foo",
+    "oblique italic",
+    "oblique inherit",
+    "italic foo",
+    "italic italic",
+    "italic oblique",
+    "italic normal",
+    "normal italic",
+    "italic 10deg",
+    "normal 10deg",
+    "inherit italic",
+    "foo",
+    "left",
+    "",
+  ])("font-style:%s는 무효라 앞의 값을 지킨다", (value) => {
+    expect(fontStyleAfterPriors(value)).toEqual(["italic", "normal"]);
+  });
+});
+
+// 선언 분리는 색 경로와 같다: 따옴표·괄호 안 `;`는 선언을 끝내지 않고,
+// `/* */` 주석은 공백 하나이며, 닫히지 않은 따옴표·괄호·주석은 끝까지 간다.
+describe("인라인 서식 선언 분리", () => {
+  it.each<[string, Partial<InlineStyleMarks>]>([
+    ["font-family:'a;font-style:italic '", {}],
+    ['font-family:"a;font-style:italic"', {}],
+    [
+      'font-style:italic;font-family:"a;font-style:normal',
+      { fontStyle: "italic" },
+    ],
+    [
+      "font-style:italic;font-family:'a;font-style:normal",
+      { fontStyle: "italic" },
+    ],
+    [
+      "font-style:italic;font-family:(a;font-style:normal)",
+      { fontStyle: "italic" },
+    ],
+    [
+      "font-style:italic;font-family:(a;font-style:normal",
+      { fontStyle: "italic" },
+    ],
+    [
+      "font-style:italic;font-family:url(a;b);font-style:normal",
+      { fontStyle: "normal" },
+    ],
+    ["font-style:/* ; */italic", { fontStyle: "italic" }],
+    ["font-style:italic /* ; font-style:normal */", { fontStyle: "italic" }],
+    ["font-style:italic /* font-style:normal", { fontStyle: "italic" }],
+    ["font-style:italic;x:'\\';font-style:normal'", { fontStyle: "italic" }],
+    ["font-style:italic;;font-style:normal", { fontStyle: "normal" }],
+    [
+      "text-decoration:underline;font-family:'a;text-decoration:none",
+      { underline: true },
+    ],
+    [
+      "font-weight:bold;font-family:url(a;font-weight:normal",
+      { fontWeight: "bold" },
+    ],
+  ])("%s", (style, expected) => {
+    expect(parseInlineStyleMarks(style)).toEqual(marksWith(expected));
+  });
+
+  it("따옴표가 든 style 값도 importHtml이 같게 읽는다", () => {
+    expect(spanContent('font-family:"a;font-style:italic"')).toEqual([
+      { text: "x" },
+    ]);
+    expect(
+      spanContent('font-family:"a;font-style:normal";font-style:italic'),
+    ).toEqual(markedText([{ type: "italic" }]));
   });
 });

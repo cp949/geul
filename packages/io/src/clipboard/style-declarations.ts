@@ -387,8 +387,8 @@ export const readDumpAuthorDeclarations = (
 //   안쪽 요소가 UA 굵기를 덮어 굵게를 끈다.
 // - inherit: 부모 굵기를 따른다. inherit·unset이다(font-weight는 상속 속성이다).
 //   끄지도 켜지도 않는다.
-// - other: 굵기를 정하지 않는다. 무효한 값(`foo`·`0`·`1001`·`calc()`)과
-//   revert·revert-layer(UA 굵기로 돌아간다)다.
+// - other: 굵기를 정하지 않는다. revert·revert-layer(UA 굵기로 돌아간다)다.
+//   무효한 값(`foo`·`0`·`1001`·`calc()`)은 선언이 버려져 분류가 없다.
 export type InlineFontWeight =
   "bold" | "normal" | "light" | "inherit" | "other";
 
@@ -400,10 +400,9 @@ export type InlineFontWeight =
 export type InlineFontStyle = "italic" | "normal" | "inherit";
 
 export type InlineStyleMarks = {
-  // 마지막 유효한 font-weight 선언(font 줄임 포함)의 분류. 선언이 없으면
-  // undefined다. 유효한 선언이 없고 무효한 선언만 있으면 other다. span과 새로
-  // 읽는 요소는 bold일 때만 굵게 읽고, b·strong은 normal·light가 아니면 굵게
-  // 읽는다.
+  // 칸을 차지한 font-weight 선언(font 줄임 포함)의 분류. 유효한 선언이 없으면
+  // undefined다. 무효한 선언은 버린다. span과 새로 읽는 요소는 bold일 때만
+  // 굵게 읽고, b·strong은 normal·light가 아니면 굵게 읽는다.
   fontWeight: InlineFontWeight | undefined;
   fontStyle: InlineFontStyle | undefined;
   underline: boolean;
@@ -805,71 +804,280 @@ const readFontWeightToken = (token: string): InlineFontWeight | undefined => {
   return classifyWeightNumber(numeric.value);
 };
 
-// style 속성에서 인라인 서식 마크(굵게·기울임·밑줄·취소선) 판정에 쓰는
-// font-weight·font-style·text-decoration(-line)·font 줄임 선언만 읽는다.
-// font 줄임은 굵기와 기울임을 함께 정한다(Issue #334). `;`로 자르고 선언마다 첫 `:` 위치로 이름과 값을 나눈다 —
-// 입력 길이에 선형이다. 같은 선언이 여럿이면 마지막이 이기고(text-decoration
-// 과 text-decoration-line은 합쳐서 마지막), `!important`·대소문자·공백은
-// 무시한다. 읽지 않는 선언과 `:`가 없는 조각은 버린다. 값이 꺼짐(normal,
-// none)이어도 이 함수는 그 선언만 반영한다 — 바깥 요소가 만든 마크를 지우는
-// 일은 없다. 끄는 값은 normal로 돌려주고 겹치기는 호출부가 정한다.
-export const parseInlineStyleMarks = (style: string): InlineStyleMarks => {
-  const result: InlineStyleMarks = {
-    fontWeight: undefined,
-    fontStyle: undefined,
-    underline: false,
-    strike: false,
-  };
+// 인라인 서식 칸이 받는 속성이다.
+const INLINE_MARK_PROPERTIES: ReadonlySet<string> = new Set([
+  "font-weight",
+  "font-style",
+  "font",
+  "text-decoration",
+  "text-decoration-line",
+]);
 
-  for (const declaration of style.split(";")) {
-    const colon = declaration.indexOf(":");
-    if (colon < 0) continue;
-    const property = declaration.slice(0, colon).trim().toLowerCase();
+// 모든 속성에서 쓰는 CSS 전역 키워드다.
+const CSS_WIDE_KEYWORDS: ReadonlySet<string> = new Set([
+  "inherit",
+  "initial",
+  "unset",
+  "revert",
+  "revert-layer",
+]);
 
-    if (property === "font-weight") {
-      const weight = classifyFontWeight(
-        normalizeDeclarationValue(declaration.slice(colon + 1)),
-      );
-      // 무효한 선언은 버린다. 앞의 유효한 분류를 지우지 않는다.
-      if (weight === undefined) result.fontWeight ??= "other";
-      else result.fontWeight = weight;
-    } else if (property === "font") {
-      // 줄임은 굵기와 기울임을 함께 정한다. 굵기가 없으면 normal로 덮는다.
-      // 문법 오류 선언은 통째로 버린다.
-      const shorthand = parseFontShorthand(
-        normalizeDeclarationValue(declaration.slice(colon + 1)),
-      );
-      if (shorthand !== undefined) {
-        result.fontWeight = shorthand.weight;
-        result.fontStyle = shorthand.fontStyle;
+// 한 값 안에서 괄호 밖 공백까지가 토큰이다. 괄호 안은 공백이 있어도 한
+// 토큰이다(`rgb(0, 0, 0)`). `from`은 공백이 아닌 글자를 가리켜야 하고, 토큰은
+// 글자를 하나 이상 먹는다. `fontTokenEnd`와 달리 `/`에서 끊지 않는다.
+const valueTokenEnd = (value: string, from: number): number => {
+  let depth = 0;
+  let index = from;
+  while (index < value.length) {
+    const character = value[index] as string;
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      if (depth > 0) depth -= 1;
+    } else if (depth === 0 && isCssSpace(character)) {
+      break;
+    }
+    index += 1;
+  }
+  return index;
+};
+
+// font-style 값 하나(소문자·양끝 공백 걷음)를 읽는다. 값 전체가 문법이다:
+// 한 낱말(normal·italic·oblique·전역 키워드)이거나 `oblique <angle>`이다.
+// 각도는 deg·grad·rad·turn 단위가 있어야 하고 범위는 검사하지 않는다.
+// 무효면 undefined다. 유효하면 분류를 담아 돌려준다. revert·revert-layer는
+// 유효하지만 기울임을 정하지 않아 분류가 undefined다.
+type FontStyleRead = { fontStyle: InlineFontStyle | undefined };
+
+const readFontStyle = (value: string): FontStyleRead | undefined => {
+  let index = skipCssSpace(value, 0);
+  if (index >= value.length) return undefined;
+  let end = valueTokenEnd(value, index);
+  const keyword = value.slice(index, end);
+  index = skipCssSpace(value, end);
+
+  if (keyword === "oblique") {
+    if (index < value.length) {
+      end = valueTokenEnd(value, index);
+      const angle = readNumeric(value.slice(index, end));
+      if (angle === undefined || !ANGLE_UNITS.has(angle.unit)) return undefined;
+      index = skipCssSpace(value, end);
+    }
+    return index >= value.length ? { fontStyle: "italic" } : undefined;
+  }
+  if (index < value.length) return undefined;
+
+  if (keyword === "italic") return { fontStyle: "italic" };
+  if (keyword === "normal" || keyword === "initial") {
+    return { fontStyle: "normal" };
+  }
+  if (keyword === "inherit" || keyword === "unset") {
+    return { fontStyle: "inherit" };
+  }
+  if (keyword === "revert" || keyword === "revert-layer") {
+    return { fontStyle: undefined };
+  }
+  return undefined;
+};
+
+// 장식 칸의 값이다. 밑줄과 취소선만 마크가 된다.
+type LineMarks = { underline: boolean; strike: boolean };
+
+const NO_LINE_MARKS: LineMarks = { underline: false, strike: false };
+
+// line 낱말이다. 값은 본 낱말을 기록하는 비트다.
+const LINE_WORD_BITS: ReadonlyMap<string, number> = new Map([
+  ["underline", 1],
+  ["overline", 2],
+  ["line-through", 4],
+  ["blink", 8],
+]);
+const UNDERLINE_BIT = 1;
+const LINE_THROUGH_BIT = 4;
+
+// 다른 line 낱말과 못 섞이는 line 값이다.
+const LINE_ALONE_KEYWORDS: ReadonlySet<string> = new Set([
+  "none",
+  "spelling-error",
+  "grammar-error",
+]);
+
+const DECORATION_STYLES: ReadonlySet<string> = new Set([
+  "solid",
+  "double",
+  "dotted",
+  "dashed",
+  "wavy",
+]);
+
+// thickness 토큰이다: auto·from-font·길이·백분율. 음수도 받는다. 단위 없는
+// 숫자는 0만 길이다.
+const isThicknessToken = (token: string): boolean => {
+  if (token === "auto" || token === "from-font") return true;
+  const numeric = readNumeric(token);
+  if (numeric === undefined) return false;
+  if (numeric.unit === "") return numeric.value === 0;
+  return numeric.unit === "%" || isCssLengthUnit(numeric.unit);
+};
+
+// text-decoration 줄임 또는 text-decoration-line 값 하나(소문자)를 읽는다.
+// 무효면 undefined다. 문법(Chromium 실측)은 이렇다.
+// - 전역 키워드는 값 하나로만 쓴다.
+// - line 낱말(underline·overline·line-through·blink)은 각각 한 번이고 서로
+//   붙어 있어야 한다. none·spelling-error·grammar-error는 다른 line 값과 못
+//   섞인다.
+// - 줄임은 style 낱말·thickness·색을 종류마다 한 번 더 받는다. 순서는 자유다.
+//   line 값이 없으면 line이 none이라 장식을 끈다.
+// 무효를 찾는 즉시 끝낸다. 토큰마다 일정한 일만 하므로 값 길이에 선형이다.
+const readDecoration = (
+  value: string,
+  lineOnly: boolean,
+): LineMarks | undefined => {
+  let seenWords = 0;
+  // 0은 line 낱말을 아직 못 봤고, 1은 line 낱말이 이어지는 중이고, 2는 line
+  // 값이 끝났다는 표시다.
+  let lineState = 0;
+  let sawAlone = false;
+  let sawStyle = false;
+  let sawThickness = false;
+  let sawColor = false;
+  let tokenCount = 0;
+  let index = skipCssSpace(value, 0);
+
+  while (index < value.length) {
+    const end = valueTokenEnd(value, index);
+    const token = value.slice(index, end);
+    tokenCount += 1;
+    index = skipCssSpace(value, end);
+
+    if (CSS_WIDE_KEYWORDS.has(token)) {
+      return tokenCount === 1 && index >= value.length
+        ? NO_LINE_MARKS
+        : undefined;
+    }
+
+    const wordBit = LINE_WORD_BITS.get(token);
+    if (wordBit !== undefined) {
+      if (lineState === 2 || sawAlone || (seenWords & wordBit) !== 0) {
+        return undefined;
       }
-    } else if (property === "font-style") {
-      const keyword = normalizeDeclarationValue(
-        declaration.slice(colon + 1),
-      ).split(WHITESPACE_RUN, 1)[0];
-      // 무효한 키워드는 선언을 버린다. 앞의 값을 지우지 않는다.
-      if (keyword === "italic" || keyword === "oblique") {
-        result.fontStyle = "italic";
-      } else if (keyword === "normal" || keyword === "initial") {
-        result.fontStyle = "normal";
-      } else if (keyword === "inherit" || keyword === "unset") {
-        result.fontStyle = "inherit";
-      } else if (keyword === "revert" || keyword === "revert-layer") {
-        result.fontStyle = undefined;
-      }
-    } else if (
-      property === "text-decoration" ||
-      property === "text-decoration-line"
-    ) {
-      const tokens = normalizeDeclarationValue(
-        declaration.slice(colon + 1),
-      ).split(WHITESPACE_RUN);
-      result.underline = tokens.includes("underline");
-      result.strike = tokens.includes("line-through");
+      seenWords |= wordBit;
+      lineState = 1;
+      continue;
+    }
+    if (lineState === 1) lineState = 2;
+
+    if (LINE_ALONE_KEYWORDS.has(token)) {
+      if (lineState !== 0 || sawAlone) return undefined;
+      sawAlone = true;
+    } else if (lineOnly) {
+      return undefined;
+    } else if (DECORATION_STYLES.has(token)) {
+      if (sawStyle) return undefined;
+      sawStyle = true;
+    } else if (isThicknessToken(token)) {
+      if (sawThickness) return undefined;
+      sawThickness = true;
+    } else if (readCssColor(token).kind !== "invalid") {
+      if (sawColor) return undefined;
+      sawColor = true;
+    } else {
+      return undefined;
     }
   }
 
-  return result;
+  if (tokenCount === 0) return undefined;
+  return {
+    underline: (seenWords & UNDERLINE_BIT) !== 0,
+    strike: (seenWords & LINE_THROUGH_BIT) !== 0,
+  };
+};
+
+// 인라인 서식 하나가 받는 칸이다. 색 칸(ColorSlot)과 같은 규칙이다. 중요도가
+// 높은 선언이 칸을 차지하면 일반 선언은 못 덮는다. 같은 중요도끼리는 뒤가
+// 이긴다. 무효 선언은 이 함수를 부르지 않아 칸을 건드리지 않는다.
+type MarkSlot<T> = { value: T; important: boolean };
+
+const applyMark = <T>(
+  slot: MarkSlot<T>,
+  value: T,
+  important: boolean,
+): void => {
+  if (slot.important && !important) return;
+  slot.value = value;
+  slot.important ||= important;
+};
+
+// style 속성에서 인라인 서식 마크(굵게·기울임·밑줄·취소선) 판정에 쓰는
+// font-weight·font-style·text-decoration(-line)·font 줄임 선언만 읽는다.
+// 색 경로(parseStyleDeclarations)와 같은 흐름이다: `splitDeclarations`로
+// 선언을 자르고(따옴표·괄호 안 `;`, `/* */` 주석, 닫히지 않은 따옴표·괄호),
+// `readDeclaration`으로 이름과 값을 나누고, `splitImportant`로 중요도를
+// 떼어 칸에 쓴다. 입력 길이에 선형이다.
+// - 칸은 굵기·기울임·장식 셋이다. font 줄임은 굵기·기울임 칸에, text-decoration
+//   과 text-decoration-line은 장식 칸 하나를 함께 쓴다.
+// - `!important` 선언이 칸을 차지하면 일반 선언은 못 덮는다. 같은 중요도끼리는
+//   뒤가 이긴다.
+// - 문법에 맞지 않는 선언은 통째로 버린다. 칸을 건드리지 않는다(`!important`가
+//   붙어도 같다). revert·revert-layer는 유효 값이라 칸을 비운다.
+// - font-style과 text-decoration(-line)은 값 전체를 문법대로 읽는다. 각도
+//   범위, `calc()` 같은 수식과 `var()`, css-color.ts가 못 읽는 색(`color-mix()`
+//   ·`lab()`·`color()`·`windowtext` 같은 시스템 색)은 읽지 않아 무효로 본다.
+//   그 값이 든 `text-decoration`은 밑줄·취소선도 켜지 못한다.
+// - 속성 이름 앞의 쓰레기 글자는 무시한다(`readDeclaration`의 규칙).
+// 값이 꺼짐(normal, none)이어도 이 함수는 그 선언만 반영한다 — 바깥 요소가
+// 만든 마크를 지우는 일은 없다. 끄는 값은 normal로 돌려주고 겹치기는 호출부가
+// 정한다.
+export const parseInlineStyleMarks = (style: string): InlineStyleMarks => {
+  const weight: MarkSlot<InlineFontWeight | undefined> = {
+    value: undefined,
+    important: false,
+  };
+  const fontStyle: MarkSlot<InlineFontStyle | undefined> = {
+    value: undefined,
+    important: false,
+  };
+  const decoration: MarkSlot<LineMarks> = {
+    value: NO_LINE_MARKS,
+    important: false,
+  };
+
+  for (const declaration of splitDeclarations(style)) {
+    const read = readDeclaration(declaration);
+    if (read === undefined) continue;
+    const property = read.property.toLowerCase();
+    if (!INLINE_MARK_PROPERTIES.has(property)) continue;
+    const split = splitImportant(read.rawValue);
+    const value = split.value.trim().toLowerCase();
+    const important = split.important;
+
+    if (property === "font-weight") {
+      const classified = classifyFontWeight(value);
+      if (classified !== undefined) applyMark(weight, classified, important);
+    } else if (property === "font") {
+      // 줄임은 굵기와 기울임을 함께 정한다. 굵기 토큰이 없으면 normal로 덮는다.
+      const shorthand = parseFontShorthand(value);
+      if (shorthand !== undefined) {
+        applyMark(weight, shorthand.weight, important);
+        applyMark(fontStyle, shorthand.fontStyle, important);
+      }
+    } else if (property === "font-style") {
+      const styleRead = readFontStyle(value);
+      if (styleRead !== undefined) {
+        applyMark(fontStyle, styleRead.fontStyle, important);
+      }
+    } else {
+      const lines = readDecoration(value, property === "text-decoration-line");
+      if (lines !== undefined) applyMark(decoration, lines, important);
+    }
+  }
+
+  return {
+    fontWeight: weight.value,
+    fontStyle: fontStyle.value,
+    underline: decoration.value.underline,
+    strike: decoration.value.strike,
+  };
 };
 
 // 소스 공백을 다루는 방식이다. preserve는 공백과 개행을 그대로 두고, pre-line은
@@ -930,9 +1138,9 @@ const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
 // 무효 선언은 버리고 앞의 유효 선언을 유지하며, 유효 선언 중 마지막이 이긴다.
 // 선언이 없거나 마지막 유효 선언이 상속 키워드(inherit·initial·unset·revert·
 // revert-layer)이면 undefined다 — 호출부가 부모 모드를 상속한다.
-// parseInlineStyleMarks와 같은 선형 방식(`;`로 자르고 선언마다 첫 `:`로 나눔)
-// 이고 `!important`·대소문자·공백은 무시한다. `/* */` 주석과 `url()` 안의 `;`는
-// 읽지 않는다.
+// 선언을 `;`로 자르고 선언마다 첫 `:`로 나누는 선형 방식이고 `!important`·
+// 대소문자·공백은 무시한다. `parseInlineStyleMarks`와 달리 `splitDeclarations`
+// 를 쓰지 않아 `/* */` 주석과 `url()`·따옴표 안의 `;`를 읽지 못한다.
 export const parseWhiteSpaceMode = (
   style: string,
 ): WhiteSpaceMode | undefined => {

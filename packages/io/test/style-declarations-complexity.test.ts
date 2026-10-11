@@ -10,9 +10,17 @@
  *    선언마다 다시 처리하거나, 긴 값을 위치마다 잘라 보는 형태는 호출 횟수가
  *    선형이어도 처리 문자 수가 제곱으로 뛴다. 호출 횟수만 세면 놓친다.
  *
- * 크기 N과 2N 입력의 작업량 증가율이 2 이하여야 한다. 입력 모양은 네 가지다.
- * 선언이 아주 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력,
- * 공백·토큰이 긴 입력이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
+ * 크기 N과 2N 입력의 작업량 증가율이 2 이하여야 한다. 입력 모양은 선언이 아주
+ * 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력, 공백·토큰이 긴
+ * 입력과 font 줄임, 선언 분리(닫히지 않은 따옴표·괄호), text-decoration·
+ * font-style 값 판정(토큰이 많거나 긴 값)이 만드는 모양이다. 기계 속도와 동시
+ * 실행 부하에 의존하지 않는다.
+ *
+ * `parseInlineStyleMarks`는 `parseStyleDeclarations`와 같은 흐름이다.
+ * `splitDeclarations`가 `;`로 한 번 자르고 따옴표·괄호·주석 상태를 조각 단위로
+ * 이어 붙인다. `readDeclaration`이 선언마다 글자를 한 번 훑고, 값 판정은 토큰마다
+ * 일정한 일만 하며 무효를 찾는 즉시 끝낸다. 정규식을 쓰지 않는다. 공백 run
+ * 입력에서 이차 시간이 되는 `\s*!important\s*$` 형태를 피했다.
  *
  * 한계: 정규식 엔진 내부 작업과 대괄호로 글자를 읽는 루프는 이 String 메서드
  * 계측에 잡히지 않는다.
@@ -20,14 +28,12 @@
  *   `parseFontShorthand`의 대괄호 읽기 절이 센다(Issue #340).
  *   `parseFontShorthand`가 받은 `value`를 직접 읽는 것만 센다. `slice`로 만든
  *   토큰을 받아 대괄호로 읽는 `readNumeric`(css-color.ts)의 루프는 못 센다.
- * - 선언 분할기(`parseStyleDeclarations`)의 대괄호 읽기는 시간 상한 테스트만
- *   덮는다.
- * `parseInlineStyleMarks`는 `!important` 제거와 선언 분리에 정규식을 쓰지
- * 않는다(공백 run 입력에서 이차 시간이 되는 `\s*!important\s*$` 형태를
- * 피했다). `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳
- * run에서 이차 시간이었지만 `matchAll` 호출 1회라 이 계측의 증가율이
- * 2로 보였다. 그래서 `parseStyleDeclarations`에는 이 작업량 테스트에 더해
- * 시간 상한 테스트를 하나 둔다.
+ * - 선언 분할기(`splitDeclarations`)의 대괄호 읽기는 시간 상한 테스트만 덮는다.
+ *   `parseStyleDeclarations`와 `parseInlineStyleMarks` 각각에 하나씩 둔다.
+ * `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳 run에서 이차
+ * 시간이었지만 `matchAll` 호출 1회라 이 계측의 증가율이 2로 보였다. 그래서
+ * `parseStyleDeclarations`에는 이 작업량 테스트에 더해 시간 상한 테스트를 하나
+ * 둔다.
  */
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -65,6 +71,80 @@ const inputShapes: Array<[string, (size: number) => string]> = [
     "공백·토큰이 긴 입력",
     (size) =>
       `text-decoration:${"underline ".repeat(size)}!important;font-style:${" ".repeat(size * 16)}italic`,
+  ],
+  // 아래는 선언 분리와 값 판정(Issue #339)이 만든 입력 모양이다. 분할기는
+  // 따옴표·괄호·주석 상태를 한 번 훑는다. text-decoration·font-style 값은
+  // 토큰마다 일정한 일만 하고 무효를 찾는 즉시 끝낸다.
+  // 변이로 확인한 RED다(Issue #339, 실측 2026-10-11). `readDecoration`이 토큰마다
+  // 값 전체를 훑게 하는 변이(값의 모든 토큰에 `value.includes(token)`)는
+  // text-decoration 토큰 모양 셋과 "공백·토큰이 긴 입력"이 처리 문자 수 증가율
+  // 3.999로 잡는다. 호출 횟수 증가율은 2라서 처리 문자 수 축이 필요하다.
+  // 무효를 찾는 즉시 끝내므로 값이 길어도 정상 구현은 토큰 몇 개만 본다.
+  [
+    "닫히지 않은 따옴표로 끝까지 이어지는 입력",
+    (size) =>
+      `font-weight:bold;font-family:'${"a;font-style:italic;".repeat(size)}`,
+  ],
+  [
+    "닫히지 않은 괄호가 깊게 쌓이는 입력",
+    (size) => `font-style:italic;font-family:${"(;".repeat(size)}`,
+  ],
+  [
+    "괄호 안 세미콜론이 많은 입력",
+    (size) => `font-weight:bold;font-family:url(${";".repeat(size)}) red`,
+  ],
+  ["주석이 많은 입력", (size) => `${"/**/".repeat(size)}font-weight:bold`],
+  [
+    "text-decoration 토큰이 아주 많은 입력",
+    (size) => `text-decoration:${"underline ".repeat(size)}`,
+  ],
+  [
+    "text-decoration 서로 다른 토큰이 아주 많은 입력",
+    (size) => `text-decoration:underline ${"red wavy ".repeat(size)}`,
+  ],
+  [
+    "text-decoration-line 토큰이 아주 많은 입력",
+    (size) => `text-decoration-line:${"blink ".repeat(size)}`,
+  ],
+  [
+    "text-decoration 값 앞 공백이 긴 입력",
+    (size) => `text-decoration:${" ".repeat(size * 16)}underline`,
+  ],
+  [
+    "text-decoration 토큰 사이 공백이 긴 입력",
+    (size) => `text-decoration:underline${" ".repeat(size * 16)}red`,
+  ],
+  [
+    "text-decoration 긴 토큰 하나인 입력",
+    (size) => `text-decoration:underline ${"a".repeat(size * 16)}`,
+  ],
+  [
+    "text-decoration 긴 숫자 토큰 하나인 입력",
+    (size) => `text-decoration:underline ${"1".repeat(size * 16)}px`,
+  ],
+  [
+    "text-decoration 색 함수 인자가 많은 입력",
+    (size) => `text-decoration:underline rgb(${"1,".repeat(size)}1)`,
+  ],
+  [
+    "text-decoration 괄호가 깊게 쌓이는 토큰 하나인 입력",
+    (size) => `text-decoration:underline ${"(".repeat(size)}`,
+  ],
+  [
+    "text-decoration 괄호 안 공백이 긴 토큰 하나인 입력",
+    (size) => `text-decoration:underline calc(${"1px + ".repeat(size)}1px)`,
+  ],
+  [
+    "font-style 긴 각도 토큰 하나인 입력",
+    (size) => `font-style:oblique ${"1".repeat(size * 16)}deg`,
+  ],
+  [
+    "font-style 토큰이 아주 많은 입력",
+    (size) => `font-style:${"italic ".repeat(size)}`,
+  ],
+  [
+    "font-style 값 앞 공백이 긴 입력",
+    (size) => `font-style:${" ".repeat(size * 16)}oblique 10deg`,
   ],
   // 아래는 font 줄임 속성(Issue #334)이 만든 입력 모양이다. 줄임 파서는
   // 값을 한 번 훑고 토큰·글꼴 이름마다 일정한 일만 한다.
@@ -132,6 +212,35 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
     const before = String.prototype.slice;
     measureWorkload("font-weight:700");
     expect(String.prototype.slice).toBe(before);
+  });
+
+  // 선언 분할기는 글자를 대괄호로 읽어 위 계측(String 메서드 호출 수와 수신
+  // 문자열 길이)에 보이지 않는다. 괄호·따옴표가 열려 있는 동안 조각마다 앞부분을
+  // 처음부터 다시 훑는 변이는 두 비율이 1과 2로 남아 통과한다. 그 변이를 잡으려고
+  // parseStyleDeclarations와 같은 형태의 시간 상한을 둔다(PIT-0034). 상한은
+  // 심각한 붕괴만 잡는 보조 장치이고, 결정적 작업량 단언은 위 모양들이 맡는다.
+  // 실측(Node, 2026-10-11, 80,000개): 선형 구현은 단독 6–11ms다. 열린 pending을
+  // 조각마다 `pending[k]`로 처음부터 다시 읽는 변이는 닫히지 않은 괄호와
+  // 따옴표에서 2.3초이고(입력이 2배가 되면 시간이 약 3.4배), 같은 변이를 위
+  // 작업량 모양 중 "닫히지 않은 따옴표로 끝까지 이어지는 입력"이 5초 제한
+  // 초과로 잡는다. 상한 1초는 선형 구현의 최대보다 약 100배 크고 변이보다
+  // 작아 둘이 겹치지 않는다. 읽은 값을 쓰지 않는 변이는 V8이 읽기를 지울 수
+  // 있어 괄호 안 세미콜론 모양에서는 통과한다.
+  it.each([
+    [
+      "괄호 안 세미콜론",
+      `font-weight:bold;font-family:url(${";".repeat(80_000)}) red`,
+    ],
+    [
+      "닫히지 않은 괄호와 따옴표",
+      `text-decoration:underline;font-family:url("${"a;(".repeat(80_000)}`,
+    ],
+  ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
+    const started = performance.now();
+    parseInlineStyleMarks(style);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(1000);
   });
 });
 

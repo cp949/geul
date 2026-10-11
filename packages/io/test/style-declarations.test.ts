@@ -701,23 +701,27 @@ describe("parseInlineStyleMarks의 font-weight 분류", () => {
   );
 
   // revert·revert-layer는 UA 굵기(b·strong은 굵게)로 돌아가므로 굵기를 정하지
-  // 않는다. 무효한 값은 선언이 무시된다. calc()는 읽지 않는다(Chromium은
-  // 유효로 보고 굵기를 계산한다, 한계).
-  it.each([
-    ["revert"],
-    ["revert-layer"],
-    ["foo"],
-    ["0"],
-    ["1001"],
-    ["-1"],
-    ["1e"],
-    ["calc(300)"],
-    [""],
-  ])("font-weight:%j는 other다", (value) => {
-    expect(parseInlineStyleMarks(`font-weight:${value}`).fontWeight).toBe(
-      "other",
-    );
-  });
+  // 않는다.
+  it.each([["revert"], ["revert-layer"]])(
+    "font-weight:%j는 other다",
+    (value) => {
+      expect(parseInlineStyleMarks(`font-weight:${value}`).fontWeight).toBe(
+        "other",
+      );
+    },
+  );
+
+  // 무효한 값은 선언이 버려져 굵기를 정하지 않는다(Issue #339). 예전에는
+  // other로 남겼지만 소비자에서 undefined와 결과가 같다. calc()는 읽지 않는다
+  // (Chromium은 유효로 보고 굵기를 계산한다, 한계).
+  it.each([["foo"], ["0"], ["1001"], ["-1"], ["1e"], ["calc(300)"], [""]])(
+    "font-weight:%j는 무효라 굵기를 정하지 않는다",
+    (value) => {
+      expect(
+        parseInlineStyleMarks(`font-weight:${value}`).fontWeight,
+      ).toBeUndefined();
+    },
+  );
 
   it("무효한 선언은 앞의 유효한 분류를 지우지 않는다", () => {
     expect(
@@ -728,7 +732,7 @@ describe("parseInlineStyleMarks의 font-weight 분류", () => {
     ).toBe("light");
     expect(
       parseInlineStyleMarks("font-weight:bogus;font-weight:bogus2").fontWeight,
-    ).toBe("other");
+    ).toBeUndefined();
   });
 
   it("revert는 앞의 유효한 분류를 other로 덮는다", () => {
