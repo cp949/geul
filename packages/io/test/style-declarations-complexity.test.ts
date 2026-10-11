@@ -1,8 +1,9 @@
 /**
- * `parseInlineStyleMarks`와 `parseStyleDeclarations`가 style 입력 길이에
- * 선형임을 시간이 아니라 관측 가능한 작업량으로 고정한다(G-TST-004).
+ * `parseInlineStyleMarks`·`parseStyleDeclarations`·`parseWhiteSpaceMode`가
+ * style 입력 길이에 선형임을 시간이 아니라 관측 가능한 작업량으로 고정한다
+ * (G-TST-004).
  *
- * 두 파서는 큰 문자열을 `String.prototype`의 문자열 메서드(split·indexOf·slice·
+ * 파서들은 큰 문자열을 `String.prototype`의 문자열 메서드(split·indexOf·slice·
  * trim 등)로 읽는다. 그 메서드를 감싸 두 축을 센다.
  * 1. 호출 횟수: 선언마다 다시 훑는 형태(이미 읽은 조각을 되돌아가 재처리)는
  *    호출 횟수가 선언 수의 제곱으로 뛴다.
@@ -16,7 +17,8 @@
  * font-style 값 판정(토큰이 많거나 긴 값)이 만드는 모양이다. 기계 속도와 동시
  * 실행 부하에 의존하지 않는다.
  *
- * `parseInlineStyleMarks`는 `parseStyleDeclarations`와 같은 흐름이다.
+ * `parseInlineStyleMarks`와 `parseWhiteSpaceMode`(Issue #361)는
+ * `parseStyleDeclarations`와 같은 흐름이다.
  * `splitDeclarations`가 `;`로 한 번 자르고 따옴표·괄호·주석 상태를 조각 단위로
  * 이어 붙인다. `readDeclaration`이 선언마다 글자를 한 번 훑고, 값 판정은 토큰마다
  * 일정한 일만 하며 무효를 찾는 즉시 끝낸다. 정규식을 쓰지 않는다. 공백 run
@@ -29,7 +31,8 @@
  *   `parseFontShorthand`가 받은 `value`를 직접 읽는 것만 센다. `slice`로 만든
  *   토큰을 받아 대괄호로 읽는 `readNumeric`(css-color.ts)의 루프는 못 센다.
  * - 선언 분할기(`splitDeclarations`)의 대괄호 읽기는 시간 상한 테스트만 덮는다.
- *   `parseStyleDeclarations`와 `parseInlineStyleMarks` 각각에 하나씩 둔다.
+ *   `parseStyleDeclarations`·`parseInlineStyleMarks`·`parseWhiteSpaceMode`
+ *   각각에 둔다.
  * `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳 run에서 이차
  * 시간이었지만 `matchAll` 호출 1회라 이 계측의 증가율이 2로 보였다. 그래서
  * `parseStyleDeclarations`에는 이 작업량 테스트에 더해 시간 상한 테스트를 하나
@@ -504,6 +507,18 @@ const whiteSpaceInputShapes: Array<[string, (size: number) => string]> = [
     (size) =>
       `white-space:${" ".repeat(size * 16)}pre${" ".repeat(size)}!important`,
   ],
+  // 아래는 선언 분리와 칸(Issue #361)이 만든 입력 모양이다. 분할기는 따옴표·
+  // 주석 상태를 한 번 훑고, 칸은 선언마다 일정한 일만 한다.
+  [
+    "닫히지 않은 따옴표로 끝까지 이어지는 입력",
+    (size) =>
+      `white-space:pre;font-family:'${"a;white-space:normal;".repeat(size)}`,
+  ],
+  ["주석이 많은 입력", (size) => `${"/**/".repeat(size)}white-space:pre`],
+  [
+    "!important 선언이 아주 많은 입력",
+    (size) => "white-space:pre !important;".repeat(size),
+  ],
 ];
 
 describe("parseWhiteSpaceMode의 선형 시간", () => {
@@ -530,6 +545,26 @@ describe("parseWhiteSpaceMode의 선형 시간", () => {
       ).toBeLessThanOrEqual(2);
     },
   );
+
+  // 선언 분할기의 대괄호 읽기는 위 계측에 보이지 않는다. parseInlineStyleMarks와
+  // 같은 형태의 시간 상한을 둔다(PIT-0034). 상한은 심각한 붕괴만 잡는 보조
+  // 장치다. 결정적 작업량 단언은 위 모양들이 맡는다.
+  // 변이로 확인한 RED다(Issue #361, 실측 Node, 2026-10-11). splitDeclarations가
+  // 조각을 이어 붙일 때마다 pending 전체를 `pending[k]`로 다시 읽고 그 값을
+  // 쓰는 변이는 이 테스트가 30.4초로 잡는다. 위 "닫히지 않은 따옴표로 끝까지
+  // 이어지는 입력"은 같은 변이를 5초 제한 초과로 잡는다(끝나기까지 127초).
+  // 선형 구현은 단독 실행 테스트 시간 11–16ms다. 상한 1초는 그보다 약 60배
+  // 크고 변이보다 작아 둘이 겹치지 않는다.
+  it("닫히지 않은 괄호와 따옴표 80,000개를 1초 안에 읽는다", () => {
+    const style = `white-space:pre;font-family:url("${"a;(".repeat(80_000)}`;
+
+    const started = performance.now();
+    const mode = parseWhiteSpaceMode(style);
+    const elapsed = performance.now() - started;
+
+    expect(mode).toBe("preserve");
+    expect(elapsed).toBeLessThan(1000);
+  });
 });
 
 const dumpInputShapes: Array<[string, (size: number) => string]> = [

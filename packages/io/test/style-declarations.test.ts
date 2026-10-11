@@ -508,7 +508,7 @@ describe("parseWhiteSpaceMode", () => {
     expect(parseWhiteSpaceMode("x-white-space:pre")).toBeUndefined();
   });
 
-  it("대소문자·공백·!important를 무시한다", () => {
+  it("대소문자·공백을 무시하고 !important 선언을 읽는다", () => {
     expect(parseWhiteSpaceMode("  WHITE-SPACE :  PRE-WRAP  !important ")).toBe(
       "preserve",
     );
@@ -573,6 +573,42 @@ describe("parseWhiteSpaceMode", () => {
     expect(
       parseWhiteSpaceMode("white-space:preserve;white-space:collapse"),
     ).toBe("normal");
+  });
+
+  // 아래는 Issue #361이 더한 규칙이다. 선언을 색 경로·parseInlineStyleMarks와
+  // 같은 흐름(splitDeclarations, readDeclaration, splitImportant, 칸)으로 읽는다.
+  // 기대값은 Chromium 153.0.8010.12 실측이다. 부모 div white-space:pre-line 안
+  // span의 계산값을 읽었다. undefined는 부모 모드 상속이다.
+  it("따옴표 안의 white-space는 선언이 아니다", () => {
+    expect(
+      parseWhiteSpaceMode('font-family:"a;white-space:pre;b"'),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    "white-space:pre !important;white-space:normal",
+    "white-space:pre ! important;white-space:normal",
+  ])("%j에서 !important 선언은 뒤 일반 선언에 지지 않는다", (style) => {
+    expect(parseWhiteSpaceMode(style)).toBe("preserve");
+  });
+
+  it.each([
+    ["white-space:inherit !important;white-space:pre", undefined],
+    [
+      "white-space:normal;white-space:inherit !important;white-space:pre",
+      undefined,
+    ],
+    ["white-space:pre !important;white-space:inherit", "preserve"],
+    ["white-space:pre !important;white-space:foo !important", "preserve"],
+    ["white-space:pre !important;white-space:pre-line !important", "pre-line"],
+    ["white-space:pre!IMPORTANT;white-space:normal", "preserve"],
+    ["white-space:pre !important ;white-space:normal", "preserve"],
+    ["white-space:pre;/*;white-space:normal*/", "preserve"],
+    ["white-space:/*c*/pre", "preserve"],
+    ["background:url(a;white-space:pre);color:red", undefined],
+    ["white-space:pre\\;white-space:normal", undefined],
+  ] as const)("Chromium처럼 %j를 %s로 읽는다", (style, mode) => {
+    expect(parseWhiteSpaceMode(style)).toBe(mode);
   });
 });
 

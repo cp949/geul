@@ -683,6 +683,27 @@ describe("div·span의 white-space 모드", () => {
         blockContents(`<div style="white-space:${value}">${inner}</div>`),
       ).toEqual([[{ text: expected }]]);
     });
+
+    // Issue #361: 선언 읽기가 색 경로와 같다. 기대값은 Chromium 153.0.8010.12
+    // 실측이다(부모 div white-space:pre-line 안 span의 계산값).
+    it("따옴표 안의 white-space는 선언이 아니라 부모 pre-line을 따른다", () => {
+      expect(
+        blockContents(
+          `<div style="white-space:pre-line"><span style='font-family:"a;white-space:pre;b"'>a  \n  b</span></div>`,
+        ),
+      ).toEqual([[{ text: "a\nb" }]]);
+    });
+
+    it.each([
+      "white-space:pre !important;white-space:normal",
+      "white-space:pre ! important;white-space:normal",
+    ])("span style %j는 !important 선언대로 공백을 보존한다", (style) => {
+      expect(
+        blockContents(
+          `<div style="white-space:pre-line"><span style="${style}">a  \n  b</span></div>`,
+        ),
+      ).toEqual([[{ text: "a  \n  b" }]]);
+    });
   });
 
   describe("div 보존", () => {

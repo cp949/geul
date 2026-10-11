@@ -412,7 +412,6 @@ export type InlineStyleMarks = {
 const MIN_BOLD_WEIGHT = 600;
 const MIN_FONT_WEIGHT = 1;
 const MAX_FONT_WEIGHT = 1000;
-const IMPORTANT_SUFFIX = "!important";
 const WHITESPACE_RUN = /\s+/;
 
 const LIGHT_WEIGHT_KEYWORDS: ReadonlySet<string> = new Set([
@@ -440,16 +439,6 @@ const classifyFontWeight = (value: string): InlineFontWeight | undefined => {
     return undefined;
   }
   return classifyWeightNumber(numeric.value);
-};
-
-// 선언 값의 `!important`와 양끝 공백을 걷고 소문자로 맞춘다. `!important`
-// 제거에 정규식을 쓰지 않는다 — `\s*!important\s*$`는 공백이 긴 입력에서
-// 시작 위치마다 끝까지 훑어 이차 시간이 된다.
-const normalizeDeclarationValue = (rawValue: string): string => {
-  const value = rawValue.trim().toLowerCase();
-  return value.endsWith(IMPORTANT_SUFFIX)
-    ? value.slice(0, value.length - IMPORTANT_SUFFIX.length).trimEnd()
-    : value;
 };
 
 // font 줄임 속성의 선언 하나가 정하는 굵기와 기울임이다.
@@ -1134,31 +1123,41 @@ const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
   return undefined;
 };
 
-// style 속성의 `white-space` 선언을 소스 공백 모드로 읽는다. 브라우저처럼
-// 무효 선언은 버리고 앞의 유효 선언을 유지하며, 유효 선언 중 마지막이 이긴다.
-// 선언이 없거나 마지막 유효 선언이 상속 키워드(inherit·initial·unset·revert·
-// revert-layer)이면 undefined다 — 호출부가 부모 모드를 상속한다.
-// 선언을 `;`로 자르고 선언마다 첫 `:`로 나누는 선형 방식이고 `!important`·
-// 대소문자·공백은 무시한다. `parseInlineStyleMarks`와 달리 `splitDeclarations`
-// 를 쓰지 않아 `/* */` 주석과 `url()`·따옴표 안의 `;`를 읽지 못한다.
+// style 속성의 `white-space` 선언을 소스 공백 모드로 읽는다(Issue #361).
+// 색 경로·`parseInlineStyleMarks`와 같은 흐름이다. `splitDeclarations`로
+// 선언을 자르고(따옴표·괄호 안 `;`, `/* */` 주석, 이스케이프된 `;`),
+// `readDeclaration`으로 이름과 값을 나누고, `splitImportant`로 중요도를 떼어
+// 칸에 쓴다. 입력 길이에 선형이다.
+// - 칸 규칙은 `applyMark`와 같다. `!important` 선언이 칸을 차지하면 일반
+//   선언은 못 덮는다. 같은 중요도끼리는 뒤가 이긴다.
+// - 무효 값은 칸을 건드리지 않는다. `!important`가 붙어도 같다.
+// - 상속 키워드(inherit·initial·unset·revert·revert-layer)는 유효 값이다.
+//   칸을 비운다.
+// 칸이 비면 undefined다. 호출부가 부모 모드를 상속한다.
+// 한계: 속성 이름 앞의 쓰레기 글자는 무시한다(`readDeclaration`의 규칙).
+// `x white-space:pre`와 `x}white-space:pre`를 preserve로 읽는다. Chromium은
+// 버린다.
 export const parseWhiteSpaceMode = (
   style: string,
 ): WhiteSpaceMode | undefined => {
-  let mode: WhiteSpaceMode | undefined;
+  const slot: MarkSlot<WhiteSpaceMode | undefined> = {
+    value: undefined,
+    important: false,
+  };
 
-  for (const declaration of style.split(";")) {
-    const colon = declaration.indexOf(":");
-    if (colon < 0) continue;
-    if (declaration.slice(0, colon).trim().toLowerCase() !== "white-space") {
-      continue;
-    }
-    const value = normalizeDeclarationValue(declaration.slice(colon + 1));
+  for (const declaration of splitDeclarations(style)) {
+    const read = readDeclaration(declaration);
+    if (read === undefined) continue;
+    if (read.property.toLowerCase() !== "white-space") continue;
+    const split = splitImportant(read.rawValue);
+    const value = split.value.trim().toLowerCase();
     if (WHITE_SPACE_RESET_KEYWORDS.has(value)) {
-      mode = undefined;
+      applyMark(slot, undefined, split.important);
       continue;
     }
-    mode = readWhiteSpaceValue(value) ?? mode;
+    const mode = readWhiteSpaceValue(value);
+    if (mode !== undefined) applyMark(slot, mode, split.important);
   }
 
-  return mode;
+  return slot.value;
 };
