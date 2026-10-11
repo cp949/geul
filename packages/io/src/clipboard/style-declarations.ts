@@ -1134,9 +1134,14 @@ const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
 // - 상속 키워드(inherit·initial·unset·revert·revert-layer)는 유효 값이다.
 //   칸을 비운다.
 // 칸이 비면 undefined다. 호출부가 부모 모드를 상속한다.
-// 한계: 속성 이름 앞의 쓰레기 글자는 무시한다(`readDeclaration`의 규칙).
-// `x white-space:pre`와 `x}white-space:pre`를 preserve로 읽는다. Chromium은
-// 버린다.
+// 한계: 공유 헬퍼의 차이를 그대로 받는다. 아래는 옛 `split(";")` 구현이
+// Chromium과 같게 읽던 입력이다.
+// - 속성 이름 앞의 쓰레기 글자는 무시한다(`readDeclaration`의 규칙).
+//   `x white-space:pre`·`_white-space:pre`·`*white-space:pre`를 preserve로
+//   읽는다. `white-space:pre;_white-space:normal`은 normal이다. Chromium은
+//   이런 선언을 버린다.
+// - 닫히지 않은 따옴표가 개행을 넘는다(#362). 따옴표 없는 `url(` 안의 `'`와
+//   `/*`도 따옴표·주석으로 읽는다. 둘 다 뒤 선언을 삼킨다.
 export const parseWhiteSpaceMode = (
   style: string,
 ): WhiteSpaceMode | undefined => {
