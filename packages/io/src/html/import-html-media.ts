@@ -28,6 +28,7 @@ import {
   unsafeMediaUrlRemovedWarning,
 } from "./import-warnings.js";
 import type { HtmlElementNode } from "./inline-content.js";
+import { mediaMarkerTypeOf } from "./media-type-marker.js";
 
 // 5종 미디어 블록 판별 타입(export-html.ts의 MediaBlock과 동형, spec §3.1,
 // iframe은 CUS-001~004).
@@ -52,14 +53,7 @@ const mediaTypeFromNode = (
   if (node.tagName === "img") return "image";
   if (node.tagName === "video") return "video";
   if (node.tagName === "audio") return "audio";
-  const raw = propertyString(node, "dataGeulMediaType");
-  return raw === "file" ||
-    raw === "image" ||
-    raw === "video" ||
-    raw === "audio" ||
-    raw === "iframe"
-    ? raw
-    : undefined;
+  return mediaMarkerTypeOf(node);
 };
 
 const hasPreChild = (node: HtmlElementNode): boolean =>

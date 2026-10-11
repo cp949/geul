@@ -14,6 +14,7 @@ import { readLegacyAttributeColor } from "../css/css-color.js";
 import { INLINE_PRESENTATION_TAG_NAMES } from "./element-presentation.js";
 import { isAuditedAttribute } from "./import-html-sanitize-schema.js";
 import { mediaPreviewWidthStyle } from "./media-preview-width-style.js";
+import { mediaMarkerTypeOf } from "./media-type-marker.js";
 import { MAX_HTML_TREE_DEPTH } from "./parse-html.js";
 import {
   htmlAllowedAttributes,
@@ -222,21 +223,12 @@ const supportedBlockNames = new Set([
   "figcaption",
 ]);
 
-// data-geul-media-type 값 검사만으로 own-format File 앵커를 판정한다 — 정확한
-// 4종 판정(isMediaNode/mediaTypeFromNode)은 import-html.ts가 단독 소유하고
-// (sanitizer 결합 회피 원칙, 위 파일 헤더 주석), 이 파일은 독립적으로
-// 마커 유효성만 다시 확인한다. 마커 없는 임의 <a>는 여전히 top-level
-// downgrade 경고 대상이다(기존 동작 불변).
-const isOwnMediaAnchorElement = (node: HtmlElementNode): boolean => {
-  if (node.tagName !== "a") return false;
-  const mediaType = node.properties.dataGeulMediaType;
-  return (
-    mediaType === "file" ||
-    mediaType === "image" ||
-    mediaType === "video" ||
-    mediaType === "audio"
-  );
-};
+// 마커가 있는 <a>는 변환기가 media 블록으로 읽는다. 마커 값 표는 변환기와
+// 공유한다(media-type-marker.ts, Issue #369). 값을 여기서 따로 알면 변환기에만
+// 값이 생겼을 때 거짓 강등 경고가 난다. 마커 없는 임의 <a>는 여전히 top-level
+// downgrade 경고 대상이다.
+const isOwnMediaAnchorElement = (node: HtmlElementNode): boolean =>
+  node.tagName === "a" && mediaMarkerTypeOf(node) !== undefined;
 
 // 이 집합은 warning 판정만 소유한다. sanitizer 허용 목록과 공유하면 raw
 // warning fact 수집기가 sanitize 구현에 결합된다(ADR-0003). 이 요소들은
