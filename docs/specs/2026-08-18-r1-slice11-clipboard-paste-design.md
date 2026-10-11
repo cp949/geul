@@ -64,7 +64,7 @@ export const parseClipboardTable = (input: {
 }): Result<TabularData, ClipboardParseError> => { ... };
 ```
 
-위 반환 타입은 설계 시점의 것이다 — 현재 공개 계약은 `Result<ClipboardContent, ClipboardParseError>`다(§4.1 '구현 반영(무손실 시퀀스 계약, Issue #71)').
+위 반환 타입은 설계 시점의 것이다 — 현재 공개 계약은 `Result<ClipboardContent, ClipboardParseError>`다(§4.1 '구현 반영(무손실 시퀀스 계약, Issue #71)'). 입력에는 선택 필드 `iframeEmbed?: IframeEmbedConfig`가 더해졌다(Issue #359, 아래 `importHtml`과 다른 점 참고). 추가형이라 기존 호출은 그대로다.
 
 ### 4.1 우선순위와 판정
 
@@ -209,7 +209,7 @@ export const parseClipboardTable = (input: {
   - 무효 선택 필드(`textColor`, `backgroundColor`, `textAlignment`, `icon`, `startNumber`, `previewWidth`, `aspectRatio` 등)는 변환기가 그 필드만 뺀다. `data-geul-text-color="red"`는 문단만 남는다.
   - 무효 미디어 `url`은 변환기가 블록을 버린다. Word의 `file:///` `img`와 Outlook의 `cid:` `img`는 표 붙여넣기를 막지 않고 빠진다.
   - 이 클립보드 경로의 차이는 경고를 내지 않는 것뿐이다. 버린 값은 `importHtml`과 같다.
-- iframe 설정은 `{}`다. 호스트의 `iframeEmbed`를 받지 않아 `iframe` 블록이 url 없이 붙는다(`importHtml`을 설정 없이 부른 결과와 같다). 일반 html 붙여넣기는 `deps.iframeEmbed`를 넘긴다. 같은 `iframe`이 표 유무에 따라 다르게 판정된다. 공개 API를 늘리지 않으려는 선택이다.
+- iframe 설정은 입력의 선택 필드 `iframeEmbed`다(Issue #359). core의 `TablePasteExtension`이 호스트의 `iframeEmbed`를 넘기므로 표 옆 `iframe` 블록의 url 판정이 표 없는 html 붙여넣기(`deps.iframeEmbed`)와 같다. 필드를 주지 않으면 `{}`라 `iframe` 블록이 url 없이 붙는다(`importHtml`을 설정 없이 부른 결과와 같다). 이전에는 입력에 이 필드가 없어 같은 `iframe`이 표 유무에 따라 다르게 판정됐다.
 - id: 변환기가 `data-geul-block-id`를 쓰고 없으면 `clipboard-1`부터 붙인다. 이미 나온 id나 빈 id는 새로 발급한다. 호출 안에서 비어 있지 않고 유일하다(RD-004). 편집기 안 복사의 id는 core가 재발급한다.
 
 core:
