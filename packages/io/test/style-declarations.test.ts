@@ -1312,4 +1312,52 @@ describe("닫히지 않은 따옴표와 개행 (Issue #362)", () => {
       parseWhiteSpaceMode('font-family:"a\nb";white-space:pre'),
     ).toBeUndefined();
   });
+
+  // IMPL-REVIEW-02: 개행 글자마다 bad 선언을 버리는지 고정한다. 다음 선언이
+  // 살아남는지만 보면 FF에서 bad를 세우지 않는 변이를 놓친다.
+  it.each([
+    ["CR", "\r"],
+    ["FF", "\f"],
+    ["CRLF", "\r\n"],
+  ])("%s로 끝난 font 줄임도 버려 기울이지 않는다", (_name, newline) => {
+    const marks = parseInlineStyleMarks(
+      `font-weight:bold;font:italic 12px 'a${newline};color:red`,
+    );
+
+    expect(marks.fontWeight).toBe("bold");
+    expect(marks.fontStyle).toBeUndefined();
+  });
+
+  // NEL(U+0085)은 CSS 개행이 아니다. Chromium은 문자열을 잇는다.
+  it("NEL은 따옴표를 끝내지 않아 뒤 선언을 삼킨다", () => {
+    expect(
+      parseInlineStyleMarks(
+        `font-family:'a${String.fromCodePoint(0x85)};font-weight:bold`,
+      ).fontWeight,
+    ).toBeUndefined();
+  });
+
+  it("이스케이프된 백슬래시 뒤 개행은 따옴표를 끝낸다", () => {
+    expect(
+      parseInlineStyleMarks("font-family:'a\\\\\n;font-weight:bold").fontWeight,
+    ).toBe("bold");
+  });
+
+  it("bad 표시는 뒤따르는 주석이 끝나도 선언 끝까지 남는다", () => {
+    const marks = parseInlineStyleMarks(
+      "font-weight:bold;font:italic 12px 'a\n/**/;color:red",
+    );
+
+    expect(marks.fontWeight).toBe("bold");
+    expect(marks.fontStyle).toBeUndefined();
+  });
+
+  // 따옴표 밖 이스케이프된 `;`는 선언을 끝내지 않는다. 다음 조각에서 escaped
+  // 표시가 풀려야 그 뒤 `;`에서 선언이 끝난다.
+  it("이스케이프된 ;가 이은 선언 뒤 ;에서 다음 선언을 읽는다", () => {
+    const style = "color:red\\;font-weight:bold;color:blue";
+
+    expect(parseStyleDeclarations(style)).toEqual({ color: "#0000FF" });
+    expect(parseInlineStyleMarks(style).fontWeight).toBeUndefined();
+  });
 });
