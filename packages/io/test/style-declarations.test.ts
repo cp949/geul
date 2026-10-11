@@ -1423,7 +1423,7 @@ describe("닫히지 않은 따옴표와 개행 (Issue #362)", () => {
     ).toBe("bold");
   });
 
-  // 값 안 판독기(isFamilyList·splitBackgroundLayers)는 bad 선언을 받지 않는다.
+  // 값 안 판독기(isFamilyNameList·splitBackgroundLayers)는 bad 선언을 받지 않는다.
   it("개행에서 끝난 font 줄임은 버려 앞 굵게를 지우지 않고 기울이지 않는다", () => {
     const style = "font-weight:bold;font:italic 12px 'a\n;color:red";
     const marks = parseInlineStyleMarks(style);
