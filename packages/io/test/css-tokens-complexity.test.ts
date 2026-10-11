@@ -1,6 +1,6 @@
 /**
- * `tokenizeCss`와 `parseCssComponentValues`가 입력 길이에 선형임을 작업량으로
- * 고정한다(G-TST-004, Issue #368).
+ * `tokenizeCss`·`parseCssComponentValues`·`parseCssDeclarations`가 입력 길이에
+ * 선형임을 작업량으로 고정한다(G-TST-004, Issue #368).
  *
  * 두 축을 센다.
  * 1. 대괄호 읽기 수: 토크나이저는 입력을 `value[index]`로만 읽는다. `new
@@ -21,10 +21,12 @@
  *   던진다.
  * - 토큰 원문을 `input.slice(start, position)`으로 만들면 처리 문자 수 증가율이
  *   4에 가깝다.
+ * - 선언마다 입력을 처음부터 다시 토큰화하면 대괄호 읽기가 상한을 넘어 던진다.
  */
 import { afterEach, describe, expect, it } from "vitest";
 
 import { parseCssComponentValues } from "../src/css/component-values.js";
+import { parseCssDeclarations } from "../src/css/declarations.js";
 import { tokenizeCss } from "../src/css/tokens.js";
 import {
   countIndexReads,
@@ -40,11 +42,22 @@ afterEach(() => {
 });
 
 /** 토큰화와 component value 묶기를 한 번에 돌린다. */
-const run = (input: string): void => {
+const runValues = (input: string): void => {
   parseCssComponentValues(tokenizeCss(input));
 };
 
-const inputShapes: Array<[string, (size: number) => string]> = [
+/** 선언 목록을 만든다. 토큰화와 component value 묶기를 포함한다. */
+const runDeclarations = (input: string): void => {
+  parseCssDeclarations(input);
+};
+
+type Shape = [
+  name: string,
+  build: (size: number) => string,
+  run: (input: string) => void,
+];
+
+const valueShapes: Array<[string, (size: number) => string]> = [
   ["긴 이름 하나", (size) => "a".repeat(size)],
   ["짧은 이름이 아주 많은 입력", (size) => "a ".repeat(size)],
   ["긴 문자열", (size) => `"${"a".repeat(size)}"`],
@@ -63,10 +76,31 @@ const inputShapes: Array<[string, (size: number) => string]> = [
   ["대문자 url 함수가 많은 입력", (size) => "URL(a)".repeat(size)],
 ];
 
-describe("tokenizeCss의 대괄호 읽기", () => {
+const declarationShapes: Array<[string, (size: number) => string]> = [
+  ["선언이 아주 많은 입력", (size) => "--a:1;".repeat(size)],
+  ["값이 긴 선언", (size) => `--a:${"a ".repeat(size)}`],
+  ["at-rule이 많은 입력", (size) => "@x;".repeat(size)],
+  ["블록 at-rule이 많은 입력", (size) => "@x{}".repeat(size)],
+  ["콜론 없는 선언이 많은 입력", (size) => "x;".repeat(size)],
+  ["닫히지 않은 함수 뒤 세미콜론", (size) => `--a:f(${";".repeat(size)}`],
+  ["important 선언이 많은 입력", (size) => "--a:1!important;".repeat(size)],
+  ["느낌표가 많은 값", (size) => `--a:1 ${"! ".repeat(size)}`],
+  ["깊은 괄호 중첩 값", (size) => `--a:${"(".repeat(size)}`],
+];
+
+const inputShapes: Shape[] = [
+  ...valueShapes.map(([name, build]): Shape => [name, build, runValues]),
+  ...declarationShapes.map(([name, build]): Shape => [
+    `선언: ${name}`,
+    build,
+    runDeclarations,
+  ]),
+];
+
+describe("CSS 선언 읽기의 대괄호 읽기", () => {
   it.each(inputShapes)(
     "%s은 크기가 2배가 되면 대괄호 읽기가 2배 이하로 는다",
-    (_name, build) => {
+    (_name, build, run) => {
       const smallInput = build(BASE_SIZE);
       const small = countIndexReads(smallInput, run);
       const large = countIndexReads(build(BASE_SIZE * 2), run);
@@ -80,10 +114,10 @@ describe("tokenizeCss의 대괄호 읽기", () => {
   );
 });
 
-describe("tokenizeCss의 String 메서드 작업량", () => {
+describe("CSS 선언 읽기의 String 메서드 작업량", () => {
   it.each(inputShapes)(
     "%s은 크기가 2배가 되면 처리 문자 수가 2배 이하로 는다",
-    (_name, build) => {
+    (_name, build, run) => {
       const smallInput = build(BASE_SIZE);
       const largeInput = build(BASE_SIZE * 2);
       const small = measureStringWorkload(() => run(smallInput));
