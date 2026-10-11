@@ -273,12 +273,17 @@ export const tokenizeCss = (input: string): CssToken[] => {
       peek(0) === "("
     ) {
       consume();
+      // 명세는 공백을 읽어 가며 따옴표를 찾는다. 함수 토큰이면 읽은 공백을
+      // 되돌려 원문이 `url(`에서 끝나게 한다. 공백은 다음 whitespace 토큰이
+      // 된다. 공백을 두 번 읽을 뿐이라 선형이다.
+      const afterParen = position;
       while (isWhitespace(peek(0)) && isWhitespace(peek(1))) consume();
       const first = peek(0);
       const second = peek(1);
       const isQuote = (character: string | undefined): boolean =>
         character === '"' || character === "'";
       if (isQuote(first) || (isWhitespace(first) && isQuote(second))) {
+        position = afterParen;
         return { type: "function", value };
       }
       return consumeUrl();
