@@ -1045,6 +1045,119 @@ describe("parseInlineStyleMarks의 font 줄임 속성", () => {
   });
 });
 
+// 아래 표는 font 줄임과 font-weight의 값 토큰 경계를 Chromium 153.0.8010.12로
+// 잰 결과다(Issue #368, RD-004). 값은 CSS Syntax 3 토큰과 component value로
+// 읽는다. 글자를 직접 훑던 옛 판독기와 다른 행이 있다.
+// - 주석은 낱말을 가르지만 공백이 아니다(`a/**/b`는 식별자 둘).
+// - U+0080 이상 글자와 이스케이프는 식별자 글자다. DEL은 아니다.
+// - 입력 끝의 `\`는 U+FFFD가 된다. 이스케이프는 키워드 이름에도 통한다.
+// - 길이 단위·식별자·키워드는 이스케이프를 푼 이름으로 읽는다.
+// - 크기 뒤의 따옴표 문자열은 공백 없이 붙어도 낱말이다.
+describe("font 줄임 속성의 값 토큰 경계 Chromium 대조 (Issue #368)", () => {
+  const NBSP = String.fromCharCode(0xa0);
+  const IDEOGRAPHIC_SPACE = String.fromCharCode(0x3000);
+  const C1 = String.fromCharCode(0x80);
+  const DEL = String.fromCharCode(0x7f);
+
+  it.each([
+    [`bold 12px a${NBSP}b`, "bold", "normal"],
+    ["bold 12px a/**/b", "bold", "normal"],
+    ['italic 12px/1 "a', "normal", "italic"],
+    ["bold 12px a\\,b", "bold", "normal"],
+    ["bold calc(12px)/1 serif", "bold", "normal"],
+    ["bold 12px a\\", "bold", "normal"],
+    [`bold 12px a${IDEOGRAPHIC_SPACE}b`, "bold", "normal"],
+    [`bold 12px a${C1}`, "bold", "normal"],
+    ['bold 12px"a"', "bold", "normal"],
+    ['bold 12px/1.5"a"', "bold", "normal"],
+    ['bold 12px"a",b', "bold", "normal"],
+    ["bold 12px \\62 a", "bold", "normal"],
+    ["\\62old 12px a", "bold", "normal"],
+    ["b\\6fld 12px a", "bold", "normal"],
+    ["bold 12\\70x a", "bold", "normal"],
+    ["bold 12px /1 a", "bold", "normal"],
+    ["\\69nherit", "inherit", "inherit"],
+  ] as Array<[string, InlineFontWeight, InlineFontStyle]>)(
+    "font:%j는 굵기 %s, 기울임 %s다",
+    (value, weight, fontStyle) => {
+      expect(fontShorthand(value)).toMatchObject({
+        fontWeight: weight,
+        fontStyle,
+      });
+    },
+  );
+
+  it.each([
+    'bold 12px "a" b',
+    `bold 12px a${DEL}`,
+    "bold 12px \\69nherit",
+    "bold 12px \\69nherit, a",
+    "bold 12px a, \\69nherit",
+    `bold${IDEOGRAPHIC_SPACE} 12px a`,
+    `bold ${C1} 12px a`,
+    "bold 12px/ /1 a",
+    "bold 12px//1 a",
+    '12px "a" "b"',
+    '12px a "b"',
+    '12px a"b"',
+  ])("font:%j는 문법 오류라 아무것도 읽지 않는다", (value) => {
+    expect(fontShorthand(value)).toEqual({
+      fontWeight: undefined,
+      fontStyle: undefined,
+      underline: false,
+      strike: false,
+    });
+  });
+});
+
+describe("font-weight 값 토큰 경계 Chromium 대조 (Issue #368)", () => {
+  const NBSP = String.fromCharCode(0xa0);
+  const IDEOGRAPHIC_SPACE = String.fromCharCode(0x3000);
+  const DEL = String.fromCharCode(0x7f);
+
+  it.each([
+    ["b\\6fld", "bold"],
+    ["\\62old", "bold"],
+    ["\\6cighter", "light"],
+    ["700/**/", "bold"],
+    ["/**/700", "bold"],
+    ["+700", "bold"],
+    ["7e2", "bold"],
+    ["7E2", "bold"],
+    ["7e+2", "bold"],
+    ["Bold", "bold"],
+    ["\\69nherit", "inherit"],
+    ["inherit/**/", "inherit"],
+  ] as Array<[string, InlineFontWeight]>)(
+    "font-weight:%j는 %s다",
+    (value, expected) => {
+      expect(parseInlineStyleMarks(`font-weight:${value}`).fontWeight).toBe(
+        expected,
+      );
+    },
+  );
+
+  it.each([
+    "bold/**/bold",
+    `bold${NBSP}`,
+    `bold${IDEOGRAPHIC_SPACE}`,
+    `700${NBSP}`,
+    `bold${DEL}`,
+    "\\34 00",
+    "7\\30 0",
+    "700.",
+    "7e",
+    "bold!",
+    '"bold"',
+    "700px",
+    "700%",
+  ])("font-weight:%j는 무효라 굵기를 정하지 않는다", (value) => {
+    expect(
+      parseInlineStyleMarks(`font-weight:${value}`).fontWeight,
+    ).toBeUndefined();
+  });
+});
+
 // Chromium 153 복사 원문의 선언 순서에 기댄다(Issue #341). 인라인 style이 준
 // text-decoration은 표식 뒤에 오고 작성자 값은 그 뒤에 붙는다. 앵커는 표식 뒤의
 // 마지막 text-decoration* 선언이다. 표식 앞의 text-decoration*은 스타일시트가

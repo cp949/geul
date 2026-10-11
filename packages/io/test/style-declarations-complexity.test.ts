@@ -22,22 +22,24 @@
  * 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
  * 한계: 정규식 엔진 내부 작업은 계측에 잡히지 않는다.
- * - 대괄호 읽기 축은 `parseCssDeclarations`가 입력을 읽는 만큼만 센다. 판독기가
- *   선언 값(`text`)을 대괄호로 다시 읽는 루프는 못 센다. 그 루프는 아래
- *   `parseFontShorthand`의 대괄호 읽기 절과 시간 상한 테스트가 덮는다.
- * - `parseFontShorthand`가 받은 `value`를 직접 읽는 것만 센다. `slice`로 만든
- *   토큰을 받아 대괄호로 읽는 `readNumeric`(css-color.ts)의 루프는 못 센다.
- * - `readDecoration`·`readFontStyle`은 선언 값(component value)을 읽고 입력 글자를
- *   읽지 않는다. 그 순회(`findNestedFunctions` 포함)는 이 계측에 보이지 않고
- *   `readInlineStyleMarks` 시간 상한 테스트와 깊은 중첩 모양이 덮는다(Issue #363·
- *   #366·#367·#368). 순회를 토큰마다 다시 시작하는 변이는 시간 상한 행이 끝나지
- *   않아 잡힌다. 재귀 순회 변이는 깊은 중첩 모양이 호출 스택 초과로 잡는다.
+ * - 대괄호 읽기 축은 `parseCssDeclarations`가 입력을 읽는 만큼만 센다. 판독기는
+ *   입력 글자를 읽지 않고 선언 값(component value)을 읽는다.
+ * - `readInlineStyleMarks`의 font 줄임 판독은 `font 줄임 속성 판독기의 component
+ *   읽기` 절이 센다. 선언 값 배열을 Proxy로 감싸 정수 키 읽기를 센다.
+ * - `readDecoration`·`readFontStyle`의 순회(`findNestedFunctions` 포함)는 이
+ *   계측에 보이지 않고 `readInlineStyleMarks` 시간 상한 테스트와 깊은 중첩 모양이
+ *   덮는다(Issue #363·#366·#367·#368). 순회를 토큰마다 다시 시작하는 변이는 시간
+ *   상한 행이 끝나지 않아 잡힌다. 재귀 순회 변이는 깊은 중첩 모양이 호출 스택
+ *   초과로 잡는다.
+ * - `readNumeric`(css-color.ts)이 `slice`로 만든 토큰을 읽는 루프는 못 센다.
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import { parseFontShorthand } from "../src/clipboard/style-declarations.js";
+import { readInlineStyleMarks } from "../src/clipboard/style-declarations.js";
+import { parseCssDeclarations } from "../src/css/declarations.js";
 import {
   countIndexReads,
+  MAX_READS_PER_CHAR,
   measureStringWorkload,
   restoreStringMethods,
   type StringWorkload,
@@ -519,83 +521,109 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
 });
 
 // `font:` 접두를 뗀 값 수준 모양이다. 선언 수준인 "선언이 아주 많은 입력"은
-// 뺐고, 긴 글꼴 식별자 하나를 더했다. 그 모양이 있어야 `scanFamilyIdent`의
-// 루프 안 재순회가 잡힌다. 셋째 값은 입력을 끝까지 훑는지다. 참이면 읽기
-// 수가 입력 길이 이상이어야 한다. 쉼표만 많은 입력은 `isFamilyList`가 첫 글자
-// `,`에서 거절하고, 앞 토큰이 아주 많은 입력은 `normal` 슬롯 토큰이
-// `MAX_FONT_PREFIX_TOKENS`(4)개를 넘기면 거절한다. `bold`를 반복하면 두 번째
-// 토큰의 굵기 중복에서 끝나 상한 경로에 닿지 않는다. 두 모양은 입력이 아무리
-// 커도 읽기 수가 상수라 입력 길이 이상을 요구하지 않는다.
+// 뺐고, 긴 글꼴 식별자 하나를 더했다. 같은 모양을 두 계측에 넣는다.
+// - 입력 글자 읽기: `parseCssDeclarations`(css/ 토크나이저)가 입력을 대괄호로 읽는
+//   횟수. 토크나이저는 값을 끝까지 읽으므로 모든 모양에서 읽기 수가 입력 길이
+//   이상이어야 한다.
+// - component 읽기: `readInlineStyleMarks`가 선언 값 배열(`value`)에서 component를
+//   읽는 횟수. 판독기는 값을 `filter`로 한 번 훑어 낱말 목록을 만든다. 쉼표만 많은
+//   입력과 앞 토큰이 아주 많은 입력도 그 한 번은 읽는다.
 const fontShorthandValueShapes: Array<
-  [name: string, build: (size: number) => string, scansWholeInput: boolean]
+  [name: string, build: (size: number) => string]
 > = [
-  ["값이 긴 알파벳 run인 입력", (size) => "a".repeat(size * 16), true],
+  ["값이 긴 알파벳 run인 입력", (size) => "a".repeat(size * 16)],
   [
     "앞 토큰 사이 공백이 긴 입력",
     (size) => `bold${" ".repeat(size * 16)}12px Arial`,
-    true,
   ],
-  ["글꼴 목록이 긴 입력", (size) => `12px ${"a,".repeat(size)}a`, true],
-  ["글꼴 식별자가 많은 입력", (size) => `12px ${"a ".repeat(size)}`, true],
-  [
-    "따옴표가 닫히지 않은 긴 입력",
-    (size) => `12px "${"a ".repeat(size)}`,
-    true,
-  ],
-  [
-    "계산 함수 토큰이 긴 입력",
-    (size) => `calc(${"1px + ".repeat(size)}1px) a`,
-    true,
-  ],
-  ["쉼표만 많은 입력", (size) => `12px ${",".repeat(size)}`, false],
-  [
-    "앞 토큰이 아주 많은 입력",
-    (size) => `${"normal ".repeat(size)}12px a`,
-    false,
-  ],
-  [
-    "line-height 토큰이 긴 입력",
-    (size) => `12px/${"1".repeat(size * 16)} a`,
-    true,
-  ],
-  ["긴 글꼴 식별자 하나", (size) => `12px ${"a".repeat(size * 16)}`, true],
+  ["글꼴 목록이 긴 입력", (size) => `12px ${"a,".repeat(size)}a`],
+  ["글꼴 식별자가 많은 입력", (size) => `12px ${"a ".repeat(size)}`],
+  ["따옴표가 닫히지 않은 긴 입력", (size) => `12px "${"a ".repeat(size)}`],
+  ["계산 함수 토큰이 긴 입력", (size) => `calc(${"1px + ".repeat(size)}1px) a`],
+  ["쉼표만 많은 입력", (size) => `12px ${",".repeat(size)}`],
+  ["앞 토큰이 아주 많은 입력", (size) => `${"normal ".repeat(size)}12px a`],
+  ["line-height 토큰이 긴 입력", (size) => `12px/${"1".repeat(size * 16)} a`],
+  ["긴 글꼴 식별자 하나", (size) => `12px ${"a".repeat(size * 16)}`],
+  ["글꼴 문자열이 많은 입력", (size) => `12px ${'"a",'.repeat(size)}b`],
+  ["주석이 낱말 사이에 낀 긴 입력", (size) => `12px ${"a/**/".repeat(size)}`],
 ];
 
-// 변이로 확인한 RED다(Issue #340). 아래 앞 세 변이는 읽기 증가율이 4 가까이
-// 뛴다(상한 없이 잰 값). 상한(`MAX_READS_PER_CHAR`)을 둔 뒤에는 읽기 수가 상한을
-// 먼저 넘어 던지고, 각 변이의 RED가 0.3–2초에 나온다.
-// 실측(Node, 2026-10-11): 정상 구현은 모양별 증가율이 2.00 이하다. 읽기 수
-// (작은 쪽/큰 쪽)는 값이 긴 알파벳 run 320,001/640,001, 글꼴 목록 200,014/
-// 400,014, 글꼴 식별자 140,009/280,009, 긴 글꼴 식별자 하나 320,013/640,013이다.
-// 쉼표만 많은 입력과 앞 토큰이 아주 많은 입력은 둘 다 13/13이다.
-// - `isFamilyList` 루프에 `for (k < index) void value[k]`를 넣으면 글꼴 목록이
-//   긴 입력이 3.998이다.
-// - `isFamilyList`가 항목마다 목록 시작부터 `scanFamilyIdent`를 이어 다시
-//   부르면 글꼴 식별자가 많은 입력이 3.9999이다.
-// - `scanFamilyIdent` while 루프에서 글자마다 `from`부터 다시 읽으면 긴 글꼴
-//   식별자 하나가 3.9999이다. 이 모양이 없으면 이 변이는 통과한다.
-// - `isFamilyList` 루프에서 `value.slice(0, index)` 사본을 훑는 변이는 대괄호
-//   읽기를 늘리지 않는다. 위 String 메서드 계측의 font 줄임 글꼴 목록이 긴
-//   입력이 처리 문자 수 증가율 3.999로 잡는다.
-describe("parseFontShorthand의 대괄호 읽기", () => {
+describe("font 줄임 속성 값의 대괄호 읽기(parseCssDeclarations)", () => {
   it.each(fontShorthandValueShapes)(
     "%s은 크기가 2배가 되면 대괄호 읽기가 2배 이하로 는다",
-    (_name, build, scansWholeInput) => {
-      const smallInput = build(BASE_SIZE);
-      const small = countIndexReads(smallInput, (value) => {
-        parseFontShorthand(value);
+    (_name, build) => {
+      const smallInput = `font:${build(READ_SIZE)}`;
+      const small = countIndexReads(smallInput, (style) => {
+        parseCssDeclarations(style);
       });
-      const large = countIndexReads(build(BASE_SIZE * 2), (value) => {
-        parseFontShorthand(value);
+      const large = countIndexReads(`font:${build(READ_SIZE * 2)}`, (style) => {
+        parseCssDeclarations(style);
       });
 
-      // 계측이 실제로 일을 셌는지 확인한다. 0이면 아래 비율 단언이 공허하다.
-      expect(small).toBeGreaterThan(0);
-      if (scansWholeInput) {
-        expect(small).toBeGreaterThanOrEqual(smallInput.length);
-      }
-
+      // 계측이 실제로 일을 셌는지 확인한다. 입력을 끝까지 읽어야 한다.
+      expect(small).toBeGreaterThanOrEqual(smallInput.length);
       expect(large / small, "대괄호 읽기 증가율").toBeLessThanOrEqual(2);
+    },
+  );
+});
+
+/**
+ * 판독기가 선언 값 배열에서 component를 읽는 횟수를 센다. 선언 목록은 읽기를
+ * 세기 전에 만들어 두므로 토크나이저의 읽기는 들어가지 않는다. `value` 배열을
+ * Proxy로 감싸 정수 키 읽기를 센다(`filter`·`for…of`·`[i]` 모두 센다). 읽기
+ * 수가 component 수의 `MAX_READS_PER_CHAR`배를 넘으면 던진다.
+ */
+const countComponentReads = (
+  style: string,
+): { reads: number; components: number } => {
+  const declarations = parseCssDeclarations(style);
+  const components = declarations.reduce(
+    (total, declaration) => total + declaration.value.length,
+    0,
+  );
+  const limit = components * MAX_READS_PER_CHAR;
+  let reads = 0;
+  const wrapped = declarations.map((declaration) => ({
+    ...declaration,
+    value: new Proxy(declaration.value, {
+      get(target, key, receiver) {
+        if (
+          typeof key === "string" &&
+          key !== "" &&
+          Number.isInteger(Number(key))
+        ) {
+          reads += 1;
+          if (reads > limit) {
+            throw new Error(
+              `component 읽기가 component 수 ${components}의 ${MAX_READS_PER_CHAR}배를 넘었다`,
+            );
+          }
+        }
+        return Reflect.get(target, key, receiver) as unknown;
+      },
+    }),
+  }));
+  readInlineStyleMarks(wrapped);
+  return { reads, components };
+};
+
+// 변이로 확인한 RED다(Issue #368 RD-004). 판독기가 글꼴 항목마다 `value.filter`로
+// 낱말 목록을 다시 만드는 변이는 글꼴 목록이 긴 입력이 component 읽기 수 상한
+// (`MAX_READS_PER_CHAR`)을 넘어 던진다. 옛 판독기(`text`를 글자로 읽던 구현)는
+// component를 읽지 않아 하한 단언(읽기 수가 component 수 이상)이 깨졌다.
+describe("font 줄임 속성 판독기의 component 읽기", () => {
+  it.each(fontShorthandValueShapes)(
+    "%s은 크기가 2배가 되면 component 읽기가 2배 이하로 는다",
+    (_name, build) => {
+      const small = countComponentReads(`font:${build(BASE_SIZE)}`);
+      const large = countComponentReads(`font:${build(BASE_SIZE * 2)}`);
+
+      // 계측이 실제로 일을 셌는지 확인한다. 값을 한 번은 읽어야 한다.
+      expect(small.reads).toBeGreaterThanOrEqual(small.components);
+      expect(
+        large.reads / small.reads,
+        "component 읽기 증가율",
+      ).toBeLessThanOrEqual(2);
     },
   );
 });

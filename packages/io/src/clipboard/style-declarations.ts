@@ -6,10 +6,8 @@ import { asciiLowerCase } from "../css/tokens.js";
 import {
   type CssColorResult,
   isCssLengthUnit,
-  isCssSpace,
   readBackgroundShorthand,
   readCssColor,
-  readNumeric,
 } from "./css-color.js";
 
 export type StyleDeclarations = {
@@ -225,20 +223,31 @@ const classifyWeightNumber = (weight: number): InlineFontWeight => {
   return weight >= MIN_BOLD_WEIGHT ? "bold" : "light";
 };
 
-// 유효한 font-weight 값이면 분류를, 무효하면 undefined를 돌려준다. 입력은
-// 소문자로 정규화된 값이다.
-const classifyFontWeight = (value: string): InlineFontWeight | undefined => {
-  if (value === "bold" || value === "bolder") return "bold";
-  if (value === "normal") return "normal";
-  if (LIGHT_WEIGHT_KEYWORDS.has(value)) return "light";
-  if (value === "inherit" || value === "unset") return "inherit";
-  if (value === "revert" || value === "revert-layer") return "other";
-  const numeric = readNumeric(value);
-  if (numeric === undefined || numeric.unit !== "") return undefined;
-  if (numeric.value < MIN_FONT_WEIGHT || numeric.value > MAX_FONT_WEIGHT) {
-    return undefined;
-  }
-  return classifyWeightNumber(numeric.value);
+// 1–1000 숫자 굵기를 분류한다. 범위 밖이면 undefined다.
+const readWeightNumber = (weight: number): InlineFontWeight | undefined =>
+  weight < MIN_FONT_WEIGHT || weight > MAX_FONT_WEIGHT
+    ? undefined
+    : classifyWeightNumber(weight);
+
+// font-weight 값(component value 목록)을 읽는다. 값 전체가 문법이다: 키워드 하나
+// 또는 1–1000 숫자 하나다. 무효하면 undefined다. 키워드는 이스케이프를 푼
+// 이름의 ASCII 소문자로 비교한다.
+const readFontWeight = (
+  value: readonly CssComponentValue[],
+): InlineFontWeight | undefined => {
+  const parts = value.filter((node) => node.type !== "whitespace");
+  const part = parts[0];
+  if (parts.length !== 1 || part === undefined) return undefined;
+  if (part.type === "number") return readWeightNumber(part.value);
+  if (part.type !== "ident") return undefined;
+
+  const keyword = asciiLowerCase(part.value);
+  if (keyword === "bold" || keyword === "bolder") return "bold";
+  if (keyword === "normal") return "normal";
+  if (LIGHT_WEIGHT_KEYWORDS.has(keyword)) return "light";
+  if (keyword === "inherit" || keyword === "unset") return "inherit";
+  if (keyword === "revert" || keyword === "revert-layer") return "other";
+  return undefined;
 };
 
 // font 줄임 속성의 선언 하나가 정하는 굵기와 기울임이다.
@@ -296,219 +305,127 @@ const ANGLE_UNITS: ReadonlySet<string> = new Set([
 ]);
 
 // 글꼴 이름 하나로 쓸 수 없는 낱말이다. 이 낱말 하나만 있는 항목은 무효다.
-const RESERVED_FAMILY_KEYWORDS: readonly string[] = [
+const RESERVED_FAMILY_KEYWORDS: ReadonlySet<string> = new Set([
   "inherit",
   "initial",
   "unset",
   "revert",
   "revert-layer",
   "default",
-];
+]);
 
 // font 줄임 속성의 앞 슬롯은 네 개다: style·variant·weight·stretch.
 const MAX_FONT_PREFIX_TOKENS = 4;
 
-const skipCssSpace = (value: string, from: number): number => {
-  let index = from;
-  while (index < value.length && isCssSpace(value[index] as string)) {
-    index += 1;
-  }
-  return index;
-};
+const isSlash = (node: CssComponentValue | undefined): boolean =>
+  node?.type === "delim" && node.value === "/";
 
-// 토큰의 끝 위치다. 괄호 밖 공백이나 `/`에서 끝난다. 괄호 안은 공백·`/`가
-// 있어도 한 토큰이다(`calc(1px + 2px)`).
-const fontTokenEnd = (value: string, from: number): number => {
-  let depth = 0;
-  let index = from;
-  while (index < value.length) {
-    const character = value[index] as string;
-    if (character === "(") {
-      depth += 1;
-    } else if (character === ")") {
-      if (depth > 0) depth -= 1;
-    } else if (depth === 0 && (character === "/" || isCssSpace(character))) {
-      break;
-    }
-    index += 1;
-  }
-  return index;
-};
-
-// calc()·min()·max()·clamp() 토큰이다. 안쪽은 검증하지 않는다.
-const isMathFunctionToken = (token: string): boolean => {
-  if (!token.endsWith(")")) return false;
-  const open = token.indexOf("(");
-  return open > 0 && MATH_FUNCTIONS.has(token.slice(0, open));
-};
+// calc()·min()·max()·clamp() 함수다. 안쪽은 검증하지 않는다.
+const isMathFunction = (node: CssComponentValue): boolean =>
+  node.type === "function" && MATH_FUNCTIONS.has(asciiLowerCase(node.name));
 
 // 0 이상의 길이·백분율이다. 단위 없는 숫자는 0만 길이다. `-0`은 0이다.
-const isNonNegativeLengthPercentage = (token: string): boolean => {
-  const numeric = readNumeric(token);
-  if (numeric === undefined || !(numeric.value >= 0)) return false;
-  if (numeric.unit === "") return numeric.value === 0;
-  return numeric.unit === "%" || isCssLengthUnit(numeric.unit);
+const isNonNegativeLengthPercentage = (node: CssComponentValue): boolean => {
+  if (node.type === "number") return node.value === 0;
+  if (node.type === "percentage") return node.value >= 0;
+  return (
+    node.type === "dimension" &&
+    node.value >= 0 &&
+    isCssLengthUnit(asciiLowerCase(node.unit))
+  );
 };
 
-const isFontSizeToken = (token: string): boolean =>
-  FONT_SIZE_KEYWORDS.has(token) ||
-  isMathFunctionToken(token) ||
-  isNonNegativeLengthPercentage(token);
+const isFontSize = (node: CssComponentValue): boolean =>
+  (node.type === "ident" &&
+    FONT_SIZE_KEYWORDS.has(asciiLowerCase(node.value))) ||
+  isMathFunction(node) ||
+  isNonNegativeLengthPercentage(node);
 
-// `/` 뒤 line-height 토큰이다: normal·0 이상의 숫자·길이·백분율.
-const isLineHeightToken = (token: string): boolean => {
-  if (token === "normal" || isMathFunctionToken(token)) return true;
-  const numeric = readNumeric(token);
-  if (numeric !== undefined && numeric.unit === "") return numeric.value >= 0;
-  return isNonNegativeLengthPercentage(token);
-};
+// `/` 뒤 line-height 값이다: normal·0 이상의 숫자·길이·백분율·수식 함수.
+const isLineHeight = (node: CssComponentValue): boolean =>
+  (node.type === "ident" && asciiLowerCase(node.value) === "normal") ||
+  isMathFunction(node) ||
+  (node.type === "number" && node.value >= 0) ||
+  isNonNegativeLengthPercentage(node);
 
-const isFamilyLetter = (character: string): boolean =>
-  (character >= "a" && character <= "z") ||
-  (character >= "A" && character <= "Z");
-
-// ASCII 밖 글자는 이름 글자다. DEL(0x7f)도 한 글자로 받아 들이는 사소한 차이는
-// 둔다.
-const isFamilyNameStart = (character: string): boolean =>
-  isFamilyLetter(character) || character === "_" || character > "~";
-
-const isFamilyNameCharacter = (character: string): boolean =>
-  isFamilyNameStart(character) ||
-  character === "-" ||
-  (character >= "0" && character <= "9");
-
-// value[start, end)가 예약 낱말인지 본다. 큰 문자열에 slice를 반복해 부르지
-// 않으려고 글자를 대괄호로 비교한다(G-TST-004).
-const isReservedFamilyKeyword = (
-  value: string,
-  start: number,
-  end: number,
+// parts[from]부터 끝까지가 쉼표로 나눈 글꼴 목록 문법에 맞는지 본다. 항목은
+// 문자열 하나이거나 식별자 하나 이상이다(`a b`). 식별자 사이의 공백·주석은 보지
+// 않는다. 빈 항목(앞뒤·연속 쉼표)은 무효다. 식별자 하나뿐인 항목이 예약 낱말이면
+// 무효다. 닫히지 않은 문자열은 입력 끝에서 닫힌 문자열 토큰이다.
+const isFamilyList = (
+  parts: readonly CssComponentValue[],
+  from: number,
 ): boolean => {
-  for (const keyword of RESERVED_FAMILY_KEYWORDS) {
-    if (keyword.length !== end - start) continue;
-    let same = true;
-    for (let offset = 0; offset < keyword.length && same; offset += 1) {
-      same = value[start + offset] === keyword[offset];
-    }
-    if (same) return true;
-  }
-  return false;
-};
-
-// `from`에서 시작하는 CSS 식별자의 끝 위치다. 식별자가 아니면 -1이다.
-// 숫자로 시작하거나 `-` 뒤에 숫자가 오면 식별자가 아니다. 백슬래시는 다음 한
-// 글자를 이스케이프한다.
-const scanFamilyIdent = (value: string, from: number): number => {
-  const length = value.length;
   let index = from;
-  if (value[index] === "-") {
-    index += 1;
-    const next = value[index];
-    if (next === undefined) return -1;
-    if (next === "-") {
-      index += 1;
-    } else if (!isFamilyNameStart(next) && next !== "\\") {
-      return -1;
-    }
-  } else {
-    const first = value[index] as string;
-    if (!isFamilyNameStart(first) && first !== "\\") return -1;
-  }
-
-  while (index < length) {
-    const character = value[index] as string;
-    if (character === "\\") {
-      if (index + 1 >= length) return -1;
-      index += 2;
-    } else if (isFamilyNameCharacter(character)) {
-      index += 1;
-    } else {
-      break;
-    }
-  }
-  return index;
-};
-
-// 쉼표로 나눈 글꼴 목록이 문법에 맞는지 본다. 항목은 따옴표 문자열 하나이거나
-// 공백으로 이은 식별자들이다. 빈 항목(앞뒤 쉼표)은 무효다. 닫히지 않은
-// 따옴표는 입력 끝에서 닫힌 것으로 본다. 한 낱말만 있는 항목이 예약 낱말이면
-// 무효다.
-const isFamilyList = (value: string, from: number): boolean => {
-  const length = value.length;
-  let index = from;
-
   for (;;) {
-    index = skipCssSpace(value, index);
-    if (index >= length) return false;
+    const first = parts[index];
+    if (first === undefined) return false;
 
-    const first = value[index] as string;
-    if (first === '"' || first === "'") {
-      index += 1;
-      while (index < length && value[index] !== first) {
-        index += value[index] === "\\" ? 2 : 1;
-      }
+    if (first.type === "string") {
       index += 1;
     } else {
       let identCount = 0;
-      let firstStart = index;
-      let firstEnd = index;
-      for (;;) {
-        const end = scanFamilyIdent(value, index);
-        if (end < 0) return false;
-        if (identCount === 0) {
-          firstStart = index;
-          firstEnd = end;
-        }
-        identCount += 1;
-        const next = skipCssSpace(value, end);
-        if (next >= length || value[next] === ",") {
-          index = next;
-          break;
-        }
-        // 식별자 바로 뒤에 식별자가 아닌 글자가 붙으면 무효다.
-        if (next === end) return false;
-        index = next;
-      }
-      if (
-        identCount === 1 &&
-        isReservedFamilyKeyword(value, firstStart, firstEnd)
+      let reserved = false;
+      for (
+        let part = parts[index];
+        part?.type === "ident";
+        part = parts[index]
       ) {
-        return false;
+        reserved = RESERVED_FAMILY_KEYWORDS.has(asciiLowerCase(part.value));
+        identCount += 1;
+        index += 1;
       }
+      if (identCount === 0 || (identCount === 1 && reserved)) return false;
     }
 
-    index = skipCssSpace(value, index);
-    if (index >= length) return true;
-    if (value[index] !== ",") return false;
+    const next = parts[index];
+    if (next === undefined) return true;
+    if (next.type !== "comma") return false;
     index += 1;
   }
 };
 
-// font 줄임 속성 값(소문자·`!important` 제거 후)에서 굵기와 기울임을 읽는다.
+// font 줄임 앞 슬롯의 굵기 낱말이다. bold·bolder·lighter와 1–1000 숫자다. 굵기
+// 낱말이 아니면 undefined다.
+const readFontWeightPart = (
+  part: CssComponentValue,
+  word: string | undefined,
+): InlineFontWeight | undefined => {
+  if (word === "bold" || word === "bolder") return "bold";
+  if (word === "lighter") return "light";
+  return part.type === "number" ? readWeightNumber(part.value) : undefined;
+};
+
+// font 줄임 속성 값(component value 목록)에서 굵기와 기울임을 읽는다.
 // 문법: `[style || variant || weight || stretch]? size[/line-height] family`.
-// - 앞 슬롯은 최대 네 토큰이고, `normal`은 어느 슬롯이든 채운다. style·
+// - 앞 슬롯은 최대 네 낱말이고, `normal`은 어느 슬롯이든 채운다. style·
 //   variant·weight·stretch는 각각 한 번만 쓴다.
 // - 크기가 없거나 글꼴 목록이 문법에 맞지 않으면 선언 전체가 무효라 undefined다.
 // - 시스템 글꼴 키워드 하나(`caption` 등)는 normal·normal이다. 전역 키워드
 //   하나는 부모를 따르거나(inherit·unset) 정하지 않거나(revert) normal로
 //   돌아간다(initial).
-// - 굵기 토큰이 없으면 normal이고 기울임 토큰이 없으면 normal이다.
-// 값을 앞에서 한 번 훑고 토큰마다 일정한 일만 한다. 정규식을 쓰지 않는다.
-// export는 복잡도 테스트 전용이다. 테스트가 대괄호 읽기를 세려고 Proxy 값을
-// 직접 넘긴다. 공개 API가 아니다.
-export const parseFontShorthand = (
-  value: string,
+// - 굵기 낱말이 없으면 normal이고 기울임 낱말이 없으면 normal이다.
+// - 낱말은 component 하나다. 공백과 주석은 낱말을 가르지만 보지 않는다.
+// 값을 한 번 걸러 낱말 목록을 만들고 앞에서 한 번 훑는다. 낱말마다 일정한 일만
+// 한다.
+const readFontShorthand = (
+  value: readonly CssComponentValue[],
 ): FontShorthand | undefined => {
-  if (value === "") return undefined;
-  if (value === "inherit" || value === "unset") {
-    return { weight: "inherit", fontStyle: "inherit" };
-  }
-  if (value === "initial") return { weight: "normal", fontStyle: "normal" };
-  if (value === "revert" || value === "revert-layer") {
-    return { weight: "other", fontStyle: undefined };
-  }
-  if (FONT_SYSTEM_KEYWORDS.has(value)) {
-    return { weight: "normal", fontStyle: "normal" };
+  const parts = value.filter((node) => node.type !== "whitespace");
+  const first = parts[0];
+  if (first === undefined) return undefined;
+  if (parts.length === 1 && first.type === "ident") {
+    const keyword = asciiLowerCase(first.value);
+    if (keyword === "inherit" || keyword === "unset") {
+      return { weight: "inherit", fontStyle: "inherit" };
+    }
+    if (keyword === "initial") return { weight: "normal", fontStyle: "normal" };
+    if (keyword === "revert" || keyword === "revert-layer") {
+      return { weight: "other", fontStyle: undefined };
+    }
+    if (FONT_SYSTEM_KEYWORDS.has(keyword)) {
+      return { weight: "normal", fontStyle: "normal" };
+    }
   }
 
   let weight: InlineFontWeight = "normal";
@@ -519,78 +436,62 @@ export const parseFontShorthand = (
   let sawStretch = false;
   let prefixCount = 0;
   let index = 0;
-  let token: string;
-  let tokenEnd: number;
+  let part: CssComponentValue;
 
   for (;;) {
-    index = skipCssSpace(value, index);
-    if (index >= value.length) return undefined;
-    tokenEnd = fontTokenEnd(value, index);
-    token = value.slice(index, tokenEnd);
+    const current = parts[index];
+    if (current === undefined) return undefined;
+    part = current;
     if (prefixCount >= MAX_FONT_PREFIX_TOKENS) break;
 
-    if (token === "normal") {
+    const word = part.type === "ident" ? asciiLowerCase(part.value) : undefined;
+    if (word === "normal") {
       // 어느 슬롯이든 채운다. 굵기·기울임은 바꾸지 않는다.
-    } else if (token === "italic") {
+    } else if (word === "italic") {
       if (sawStyle) return undefined;
       sawStyle = true;
       italic = true;
-    } else if (token === "oblique") {
+    } else if (word === "oblique") {
       if (sawStyle) return undefined;
       sawStyle = true;
       italic = true;
       // 각도가 따라오면 함께 읽는다.
-      const angleStart = skipCssSpace(value, tokenEnd);
-      const angleEnd = fontTokenEnd(value, angleStart);
-      const angle = readNumeric(value.slice(angleStart, angleEnd));
-      if (angle !== undefined && ANGLE_UNITS.has(angle.unit)) {
-        tokenEnd = angleEnd;
+      const angle = parts[index + 1];
+      if (
+        angle?.type === "dimension" &&
+        ANGLE_UNITS.has(asciiLowerCase(angle.unit))
+      ) {
+        index += 1;
       }
-    } else if (token === "small-caps") {
+    } else if (word === "small-caps") {
       if (sawVariant) return undefined;
       sawVariant = true;
-    } else if (FONT_STRETCH_KEYWORDS.has(token)) {
+    } else if (word !== undefined && FONT_STRETCH_KEYWORDS.has(word)) {
       if (sawStretch) return undefined;
       sawStretch = true;
     } else {
-      const slotWeight = readFontWeightToken(token);
+      const slotWeight = readFontWeightPart(part, word);
       if (slotWeight === undefined) break;
       if (sawWeight) return undefined;
       sawWeight = true;
       weight = slotWeight;
     }
     prefixCount += 1;
-    index = tokenEnd;
+    index += 1;
   }
 
-  // 여기서 token은 크기 후보다.
-  if (!isFontSizeToken(token)) return undefined;
-  index = skipCssSpace(value, tokenEnd);
-  if (value[index] === "/") {
-    index = skipCssSpace(value, index + 1);
-    const lineEnd = fontTokenEnd(value, index);
-    if (!isLineHeightToken(value.slice(index, lineEnd))) return undefined;
-    index = lineEnd;
+  // 여기서 part는 크기 후보다.
+  if (!isFontSize(part)) return undefined;
+  index += 1;
+  if (isSlash(parts[index])) {
+    const lineHeight = parts[index + 1];
+    if (lineHeight === undefined || !isLineHeight(lineHeight)) {
+      return undefined;
+    }
+    index += 2;
   }
-  if (!isFamilyList(value, index)) return undefined;
+  if (!isFamilyList(parts, index)) return undefined;
   return { weight, fontStyle: italic ? "italic" : "normal" };
-};
-
-// font 줄임 앞 슬롯의 굵기 토큰이다. bold·bolder·lighter와 1–1000 숫자다.
-// 굵기 토큰이 아니면 undefined다.
-const readFontWeightToken = (token: string): InlineFontWeight | undefined => {
-  if (token === "bold" || token === "bolder") return "bold";
-  if (token === "lighter") return "light";
-  const numeric = readNumeric(token);
-  if (
-    numeric === undefined ||
-    numeric.unit !== "" ||
-    numeric.value < MIN_FONT_WEIGHT ||
-    numeric.value > MAX_FONT_WEIGHT
-  ) {
-    return undefined;
-  }
-  return classifyWeightNumber(numeric.value);
 };
 
 // 인라인 서식 칸이 받는 속성이다.
@@ -977,14 +878,17 @@ const applyMark = <T>(
 //   뒤가 이긴다.
 // - 문법에 맞지 않는 선언은 통째로 버린다. 칸을 건드리지 않는다(`!important`가
 //   붙어도 같다). revert·revert-layer는 유효 값이라 칸을 비운다.
-// - font-style과 text-decoration(-line)은 값 전체를 문법대로 읽는다.
-//   text-decoration(-line)은 색 함수·수식 함수·시스템 색을 이름만 보고 받고
-//   치환 함수(`var()` 등)는 건너뛴다(`readDecoration`). 남은 한계가 있다.
+// - font-weight·font 줄임·font-style과 text-decoration(-line)은 값 전체를 문법대로
+//   읽는다. 값은 component value다. 키워드와 글꼴 이름은 이스케이프를 푼 이름으로
+//   읽는다. text-decoration(-line)은 색 함수·수식 함수·시스템 색을 이름만 보고
+//   받고 치환 함수(`var()` 등)는 건너뛴다(`readDecoration`). 남은 한계가 있다.
 //   - 함수 안쪽 인자를 검증하지 않는다(Chromium은 `calc(1)`을 무효로 본다).
-//   - 괄호 짝은 따옴표와 `\` 이스케이프 안의 괄호도 센다.
 //   - 치환 결과를 추적하지 않는다. `<style>`과 조상의 `--x` 정의를 읽지 않는다.
 //   - font 경로의 수식 함수는 `calc`·`min`·`max`·`clamp` 넷뿐이다.
 //   - `oblique` 각도 범위를 검사하지 않는다.
+//   - 글꼴 목록의 `serif a`처럼 일반 글꼴 키워드와 다른 식별자가 한 항목에 있는
+//     값을 유효로 읽는다(Chromium은 무효). font 줄임에 `--f()` 호출이 있으면
+//     무효로 읽는다(Chromium은 유효).
 // 값이 꺼짐(normal, none)이어도 이 함수는 그 선언만 반영한다 — 바깥 요소가
 // 만든 마크를 지우는 일은 없다. 끄는 값은 normal로 돌려주고 겹치기는 호출부가
 // 정한다.
@@ -1004,20 +908,15 @@ export const readInlineStyleMarks = (
     important: false,
   };
 
-  for (const {
-    name: property,
-    text,
-    value: components,
-    important,
-  } of declarations) {
+  for (const { name: property, value: components, important } of declarations) {
     if (!INLINE_MARK_PROPERTIES.has(property)) continue;
 
     if (property === "font-weight") {
-      const classified = classifyFontWeight(asciiLowerCase(text));
+      const classified = readFontWeight(components);
       if (classified !== undefined) applyMark(weight, classified, important);
     } else if (property === "font") {
       // 줄임은 굵기와 기울임을 함께 정한다. 굵기 토큰이 없으면 normal로 덮는다.
-      const shorthand = parseFontShorthand(asciiLowerCase(text));
+      const shorthand = readFontShorthand(components);
       if (shorthand !== undefined) {
         applyMark(weight, shorthand.weight, important);
         applyMark(fontStyle, shorthand.fontStyle, important);
