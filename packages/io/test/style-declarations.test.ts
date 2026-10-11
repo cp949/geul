@@ -1423,7 +1423,7 @@ describe("닫히지 않은 따옴표와 개행 (Issue #362)", () => {
     ).toBe("bold");
   });
 
-  // 값 안 판독기(isFamilyNameList·splitBackgroundLayers)는 bad 선언을 받지 않는다.
+  // 값 안 판독기(isFamilyNameList·readBackgroundShorthand)는 bad 선언을 받지 않는다.
   it("개행에서 끝난 font 줄임은 버려 앞 굵게를 지우지 않고 기울이지 않는다", () => {
     const style = "font-weight:bold;font:italic 12px 'a\n;color:red";
     const marks = parseInlineStyleMarks(style);
@@ -1888,5 +1888,65 @@ describe("선언 단계 Chromium 동등성 (Issue #368)", () => {
 
   it("재현 9행 `_white-space:pre`는 공백 모드를 정하지 않는다", () => {
     expect(parseWhiteSpaceMode("_white-space:pre")).toBe(undefined);
+  });
+});
+
+// Chromium 153.0.8010.12 실측(2026-10-12, Issue #368 RD-005). 색 값을 component
+// value로 읽는 규칙이다. 센티널 `#123456` 뒤에 시험 값을 두고 계산 색을 읽었다.
+// 센티널이 남으면 무효 선언이다. 반투명·투명·`url()` 뿐인 배경은 색을 정하지 않아
+// 센티널이 지워진다(`{}`).
+describe("색 값 component value Chromium 대조 (Issue #368)", () => {
+  const SENTINEL = "#123456";
+
+  it.each<[string, string, StyleDeclarations]>([
+    // 재현 7a. 입력 끝에서 닫히지 않은 함수는 닫힌 것으로 읽는다.
+    ["7a", "rgb(255,0,0", { color: "#FF0000" }],
+    ["7a", "hsl(120 100% 25%", { color: "#008000" }],
+    ["7a", "rgb(255 0 0 / 50%", {}],
+    ["7a", "rgb(255,0,0,", { color: SENTINEL }],
+    ["7a", "rgb(255 0 0 /", { color: SENTINEL }],
+    ["함수 뒤 붙은 토큰", "rgb(255,0,0)red", { color: SENTINEL }],
+    ["짝 없는 닫는 괄호", "rgb(255,0,0))", { color: SENTINEL }],
+    ["인자에 `.`이 남음", "rgb(255,0,0.)", { color: SENTINEL }],
+    ["이스케이프 식별자", "\\72 ed", { color: "#FF0000" }],
+    ["이스케이프 함수 이름", "\\72 gb(255,0,0)", { color: "#FF0000" }],
+    ["이스케이프 hash 토큰", "#\\66 00", { color: "#FF0000" }],
+    ["이스케이프 단위", "hsl(90\\64 eg 100% 50%)", { color: "#80FF00" }],
+    ["함수 안 주석", "rgb(255,0,0/**/)", { color: "#FF0000" }],
+    ["값 앞뒤 주석", "/**/red/**/", { color: "#FF0000" }],
+    ["대문자 함수·단위", "HSL(90DEG 100% 50%)", { color: "#80FF00" }],
+    // 유니코드 소문자 변환은 U+212A(켈빈 기호)를 `k`로 바꿔 `black`이 된다.
+    // Chromium은 ASCII 대소문자만 같게 본다.
+    ["켈빈 기호", "blacK", { color: SENTINEL }],
+    ["터키어 대문자 İ", "İ", { color: SENTINEL }],
+  ])("재현 %s행 color:%j은 Chromium처럼 %j다", (_row, value, expected) => {
+    expect(parseStyleDeclarations(`color:${SENTINEL};color:${value}`)).toEqual(
+      expected,
+    );
+  });
+
+  it.each<[string, string, StyleDeclarations]>([
+    // 재현 7b. 닫히지 않은 url 토큰은 입력 끝에서 닫힌다.
+    ["7b", "url(x.png", {}],
+    ["7b", "red url(x.png", { backgroundColor: "#FF0000" }],
+    ["7b", "rgb(255,0,0", { backgroundColor: "#FF0000" }],
+    ["이스케이프 url 이름", "\\75 rl(x.png)", {}],
+    [
+      "이스케이프 단위",
+      "red url(x.png) 5\\70 x",
+      { backgroundColor: "#FF0000" },
+    ],
+    ["짝 없는 닫는 괄호", "url(x.png)) red", { backgroundColor: SENTINEL }],
+    [
+      "대문자 url·키워드",
+      "red URL(x.png) NO-REPEAT",
+      { backgroundColor: "#FF0000" },
+    ],
+  ])("재현 %s행 background:%j은 Chromium처럼 %j다", (_row, value, expected) => {
+    expect(
+      parseStyleDeclarations(
+        `background-color:${SENTINEL};background:${value}`,
+      ),
+    ).toEqual(expected);
   });
 });

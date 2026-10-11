@@ -31,14 +31,18 @@
  *   덮는다(Issue #363·#366·#367·#368). 순회를 토큰마다 다시 시작하는 변이는 시간
  *   상한 행이 끝나지 않아 잡힌다. 재귀 순회 변이는 깊은 중첩 모양이 호출 스택
  *   초과로 잡는다.
- * - `readNumeric`(css-color.ts)이 `slice`로 만든 토큰을 읽는 루프는 못 센다.
+ * - 색·background 판독기(css-color.ts)는 함수 안 component까지 읽는다. 선언
+ *   값 배열만 감싸는 계측은 함수 안쪽을 못 본다. `색·background 판독기의
+ *   component 읽기` 절이 함수 안 배열까지 감싼다.
  */
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   readInlineStyleMarks,
+  readStyleDeclarations,
   readWhiteSpaceMode,
 } from "../src/clipboard/style-declarations.js";
+import type { CssComponentValue } from "../src/css/component-values.js";
 import {
   type CssDeclaration,
   parseCssDeclarations,
@@ -668,6 +672,121 @@ describe("white-space 판독기의 component 읽기", () => {
       expect(reads).toBeLessThanOrEqual(MAX_WHITE_SPACE_READS);
     }
   });
+});
+
+/**
+ * 함수·블록 안 배열까지 Proxy로 감싸 정수 키 읽기를 센다. 색 함수 인자는 함수
+ * 안 배열에 있어 `countComponentReads`가 못 본다. component 수는 안쪽까지 센다.
+ */
+const countDeepComponentReads = (
+  style: string,
+  read: (declarations: CssDeclaration[]) => unknown,
+): { reads: number; components: number } => {
+  let reads = 0;
+  let components = 0;
+  let limit = Number.POSITIVE_INFINITY;
+  const wrap = (value: CssComponentValue[]): CssComponentValue[] => {
+    components += value.length;
+    const copy = value.map((node) =>
+      node.type === "function" || node.type === "block"
+        ? { ...node, value: wrap(node.value) }
+        : node,
+    );
+    return new Proxy(copy, {
+      get(target, key, receiver) {
+        if (
+          typeof key === "string" &&
+          key !== "" &&
+          Number.isInteger(Number(key))
+        ) {
+          reads += 1;
+          if (reads > limit) {
+            throw new Error(
+              `component 읽기가 component 수 ${components}의 ${MAX_READS_PER_CHAR}배를 넘었다`,
+            );
+          }
+        }
+        return Reflect.get(target, key, receiver) as unknown;
+      },
+    });
+  };
+  const wrapped = parseCssDeclarations(style).map((declaration) => ({
+    ...declaration,
+    value: wrap(declaration.value),
+  }));
+  limit = components * MAX_READS_PER_CHAR;
+  read(wrapped);
+  return { reads, components };
+};
+
+// 색 판독기는 값을 한 번 걸러(`filter`) 센다. 레이어·조각·낱말마다 값을 다시
+// 걸러 세는 변이는 component 읽기 수가 component 수의 제곱으로 늘어 상한
+// (`MAX_READS_PER_CHAR`)을 넘어 던진다. 옛 판독기(`text`를 글자로 읽던 구현)는
+// component를 읽지 않아 하한 단언(읽기 수가 component 수 이상)이 깨졌다.
+describe("색·background 판독기의 component 읽기", () => {
+  it.each<[string, (size: number) => string]>([
+    [
+      "색 함수 쉼표 인자가 많은 입력",
+      (size) => `color:rgb(${"1,".repeat(size)}1)`,
+    ],
+    [
+      "색 함수 공백 인자가 많은 입력",
+      (size) => `color:rgb(${"1 ".repeat(size)})`,
+    ],
+    [
+      "닫히지 않은 색 함수 인자가 많은 입력",
+      (size) => `color:rgb(${"1 ".repeat(size)}`,
+    ],
+    ["색 함수 안 쉼표만 많은 입력", (size) => `color:rgb(${",".repeat(size)})`],
+    [
+      "색 함수 안 주석이 많은 입력",
+      (size) => `color:rgb(${"/**/".repeat(size)}1,2,3)`,
+    ],
+    ["값이 색 낱말로 가득한 입력", (size) => `color:${"red ".repeat(size)}`],
+    [
+      "background 레이어가 많은 입력",
+      (size) => `background:${"none,".repeat(size)}red`,
+    ],
+    [
+      "background 낱말이 많은 입력",
+      (size) => `background:${"no-repeat ".repeat(size)}red`,
+    ],
+    [
+      "background 이미지가 많은 입력",
+      (size) => `background:${"url(a) ".repeat(size)}`,
+    ],
+    [
+      "background 위치가 많은 입력",
+      (size) => `background:${"10px 5% ".repeat(size)}red`,
+    ],
+    [
+      "background 색이 반복된 입력",
+      (size) => `background:${"red,".repeat(size)}red`,
+    ],
+    [
+      "background 슬래시가 많은 입력",
+      (size) => `background:${"/ ".repeat(size)}`,
+    ],
+  ])(
+    "%s은 크기가 2배가 되면 component 읽기가 2배 이하로 는다",
+    (_name, build) => {
+      const small = countDeepComponentReads(
+        build(BASE_SIZE),
+        readStyleDeclarations,
+      );
+      const large = countDeepComponentReads(
+        build(BASE_SIZE * 2),
+        readStyleDeclarations,
+      );
+
+      // 계측이 실제로 일을 셌는지 확인한다. 값을 한 번은 읽어야 한다.
+      expect(small.reads).toBeGreaterThanOrEqual(small.components);
+      expect(
+        large.reads / small.reads,
+        "component 읽기 증가율",
+      ).toBeLessThanOrEqual(2.05);
+    },
+  );
 });
 
 const declarationInputShapes: Array<[string, (size: number) => string]> = [

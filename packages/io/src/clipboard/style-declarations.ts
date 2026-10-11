@@ -7,6 +7,7 @@ import {
   type CssColorResult,
   isCssLengthUnit,
   readBackgroundShorthand,
+  readColorComponent,
   readCssColor,
 } from "./css-color.js";
 
@@ -71,13 +72,13 @@ const readStyleSlots = (
   const background: ColorSlot = { result: undefined, important: false };
   const align: AlignSlot = { value: undefined, important: false };
 
-  for (const { name, text, important } of declarations) {
+  for (const { name, value, text, important } of declarations) {
     if (name === "color") {
-      applyColor(color, readCssColor(text), important);
+      applyColor(color, readCssColor(value), important);
     } else if (name === "background-color") {
-      applyColor(background, readCssColor(text), important);
+      applyColor(background, readCssColor(value), important);
     } else if (name === "background") {
-      applyColor(background, readBackgroundShorthand(text), important);
+      applyColor(background, readBackgroundShorthand(value), important);
     } else if (name === "text-align") {
       const value = asciiLowerCase(text);
       if (isCanonicalCellAlign(value) && (important || !align.important)) {
@@ -628,7 +629,7 @@ const DECORATION_THICKNESS_FUNCTIONS: ReadonlySet<string> = new Set([
 ]);
 
 // 색 식별자다. CSS Color 4 시스템 색 19개, 폐기된 시스템 색 23개와 WebKit
-// 색 3개다. `currentcolor`·`transparent`·이름 색은 `readCssColor`가 읽는다.
+// 색 3개다. `currentcolor`·`transparent`·이름 색은 `readColorComponent`가 읽는다.
 const DECORATION_COLOR_IDENTIFIERS: ReadonlySet<string> = new Set([
   "accentcolor",
   "accentcolortext",
@@ -677,9 +678,8 @@ const DECORATION_COLOR_IDENTIFIERS: ReadonlySet<string> = new Set([
   "-webkit-focus-ring-color",
 ]);
 
-// 색 토큰인지 본다. 함수는 이름만 보고 안쪽은 읽지 않는다. 식별자는
-// 이스케이프를 푼 소문자 낱말로, `#` 토큰은 이스케이프를 푼 이름 앞에 `#`를
-// 붙여 `readCssColor`에 묻는다(`#\66 00`은 `#f00`).
+// 색 토큰인지 본다. 함수는 이름만 보고 안쪽은 읽지 않는다. 식별자와 `#`
+// 토큰은 `readColorComponent`에 묻는다(`#\66 00`은 `#f00`).
 const isDecorationColor = (
   node: CssComponentValue,
   word: string | undefined,
@@ -691,13 +691,10 @@ const isDecorationColor = (
   if (word !== undefined) {
     return (
       DECORATION_COLOR_IDENTIFIERS.has(word) ||
-      readCssColor(word).kind !== "invalid"
+      readColorComponent(node).kind !== "invalid"
     );
   }
-  return (
-    node.type === "hash" &&
-    readCssColor(asciiLowerCase(`#${node.value}`)).kind !== "invalid"
-  );
+  return node.type === "hash" && readColorComponent(node).kind !== "invalid";
 };
 
 // 치환 함수다. 값 어디에 있든 Chromium은 선언을 파싱 단계에서 버리지 않고,

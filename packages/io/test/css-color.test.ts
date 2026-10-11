@@ -20,6 +20,11 @@ import {
   readCssColor,
   readLegacyAttributeColor,
 } from "../src/clipboard/css-color.js";
+import { parseCssComponentValues } from "../src/css/component-values.js";
+import { tokenizeCss } from "../src/css/tokens.js";
+
+/** 값 문자열을 판독기가 받는 component value 목록으로 바꾼다. */
+const values = (text: string) => parseCssComponentValues(tokenizeCss(text));
 
 /** 결과를 표의 기대값 표기(`#RRGGBB`·`clear`·`invalid`)로 바꾼다. */
 const show = (result: CssColorResult): string =>
@@ -579,29 +584,30 @@ const backgroundTable: Array<[string, string]> = [
 
 describe("readCssColor", () => {
   it.each(colorTable)("%j은 %s로 읽는다", (value, expected) => {
-    expect(show(readCssColor(value))).toBe(expected);
+    expect(show(readCssColor(values(value)))).toBe(expected);
   });
 
   it.each(namedColorTable)("색 이름 %s는 %s다", (name, expected) => {
-    expect(show(readCssColor(name))).toBe(expected);
-    expect(show(readCssColor(name.toUpperCase()))).toBe(expected);
+    expect(show(readCssColor(values(name)))).toBe(expected);
+    expect(show(readCssColor(values(name.toUpperCase())))).toBe(expected);
   });
 
   it.each(unreadColorTable)(
     "읽지 않는 값 %j은 invalid라 앞 값을 유지한다(한계)",
     (value, expected) => {
-      expect(show(readCssColor(value))).toBe(expected);
+      expect(show(readCssColor(values(value)))).toBe(expected);
     },
   );
 
-  it("닫히지 않은 함수는 invalid다(Chromium은 입력 끝에서 닫는다, 한계)", () => {
-    expect(show(readCssColor("rgb(255,0,0"))).toBe("invalid");
+  it("닫히지 않은 함수는 입력 끝에서 닫는다(Chromium과 같다)", () => {
+    expect(show(readCssColor(values("rgb(255,0,0")))).toBe("#FF0000");
+    expect(show(readCssColor(values("rgb(255 0 0 / 50%")))).toBe("clear");
   });
 });
 
 describe("readBackgroundShorthand", () => {
   it.each(backgroundTable)("background:%j은 %s로 읽는다", (value, expected) => {
-    expect(show(readBackgroundShorthand(value))).toBe(expected);
+    expect(show(readBackgroundShorthand(values(value)))).toBe(expected);
   });
 
   // 위치 문법의 순서·개수는 검증하지 않는다. Chromium은 아래를 모두 무효로
@@ -617,11 +623,14 @@ describe("readBackgroundShorthand", () => {
     "/ red",
     "red / ",
   ])("순서가 틀린 %j도 색으로 읽는다(한계)", (value) => {
-    expect(show(readBackgroundShorthand(value))).toBe("#FF0000");
+    expect(show(readBackgroundShorthand(values(value)))).toBe("#FF0000");
   });
 
-  it("닫히지 않은 url()은 invalid다(Chromium은 clear, 한계)", () => {
-    expect(show(readBackgroundShorthand("url(x.png"))).toBe("invalid");
+  it("닫히지 않은 url()은 입력 끝에서 닫는다(Chromium과 같다)", () => {
+    expect(show(readBackgroundShorthand(values("url(x.png")))).toBe("clear");
+    expect(show(readBackgroundShorthand(values("red url(x.png")))).toBe(
+      "#FF0000",
+    );
   });
 });
 
@@ -694,7 +703,9 @@ describe("readLegacyAttributeColor", () => {
 
   it("CSS 색 이름과 readCssColor가 같은 색을 낸다", () => {
     for (const name of ["aliceblue", "coral", "darkslategrey", "yellowgreen"]) {
-      expect(readLegacyAttributeColor(name)).toBe(show(readCssColor(name)));
+      expect(readLegacyAttributeColor(name)).toBe(
+        show(readCssColor(values(name))),
+      );
     }
   });
 });

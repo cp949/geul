@@ -11,10 +11,15 @@
 // color-mix()·var()·env()·calc()·상대 색·시스템 색. 모델은 alpha를 담지
 // 않으므로 반투명 색은 합성하지 않고 clear로 둔다.
 //
-// 입력은 주석이 이미 걷힌 값이다(style-declarations.ts가 걷는다). 계측 테스트
-// (G-TST-004)가 큰 문자열에 대한 String 메서드 호출 횟수를 세므로, 긴 입력을
-// 훑는 곳은 글자를 대괄호로 읽고 `+=`로 쌓는다. 큰 문자열에 slice를 반복해
-// 부르지 않는다.
+// 입력은 `CssDeclaration.value`다(css/declarations.ts). 토크나이저와 component
+// value 묶기가 문자열·괄호·이스케이프·주석 규칙을 이미 처리한다. 판독기는 글자를
+// 훑지 않고 component만 읽는다. 공백 토큰은 component 사이에 남아 있어 먼저
+// 걸러 센다. 키워드는 ASCII 대소문자만 같게 본다.
+import type {
+  CssComponentValue,
+  CssFunction,
+} from "../css/component-values.js";
+import { asciiLowerCase } from "../css/tokens.js";
 
 export type CssColorResult =
   { kind: "color"; color: string } | { kind: "clear" } | { kind: "invalid" };
@@ -184,25 +189,12 @@ const GLOBAL_KEYWORDS: ReadonlySet<string> = new Set([
 ]);
 
 // CSS 공백이다. JS `trim()`과 달리 NBSP 등은 공백이 아니다.
-export const isCssSpace = (character: string): boolean =>
+const isCssSpace = (character: string): boolean =>
   character === " " ||
   character === "\t" ||
   character === "\n" ||
   character === "\r" ||
   character === "\f";
-
-// 양끝 CSS 공백만 걷는다. JS `trim()`은 NBSP·VT 등도 걷어 Chromium과
-// 달라진다(Issue #368: `color:`(NBSP)`red`는 색이 아니다).
-const trimCssSpace = (value: string): string => {
-  let start = 0;
-  let end = value.length;
-  while (start < end && isCssSpace(value[start] as string)) start += 1;
-  while (end > start && isCssSpace(value[end - 1] as string)) end -= 1;
-  return start === 0 && end === value.length ? value : value.slice(start, end);
-};
-
-const isDigit = (character: string | undefined): boolean =>
-  character !== undefined && character >= "0" && character <= "9";
 
 const clamp = (value: number, min: number, max: number): number =>
   value < min ? min : value > max ? max : value;
@@ -220,74 +212,39 @@ const colorFromBytes = (red: number, green: number, blue: number) =>
 // 254/255다. 불투명이 아니면 clear다.
 const isOpaque = (alpha: number): boolean => Math.round(alpha * 255) === 255;
 
-export type Numeric = { value: number; unit: string };
+type Numeric = { value: number; unit: string };
 
-// CSS 숫자 토큰 하나를 읽는다. 단위는 `%` 또는 영문 단위(소문자)다. `1.`과
-// `1e+`처럼 토큰이 어긋나면 undefined다. font 줄임 속성(style-declarations.ts)도
-// 이 함수로 크기·굵기 토큰을 읽는다.
-export const readNumeric = (token: string): Numeric | undefined => {
-  const length = token.length;
-  let index = 0;
-  if (token[index] === "+" || token[index] === "-") index += 1;
+// 공백 토큰을 뺀다.
+const withoutWhitespace = (
+  value: readonly CssComponentValue[],
+): CssComponentValue[] => value.filter((node) => node.type !== "whitespace");
 
-  const integerStart = index;
-  while (index < length && isDigit(token[index])) index += 1;
-  let digits = index - integerStart;
-
-  if (token[index] === ".") {
-    const fractionStart = index + 1;
-    let fractionEnd = fractionStart;
-    while (fractionEnd < length && isDigit(token[fractionEnd])) {
-      fractionEnd += 1;
-    }
-    if (fractionEnd === fractionStart) return undefined;
-    digits += fractionEnd - fractionStart;
-    index = fractionEnd;
-  }
-  if (digits === 0) return undefined;
-
-  if (token[index] === "e" || token[index] === "E") {
-    let exponentEnd = index + 1;
-    if (token[exponentEnd] === "+" || token[exponentEnd] === "-") {
-      exponentEnd += 1;
-    }
-    const exponentStart = exponentEnd;
-    while (exponentEnd < length && isDigit(token[exponentEnd])) {
-      exponentEnd += 1;
-    }
-    if (exponentEnd > exponentStart) index = exponentEnd;
-  }
-
-  const value = Number(token.slice(0, index));
-  const unit = token.slice(index);
-  if (unit === "" || unit === "%") return { value, unit };
-  for (let position = 0; position < unit.length; position += 1) {
-    const character = unit[position] as string;
-    const isLetter =
-      (character >= "a" && character <= "z") ||
-      (character >= "A" && character <= "Z");
-    if (!isLetter) return undefined;
-  }
-  return { value, unit: unit.toLowerCase() };
-};
-
-// 색 함수 인자 하나다. `none`은 숫자 0으로 읽는다.
+// 색 함수 인자 하나를 읽는다. 단위는 소문자다. `none`은 숫자 0으로 읽는다.
 const readComponent = (
-  token: string,
+  node: CssComponentValue,
   allowNone: boolean,
 ): Numeric | undefined => {
-  if (allowNone && token.toLowerCase() === "none") {
+  if (node.type === "number") return { value: node.value, unit: "" };
+  if (node.type === "percentage") return { value: node.value, unit: "%" };
+  if (node.type === "dimension") {
+    return { value: node.value, unit: asciiLowerCase(node.unit) };
+  }
+  if (
+    allowNone &&
+    node.type === "ident" &&
+    asciiLowerCase(node.value) === "none"
+  ) {
     return { value: 0, unit: "" };
   }
-  return readNumeric(token);
+  return undefined;
 };
 
 const readAlpha = (
-  token: string | undefined,
+  node: CssComponentValue | undefined,
   allowNone: boolean,
 ): number | undefined => {
-  if (token === undefined) return 1;
-  const component = readComponent(token, allowNone);
+  if (node === undefined) return 1;
+  const component = readComponent(node, allowNone);
   if (component === undefined) return undefined;
   if (component.unit === "") return clamp(component.value, 0, 1);
   if (component.unit === "%") return clamp(component.value / 100, 0, 1);
@@ -295,74 +252,56 @@ const readAlpha = (
 };
 
 type FunctionArguments = {
-  channels: string[];
-  alpha: string | undefined;
+  channels: [CssComponentValue, CssComponentValue, CssComponentValue];
+  alpha: CssComponentValue | undefined;
   // 쉼표 문법이면 true, 공백(`/ alpha`) 문법이면 false다.
   comma: boolean;
 };
 
-const hasSeparatorCharacter = (piece: string): boolean => {
-  for (let index = 0; index < piece.length; index += 1) {
-    const character = piece[index] as string;
-    if (character === "/" || isCssSpace(character)) return true;
-  }
-  return false;
-};
+const isSlash = (node: CssComponentValue | undefined): boolean =>
+  node?.type === "delim" && node.value === "/";
 
-// 괄호 안 인자를 쉼표 문법과 공백 문법으로 나눈다. 둘을 섞으면 undefined다.
-const splitFunctionArguments = (
-  inner: string,
+// 함수 인자를 쉼표 문법과 공백 문법으로 나눈다. 둘을 섞으면 undefined다.
+// 쉼표 문법은 조각마다 component 하나이고 3–4조각이다. 공백 문법은 component
+// 셋, 또는 셋 뒤에 `/`와 alpha다.
+const readFunctionArguments = (
+  value: readonly CssComponentValue[],
 ): FunctionArguments | undefined => {
-  if (inner.indexOf(",") >= 0) {
-    const pieces = inner.split(",");
-    if (pieces.length !== 3 && pieces.length !== 4) return undefined;
-    const trimmed: string[] = [];
-    for (const piece of pieces) {
-      const text = piece.trim();
-      if (text === "" || hasSeparatorCharacter(text)) return undefined;
-      trimmed.push(text);
+  const nodes = withoutWhitespace(value);
+  if (nodes.some((node) => node.type === "comma")) {
+    const pieces: CssComponentValue[] = [];
+    let expectValue = true;
+    for (const node of nodes) {
+      if (node.type === "comma") {
+        if (expectValue) return undefined;
+        expectValue = true;
+      } else {
+        if (!expectValue) return undefined;
+        pieces.push(node);
+        expectValue = false;
+      }
     }
+    if (expectValue) return undefined;
+    if (pieces.length !== 3 && pieces.length !== 4) return undefined;
     return {
       channels: [
-        trimmed[0] as string,
-        trimmed[1] as string,
-        trimmed[2] as string,
+        pieces[0] as CssComponentValue,
+        pieces[1] as CssComponentValue,
+        pieces[2] as CssComponentValue,
       ],
-      alpha: trimmed[3],
+      alpha: pieces[3],
       comma: true,
     };
   }
 
-  // 공백 문법이다. `/`는 공백 없이 붙어도 별도 토큰이다. 토큰이 다섯을
-  // 넘으면 더 읽지 않는다.
-  const tokens: string[] = [];
-  let token = "";
-  for (let index = 0; index < inner.length; index += 1) {
-    const character = inner[index] as string;
-    if (isCssSpace(character) || character === "/") {
-      if (token !== "") {
-        tokens.push(token);
-        token = "";
-      }
-      if (character === "/") tokens.push("/");
-      if (tokens.length > 5) return undefined;
-    } else {
-      token += character;
-    }
-  }
-  if (token !== "") tokens.push(token);
-
-  if (tokens.length === 3) {
+  if (nodes.length === 3 || (nodes.length === 5 && isSlash(nodes[3]))) {
     return {
-      channels: [tokens[0] as string, tokens[1] as string, tokens[2] as string],
-      alpha: undefined,
-      comma: false,
-    };
-  }
-  if (tokens.length === 5 && tokens[3] === "/") {
-    return {
-      channels: [tokens[0] as string, tokens[1] as string, tokens[2] as string],
-      alpha: tokens[4],
+      channels: [
+        nodes[0] as CssComponentValue,
+        nodes[1] as CssComponentValue,
+        nodes[2] as CssComponentValue,
+      ],
+      alpha: nodes[4],
       comma: false,
     };
   }
@@ -466,9 +405,9 @@ const colorFromUnitRgb = (
   );
 
 const readHsl = (parts: FunctionArguments): CssColorResult => {
-  const hue = readComponent(parts.channels[0] as string, !parts.comma);
-  const saturation = readComponent(parts.channels[1] as string, !parts.comma);
-  const lightness = readComponent(parts.channels[2] as string, !parts.comma);
+  const hue = readComponent(parts.channels[0], !parts.comma);
+  const saturation = readComponent(parts.channels[1], !parts.comma);
+  const lightness = readComponent(parts.channels[2], !parts.comma);
   if (
     hue === undefined ||
     saturation === undefined ||
@@ -501,9 +440,9 @@ const readHsl = (parts: FunctionArguments): CssColorResult => {
 // hwb()는 공백 문법만 있다.
 const readHwb = (parts: FunctionArguments): CssColorResult => {
   if (parts.comma) return INVALID;
-  const hue = readComponent(parts.channels[0] as string, true);
-  const whiteness = readComponent(parts.channels[1] as string, true);
-  const blackness = readComponent(parts.channels[2] as string, true);
+  const hue = readComponent(parts.channels[0], true);
+  const whiteness = readComponent(parts.channels[1], true);
+  const blackness = readComponent(parts.channels[2], true);
   if (hue === undefined || whiteness === undefined || blackness === undefined) {
     return INVALID;
   }
@@ -540,9 +479,10 @@ const hexDigitValue = (character: string): number => {
   return -1;
 };
 
-// `#rgb`·`#rgba`·`#rrggbb`·`#rrggbbaa`를 읽는다. 5·7자리는 무효다.
-const readHex = (value: string): CssColorResult => {
-  const digitCount = value.length - 1;
+// `#` 뒤의 hex 자릿수를 읽는다. `rgb`·`rgba`·`rrggbb`·`rrggbbaa`만 받고
+// 5·7자리는 무효다.
+const readHex = (digitsText: string): CssColorResult => {
+  const digitCount = digitsText.length;
   if (
     digitCount !== 3 &&
     digitCount !== 4 &&
@@ -552,8 +492,8 @@ const readHex = (value: string): CssColorResult => {
     return INVALID;
   }
   const digits: number[] = [];
-  for (let index = 1; index < value.length; index += 1) {
-    const digit = hexDigitValue(value[index] as string);
+  for (let index = 0; index < digitsText.length; index += 1) {
+    const digit = hexDigitValue(digitsText[index] as string);
     if (digit < 0) return INVALID;
     digits.push(digit);
   }
@@ -570,9 +510,8 @@ const readHex = (value: string): CssColorResult => {
   return colorFromBytes(byteAt(0), byteAt(1), byteAt(2));
 };
 
-const readColorFunction = (lower: string): CssColorResult => {
-  const open = lower.indexOf("(");
-  const name = lower.slice(0, open);
+const readColorFunction = (node: CssFunction): CssColorResult => {
+  const name = asciiLowerCase(node.name);
   if (
     name !== "rgb" &&
     name !== "rgba" &&
@@ -582,35 +521,49 @@ const readColorFunction = (lower: string): CssColorResult => {
   ) {
     return INVALID;
   }
-  const inner = lower.slice(open + 1, lower.length - 1);
-  // 중첩 함수(calc() 등)는 읽지 않는다.
-  if (inner.indexOf("(") >= 0 || inner.indexOf(")") >= 0) return INVALID;
-  const parts = splitFunctionArguments(inner);
+  // 닫히지 않은 함수는 입력 끝에서 닫은 것으로 읽는다(Chromium과 같다).
+  // 중첩 함수(calc() 등)는 인자가 숫자가 아니라 읽지 않는다.
+  const parts = readFunctionArguments(node.value);
   if (parts === undefined) return INVALID;
   if (name === "rgb" || name === "rgba") return readRgb(parts);
   if (name === "hwb") return readHwb(parts);
   return readHsl(parts);
 };
 
-// 전역 키워드를 뺀 색 값 하나를 읽는다. `background` 줄임 속성의 색 토큰도
-// 이 함수로 읽는다.
-const readColorValue = (value: string): CssColorResult => {
-  if (value === "") return INVALID;
-  if (value[0] === "#") return readHex(value);
+/**
+ * component 하나가 색인지 읽는다. 읽는 것은 ident(이름 색·`transparent`·
+ * `currentcolor`), hash(`#rgb` 계열), 색 함수다. 전역 키워드는 색이 아니라서
+ * invalid다. `background` 줄임 속성과 `text-decoration`의 색 토큰도 이 함수로
+ * 읽는다.
+ */
+export const readColorComponent = (node: CssComponentValue): CssColorResult => {
+  if (node.type === "hash") return readHex(node.value);
+  if (node.type === "function") return readColorFunction(node);
+  if (node.type !== "ident") return INVALID;
 
-  const lower = value.toLowerCase();
+  const lower = asciiLowerCase(node.value);
   if (lower === "transparent" || lower === "currentcolor") return CLEAR;
   const named = NAMED_COLORS.get(lower);
-  if (named !== undefined) return { kind: "color", color: named };
-  if (lower.endsWith(")")) return readColorFunction(lower);
-  return INVALID;
+  return named === undefined ? INVALID : { kind: "color", color: named };
 };
 
-// `color`·`background-color` 값 하나를 읽는다. 앞뒤 CSS 공백은 걷는다.
-export const readCssColor = (value: string): CssColorResult => {
-  const trimmed = trimCssSpace(value);
-  if (GLOBAL_KEYWORDS.has(trimmed.toLowerCase())) return CLEAR;
-  return readColorValue(trimmed);
+/**
+ * `color`·`background-color` 값(component value 목록)을 읽는다. 값은 component
+ * 하나여야 한다.
+ */
+export const readCssColor = (
+  value: readonly CssComponentValue[],
+): CssColorResult => {
+  const nodes = withoutWhitespace(value);
+  const node = nodes[0];
+  if (nodes.length !== 1 || node === undefined) return INVALID;
+  if (
+    node.type === "ident" &&
+    GLOBAL_KEYWORDS.has(asciiLowerCase(node.value))
+  ) {
+    return CLEAR;
+  }
+  return readColorComponent(node);
 };
 
 // 옛 HTML 색 속성(`<font color>`)의 값을 읽는다(Issue #334). 읽는 값은 CSS 색
@@ -633,7 +586,7 @@ export const readLegacyAttributeColor = (value: string): string | undefined => {
   const digitCount = trimmed.length - (hasHash ? 1 : 0);
   if (digitCount === 3 && !hasHash) return undefined;
   if (digitCount !== 3 && digitCount !== 6) return undefined;
-  const result = readHex(hasHash ? trimmed : `#${trimmed}`);
+  const result = readHex(hasHash ? trimmed.slice(1) : trimmed);
   return result.kind === "color" ? result.color : undefined;
 };
 
@@ -718,67 +671,12 @@ const LENGTH_UNITS: ReadonlySet<string> = new Set([
   "cqmax",
 ]);
 
-// 최상위 쉼표로 레이어를, 최상위 공백으로 토큰을 나눈다. `/`는 별도 토큰이다.
-// 괄호·따옴표 안은 나누지 않고, 함수가 닫히면 토큰이 끝난다
-// (`url(x.png)red`는 토큰 둘).
-const splitBackgroundLayers = (value: string): string[][] => {
-  const layers: string[][] = [[]];
-  let token = "";
-  let depth = 0;
-  let quote = "";
-
-  const flush = (): void => {
-    if (token === "") return;
-    (layers[layers.length - 1] as string[]).push(token);
-    token = "";
-  };
-
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index] as string;
-    if (quote !== "") {
-      token += character;
-      if (character === "\\") {
-        index += 1;
-        token += value[index] ?? "";
-      } else if (character === quote) {
-        quote = "";
-      }
-    } else if (character === '"' || character === "'") {
-      token += character;
-      quote = character;
-    } else if (character === "(") {
-      token += character;
-      depth += 1;
-    } else if (character === ")") {
-      token += character;
-      if (depth > 0) {
-        depth -= 1;
-        if (depth === 0) flush();
-      }
-    } else if (depth > 0) {
-      token += character;
-    } else if (isCssSpace(character)) {
-      flush();
-    } else if (character === ",") {
-      flush();
-      layers.push([]);
-    } else if (character === "/") {
-      flush();
-      (layers[layers.length - 1] as string[]).push("/");
-    } else {
-      token += character;
-    }
-  }
-  flush();
-  return layers;
-};
-
-// 이미지 토큰이다: url()·image-set()·*-gradient(). 인자는 검증하지 않는다.
-const isImageToken = (lower: string): boolean => {
-  if (!lower.endsWith(")")) return false;
-  const open = lower.indexOf("(");
-  if (open <= 0) return false;
-  const name = lower.slice(0, open);
+// 이미지 component다: url 토큰, url()·image-set()·*-gradient() 함수. 인자는
+// 검증하지 않는다. 그래디언트는 이름이 `-gradient`로 끝나는지만 본다(한계).
+const isImageComponent = (node: CssComponentValue): boolean => {
+  if (node.type === "url") return true;
+  if (node.type !== "function") return false;
+  const name = asciiLowerCase(node.name);
   return (
     name === "url" ||
     name === "image-set" ||
@@ -791,50 +689,72 @@ const isImageToken = (lower: string): boolean => {
 export const isCssLengthUnit = (unit: string): boolean =>
   LENGTH_UNITS.has(unit);
 
-const isPositionToken = (token: string): boolean => {
-  const numeric = readNumeric(token);
-  if (numeric === undefined) return false;
-  if (numeric.unit === "") return numeric.value === 0;
-  return numeric.unit === "%" || LENGTH_UNITS.has(numeric.unit);
+// 위치 component다: 0, 백분율, 길이. 단위 없는 숫자는 0만 받는다.
+const isPositionComponent = (node: CssComponentValue): boolean => {
+  if (node.type === "number") return node.value === 0;
+  if (node.type === "percentage") return true;
+  return (
+    node.type === "dimension" && LENGTH_UNITS.has(asciiLowerCase(node.unit))
+  );
 };
 
-// `background` 줄임 속성 값을 읽는다. 허용 목록 밖 토큰이 있거나 색 토큰이
-// 둘이면 선언 전체가 invalid다. 색 토큰이 없는 유효한 값(`url(x.png)`,
-// `none`)은 이 요소의 배경색을 초기화하므로 clear다. 위치 토큰의 순서와
-// 개수는 검증하지 않는다(한계).
-export const readBackgroundShorthand = (value: string): CssColorResult => {
-  const trimmed = trimCssSpace(value);
-  if (GLOBAL_KEYWORDS.has(trimmed.toLowerCase())) return CLEAR;
-
-  const layers = splitBackgroundLayers(trimmed);
-  let color: CssColorResult | undefined;
-
-  for (let layerIndex = 0; layerIndex < layers.length; layerIndex += 1) {
-    const tokens = layers[layerIndex] as string[];
-    if (tokens.length === 0) return INVALID;
-    let afterSlash = false;
-    let layerColor: CssColorResult | undefined;
-
-    for (const token of tokens) {
-      if (token === "/") {
-        afterSlash = true;
-        continue;
-      }
-      const lower = token.toLowerCase();
-      if (BACKGROUND_KEYWORDS.has(lower)) continue;
-      if (afterSlash && BACKGROUND_SIZE_KEYWORDS.has(lower)) continue;
-      if (isImageToken(lower)) continue;
-      if (isPositionToken(token)) continue;
-
-      const tokenColor = readColorValue(token);
-      if (tokenColor.kind === "invalid") return INVALID;
-      // 색 토큰은 레이어당 하나이고 마지막 레이어에만 둔다.
-      if (layerColor !== undefined) return INVALID;
-      if (layerIndex !== layers.length - 1) return INVALID;
-      layerColor = tokenColor;
-    }
-    color = layerColor ?? color;
+// `background` 줄임 속성 값(component value 목록)을 읽는다. 허용 목록 밖
+// component가 있거나 색 component가 둘이면 선언 전체가 invalid다. 색
+// component가 없는 유효한 값(`url(x.png)`, `none`)은 이 요소의 배경색을
+// 초기화하므로 clear다. 최상위 쉼표가 레이어를 나눈다. 위치 component의
+// 순서와 개수는 검증하지 않는다(한계).
+export const readBackgroundShorthand = (
+  value: readonly CssComponentValue[],
+): CssColorResult => {
+  const nodes = withoutWhitespace(value);
+  const only = nodes[0];
+  if (
+    nodes.length === 1 &&
+    only?.type === "ident" &&
+    GLOBAL_KEYWORDS.has(asciiLowerCase(only.value))
+  ) {
+    return CLEAR;
   }
 
-  return color ?? CLEAR;
+  let hasComponent = false;
+  let afterSlash = false;
+  let layerColor: CssColorResult | undefined;
+
+  for (const node of nodes) {
+    if (node.type === "comma") {
+      // 색 component는 마지막 레이어에만 둔다. 빈 레이어는 무효다.
+      if (!hasComponent || layerColor !== undefined) return INVALID;
+      hasComponent = false;
+      afterSlash = false;
+      continue;
+    }
+    hasComponent = true;
+    if (isSlash(node)) {
+      afterSlash = true;
+      continue;
+    }
+    if (isImageComponent(node)) continue;
+    if (node.type === "ident") {
+      const lower = asciiLowerCase(node.value);
+      if (BACKGROUND_KEYWORDS.has(lower)) continue;
+      if (afterSlash && BACKGROUND_SIZE_KEYWORDS.has(lower)) continue;
+    }
+    if (
+      node.type === "number" ||
+      node.type === "percentage" ||
+      node.type === "dimension"
+    ) {
+      if (isPositionComponent(node)) continue;
+      return INVALID;
+    }
+
+    const tokenColor = readColorComponent(node);
+    // 색 component는 레이어당 하나다.
+    if (tokenColor.kind === "invalid" || layerColor !== undefined) {
+      return INVALID;
+    }
+    layerColor = tokenColor;
+  }
+
+  return hasComponent ? (layerColor ?? CLEAR) : INVALID;
 };
