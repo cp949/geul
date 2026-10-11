@@ -1159,6 +1159,60 @@ const hasSubstitutionFunction = (value: string): boolean => {
   return false;
 };
 
+// 이름 글자 run 바로 앞에 오면 `--f(`를 호출로 읽지 않게 하는 ASCII 글자다.
+// Chromium은 이 글자들 뒤의 `--f(`가 든 값을 무효로 버린다(실측). `!`·`#`·`@`
+// 는 단독 토큰이고, `{`·`}`·`]`는 블록 글자이고, 따옴표는 문자열 시작이다.
+const CALL_BLOCKING_PREFIX: ReadonlySet<string> = new Set([
+  "!",
+  "#",
+  "@",
+  "{",
+  "}",
+  "]",
+  '"',
+  "'",
+]);
+
+// run 바로 앞 글자 `previous`가 호출을 막는지 본다. 비ASCII 글자는 Chromium이
+// 이름 글자로 읽어 `é--f`가 한 이름이 되므로 막는다.
+const blocksCustomFunctionCall = (previous: string | undefined): boolean =>
+  previous !== undefined &&
+  (CALL_BLOCKING_PREFIX.has(previous) || previous >= "\u0080");
+
+// 값 어디에든(괄호 안 중첩 포함) 사용자 정의 함수 호출이 있는지 값마다 한 번
+// 훑는다. 호출은 이름 글자 run이 `--`로 시작하고 길이가 3 이상이며 바로 뒤가
+// `(`인 경우다. `--f(`·`---(`는 호출이고 `--(`(run 길이 2)·`--f (`(공백)·
+// `foo--f(`(run이 `--`로 시작하지 않음)는 아니다. run 바로 앞 글자가
+// `CALL_BLOCKING_PREFIX`이거나 비ASCII 글자이면 호출이 아니다(`#--f(`·`é--f(`).
+// 이름 글자가 ASCII뿐이라 그런 글자 뒤에서 run이 새로 시작해 앞 글자를 따로
+// 봐야 한다. `@function` 정의는 스타일시트에만 둘 수 있고 `importHtml`은
+// `<style>`을 읽지 않아, 클립보드 입력의 호출은 늘 미정의다. 그래서 Chromium
+// 결과가 늘 꺼짐이다. 글자를 대괄호로 읽는다. 한계: 이름은 ASCII 글자만 읽는다.
+// 비ASCII·`\` 이스케이프 이름(`--é(`)은 호출로 보지 않는다. 따옴표 안 낱말
+// (`"a --f(1px)"`), `{}` 블록 안, `url(`·`env(`·`attr(` 인자의 호출은 구분하지
+// 않고 호출로 본다. Chromium은 그 값을 무효로 버린다.
+const hasCustomFunctionCall = (value: string): boolean => {
+  let index = 0;
+  while (index < value.length) {
+    if (!isNameCharacter(value[index] as string)) {
+      index += 1;
+      continue;
+    }
+    const runEnd = nameRunEnd(value, index);
+    if (
+      runEnd - index >= 3 &&
+      value[index] === "-" &&
+      value[index + 1] === "-" &&
+      value[runEnd] === "(" &&
+      !blocksCustomFunctionCall(value[index - 1])
+    ) {
+      return true;
+    }
+    index = runEnd;
+  }
+  return false;
+};
+
 // text-decoration 줄임 또는 text-decoration-line 값 하나(소문자)를 읽는다.
 // 무효면 undefined다. 문법(Chromium 실측)은 이렇다.
 // - 전역 키워드는 값 하나로만 쓴다.
@@ -1175,6 +1229,8 @@ const hasSubstitutionFunction = (value: string): boolean => {
 //   열린 토큰만 함수 토큰이고, `)` 뒤에 글자가 남은 토큰은 무효다.
 // - 깊이 0의 바깥 `)`가 값 어디에 있든 무효다. 치환 함수가 있어도 꺼짐이
 //   아니라 무효다(Chromium 실측). 값 맨 앞에서 한 번 훑어 거른다.
+// - 사용자 정의 함수 호출(`--f(…)`)이 값 어디에 있든 꺼짐이다. 바깥 `)` 검사
+//   다음, 토큰 분류 앞에서 판정한다. 호출 앞뒤 토큰의 유효 여부를 보지 않는다.
 // - 치환 함수(var·env·attr·if) 토큰은 닫혔을 때만 치환 토큰이다. 칸을 차지하지
 //   않고 건너뛴다. line 낱말 연속을 끊는다. Chromium은 값 어디에든 인자가
 //   정상인 치환 함수가 있으면 선언을 버리지 않고 항상 앞 선언을 덮는다.
@@ -1182,7 +1238,8 @@ const hasSubstitutionFunction = (value: string): boolean => {
 //   치환 결과를 알 수 없으므로 무효를 만났을 때 값에 치환 함수가 있으면
 //   장식을 끈다. 끝까지 유효해도 line 낱말도 단독 낱말도 못 봤다면 line 값을
 //   알 수 없어 선언을 버린다.
-// 무효를 찾는 즉시 끝낸다. 치환 함수 탐색은 무효를 찾았을 때 값마다 한 번이다.
+// 무효를 찾는 즉시 끝낸다. 치환 함수 탐색은 무효를 찾았을 때 값마다 한 번이고
+// 사용자 정의 함수 호출 탐색은 값 앞에서 값마다 한 번이다.
 // 토큰마다 일정한 일만 하므로 값 길이에 선형이다.
 const readDecoration = (
   value: string,
@@ -1201,6 +1258,7 @@ const readDecoration = (
   let index = skipCssSpace(value, 0);
 
   if (hasStrayCloseParen(value)) return undefined;
+  if (hasCustomFunctionCall(value)) return NO_LINE_MARKS;
 
   // 무효를 만났을 때의 결과다. 치환 함수가 있으면 치환 결과를 알 수 없어 꺼짐이다.
   const invalid = (): LineMarks | undefined =>

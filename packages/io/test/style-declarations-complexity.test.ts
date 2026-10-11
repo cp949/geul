@@ -37,6 +37,8 @@
  *   `parseInlineStyleMarks` 시간 상한 테스트만 덮는다(Issue #363).
  * - 괄호 짝 판정(`pairParens`)과 바깥 `)` 사전 검사(`hasStrayCloseParen`)의
  *   대괄호 읽기도 같다(Issue #366).
+ * - 사용자 정의 함수 호출 탐색(`hasCustomFunctionCall`)의 대괄호 읽기도
+ *   같다(Issue #367).
  * `parseStyleDeclarations`의 옛 정규식 구현은 `:`가 없는 알파벳 run에서 이차
  * 시간이었지만 `matchAll` 호출 1회라 이 계측의 증가율이 2로 보였다. 그래서
  * `parseStyleDeclarations`에는 이 작업량 테스트에 더해 시간 상한 테스트를 하나
@@ -228,6 +230,31 @@ const inputShapes: Array<[string, (size: number) => string]> = [
     "text-decoration 닫힌 뒤 잉여 글자가 붙은 치환 토큰이 긴 입력",
     (size) => `text-decoration:underline var(--x)${"a".repeat(size * 16)}`,
   ],
+  // 아래는 사용자 정의 함수 호출 탐색(Issue #367)이 만든 입력 모양이다. 탐색
+  // (`hasCustomFunctionCall`)은 글자를 대괄호로 읽어서 이 계측에 보이지 않는다.
+  // run이 아주 많은 두 모양("`--` 이름 run이 아주 많고 호출이 없는 입력",
+  // "호출이 값 맨 끝에 있는 긴 입력")은 이름 글자 run마다 `value.slice`로
+  // 앞부분을 잘라 보는 변이를 잡는다. 호출이 없는 입력은 탐색이 값 끝까지
+  // 가므로 run마다 하는 일이 다 드러난다. run이 하나인 두 모양(`--` 긴 이름
+  // run, `-` 긴 이름 run)은 `slice` 변이를 못 가려낸다. run이 하나라 호출이
+  // 한 번뿐이다. 이름 글자 run 안에서 한 글자씩 다시 시작하는 변이와 값 앞부분을
+  // 다시 읽는 변이는 아래 시간 상한이 잡는다.
+  [
+    "text-decoration `--` 이름 run이 아주 많고 호출이 없는 입력",
+    (size) => `text-decoration:underline ${"--f ".repeat(size)}`,
+  ],
+  [
+    "text-decoration `--`로 시작하는 이름 run 하나가 긴 입력",
+    (size) => `text-decoration:underline --${"a".repeat(size * 16)}`,
+  ],
+  [
+    "text-decoration 호출이 값 맨 끝에 있는 긴 입력",
+    (size) => `text-decoration:underline ${"red ".repeat(size)}--f(1px)`,
+  ],
+  [
+    "text-decoration `-`만 이어지는 이름 run이 긴 입력",
+    (size) => `text-decoration:underline ${"-".repeat(size * 16)}`,
+  ],
   [
     "font-style 긴 각도 토큰 하나인 입력",
     (size) => `font-style:oblique ${"1".repeat(size * 16)}deg`,
@@ -355,6 +382,24 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
   //   5초 제한 초과다.
   // 정상 구현은 단독 실행 테스트 시간 46–55ms다. 상한 1초는 그보다 약 18배
   // 크고 변이보다 작아 둘이 겹치지 않는다.
+  // "호출 없이 `--` 이름 run이 아주 많은 입력" 행은 Issue #367이 더했다. 사용자
+  // 정의 함수 호출 탐색(`hasCustomFunctionCall`)은 글자를 대괄호로 읽어서 위
+  // String 메서드 계측에 보이지 않는다.
+  // 변이로 확인한 RED다(Issue #367, 실측 Node, 2026-10-11, 80,000개).
+  // - 이름 글자 run마다 값 앞부분(`value[0..index)`)을 처음부터 다시 읽는
+  //   변이는 이 행이 26.7초로 잡는다. 위 작업량 모양 "`--` 이름 run이 아주
+  //   많고 호출이 없는 입력"과 "호출이 값 맨 끝에 있는 긴 입력"도 각각 8.3초로
+  //   5초 제한 초과다. 호출이 없는 입력이라야 탐색이 값 끝까지 가서 이 변이가
+  //   드러난다. 다시 읽은 값은 조건에 써야 V8이 읽기를 지우지 못한다.
+  // - 이름 글자 run마다 `value.slice(index, index + 2)`로 앞 두 글자를 보는
+  //   변이는 시간이 아니라 위 작업량 모양이 잡는다. 두 모양의 처리 문자 수
+  //   증가율이 각각 3.9988과 3.9987이다(상한 2). 이 행은 못 잡는다.
+  // - 이름 글자 run 안에서 한 글자씩 다시 시작하는 변이(`index = runEnd` 대신
+  //   `index += 1`)는 "호출 없이 `-` 글자만 이어지는 이름 run 하나의 글자" 행이
+  //   10.8초로 잡는다. 이 변이는 run이 긴 입력에서만 이차이고 run이 하나라
+  //   작업량 모양과 `--f ` 행은 못 잡는다.
+  // 정상 구현은 단독 실행 테스트 시간 32–40ms다. 상한 1초는 그보다 약 25배
+  // 크고 변이보다 작아 둘이 겹치지 않는다.
   it.each([
     [
       "괄호 안 세미콜론",
@@ -379,6 +424,14 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
     [
       "치환 토큰이 아주 많고 끝이 잉여 글자",
       `text-decoration:underline ${"var(--x) ".repeat(80_000)}var(--y)foo`,
+    ],
+    [
+      "호출 없이 `--` 이름 run이 아주 많은 입력",
+      `text-decoration:underline ${"--f ".repeat(80_000)}`,
+    ],
+    [
+      "호출 없이 `-` 글자만 이어지는 이름 run 하나의 글자",
+      `text-decoration:underline ${"-".repeat(80_000)}`,
     ],
   ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
     const started = performance.now();
