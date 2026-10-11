@@ -1361,3 +1361,80 @@ describe("닫히지 않은 따옴표와 개행 (Issue #362)", () => {
     expect(parseInlineStyleMarks(style).fontWeight).toBeUndefined();
   });
 });
+
+/*
+ * 아래는 Issue #365가 더한 규칙이다. 분할기는 `(`·`[`·`{` 블록을 종류별
+ * 스택으로 센다. 짝 맞는 닫는 글자만 블록을 닫는다. 블록 안 짝 안 맞는 닫는
+ * 글자는 블록을 닫지 않는다. 스택이 비었을 때만 `;`가 선언을 끝낸다. 블록
+ * 안에서도 따옴표·주석·이스케이프는 그대로 읽는다. 기대값은 Chromium
+ * 153.0.8010.12 실측이다(부모 `white-space:pre-line` 안 span `setAttribute`,
+ * getComputedStyle).
+ */
+describe("`[`·`{` 블록 (Issue #365)", () => {
+  it.each([
+    "font-family:[;font-weight:bold",
+    "font-family:'a\n[;font-weight:bold",
+    "font-family:'a\n{;font-weight:bold",
+  ])("parseInlineStyleMarks는 %j를 굵게 읽지 않는다", (style) => {
+    expect(parseInlineStyleMarks(style).fontWeight).toBeUndefined();
+  });
+
+  it("parseStyleDeclarations는 개행 뒤 [ 블록 안 배경색을 읽지 않는다", () => {
+    expect(
+      parseStyleDeclarations("font-family:'a\n[;background-color:yellow"),
+    ).toEqual({});
+  });
+
+  it("parseWhiteSpaceMode는 개행 뒤 [ 블록 안 white-space를 읽지 않는다", () => {
+    expect(
+      parseWhiteSpaceMode("font-family:'a\n[;white-space:pre"),
+    ).toBeUndefined();
+  });
+
+  it.each(["[)", "{)", "[}", "{]", "([)]", "[(])", "{(})", "(]"])(
+    "짝 안 맞는 닫는 글자는 %s의 블록을 닫지 않아 뒤 굵게를 삼킨다",
+    (block) => {
+      expect(
+        parseInlineStyleMarks(`font-family:${block};font-weight:bold`)
+          .fontWeight,
+      ).toBeUndefined();
+    },
+  );
+
+  it.each(["[)]", "([])", "[]", "{}"])(
+    "짝 맞는 닫는 글자가 %s의 블록을 닫아 뒤 굵게를 읽는다",
+    (block) => {
+      expect(
+        parseInlineStyleMarks(`font-family:${block};font-weight:bold`)
+          .fontWeight,
+      ).toBe("bold");
+    },
+  );
+
+  it.each([
+    ["font-family:[']';font-weight:bold", undefined],
+    ["font-family:[/*]*/;font-weight:bold", undefined],
+    ["font-family:\\[;font-weight:bold", "bold"],
+    ["font-family:[\\];font-weight:bold", undefined],
+    ["font-family:['a\n];font-weight:bold", "bold"],
+    ["font-family:[url(;)];font-weight:bold", "bold"],
+    ["font-family:a];font-weight:bold", "bold"],
+    ["font-family:a};font-weight:bold", "bold"],
+    ["};font-weight:bold", "bold"],
+  ] as const)(
+    "블록 안 따옴표·주석·이스케이프와 깊이 0: %j의 굵기는 %s다",
+    (style, expected) => {
+      expect(parseInlineStyleMarks(style).fontWeight).toBe(expected);
+    },
+  );
+
+  // 값 판독기는 고치지 않았다. 블록 글자가 든 값은 판독기가 이미 거절한다.
+  it("값 안 [ 블록은 그 선언만 무효로 만들고 다음 선언을 읽는다", () => {
+    const marks = parseInlineStyleMarks(
+      "font-weight:bold[;];font-style:italic",
+    );
+
+    expect(marks.fontWeight).toBeUndefined();
+    expect(marks.fontStyle).toBe("italic");
+  });
+});

@@ -14,13 +14,13 @@
  * 크기 N과 2N 입력의 작업량 증가율이 2 이하여야 한다. 입력 모양은 선언이 아주
  * 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력, 공백·토큰이 긴
  * 입력과 font 줄임, 선언 분리(닫히지 않은 따옴표·괄호, 개행이 끝내는
- * 따옴표), text-decoration·font-style 값 판정(토큰이 많거나 긴 값)이 만드는
- * 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
+ * 따옴표, `[`·`{` 블록 스택), text-decoration·font-style 값 판정(토큰이
+ * 많거나 긴 값)이 만드는 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
  * `parseInlineStyleMarks`와 `parseWhiteSpaceMode`(Issue #361)는
  * `parseStyleDeclarations`와 같은 흐름이다.
- * `splitDeclarations`가 `;`로 한 번 자르고 따옴표·괄호·주석 상태를 조각 단위로
- * 이어 붙인다. `readDeclaration`이 선언마다 글자를 한 번 훑고, 값 판정은 토큰마다
+ * `splitDeclarations`가 `;`로 한 번 자르고 따옴표·블록 스택·주석 상태를 조각
+ * 단위로 이어 붙인다. `readDeclaration`이 선언마다 글자를 한 번 훑고, 값 판정은 토큰마다
  * 일정한 일만 하며 무효를 찾는 즉시 끝낸다. 정규식을 쓰지 않는다. 공백 run
  * 입력에서 이차 시간이 되는 `\s*!important\s*$` 형태를 피했다.
  *
@@ -113,6 +113,21 @@ const inputShapes: Array<[string, (size: number) => string]> = [
   [
     "닫히지 않은 따옴표 뒤 이스케이프된 개행이 아주 많은 입력",
     (size) => `font-weight:bold;font-family:'${"\\\n;\\\r\n;".repeat(size)}`,
+  ],
+  // 아래는 종류별 블록 스택(Issue #365)이 만든 입력 모양이다. 분할기는
+  // 닫는 글자를 스택 맨 위와만 비교한다. 스택은 배열이라 이 계측에 보이지
+  // 않는다. 스택 재순회 변이는 아래 시간 상한의 깊은 `[` 스택 행이 잡는다.
+  [
+    "닫히지 않은 `[`·`{`가 깊게 쌓이는 입력",
+    (size) => `font-style:italic;font-family:${"[;{;".repeat(size)}`,
+  ],
+  [
+    "`[` 블록 안 세미콜론이 많은 입력",
+    (size) => `font-weight:bold;font-family:[${";".repeat(size)}]`,
+  ],
+  [
+    "`[` 블록 안 짝 안 맞는 닫는 괄호가 많은 입력",
+    (size) => `font-weight:bold;font-family:[${")};".repeat(size)}`,
   ],
   [
     "text-decoration 토큰이 아주 많은 입력",
@@ -246,6 +261,11 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
   // 초과로 잡는다. 상한 1초는 선형 구현의 최대보다 약 100배 크고 변이보다
   // 작아 둘이 겹치지 않는다. 읽은 값을 쓰지 않는 변이는 V8이 읽기를 지울 수
   // 있어 괄호 안 세미콜론 모양에서는 통과한다.
+  // 변이로 확인한 RED다(Issue #365, 실측 Node, 2026-10-11, 80,000개).
+  // 짝 안 맞는 닫는 글자마다 `state.closers.lastIndexOf(character)`로 스택
+  // 전체를 훑는 변이는 깊은 `[` 스택 행이 28.0초로 잡는다. 정상 구현은 단독
+  // 실행 테스트 시간 19ms다. 상한 1초는 그보다 약 50배 크고 변이보다 작아
+  // 둘이 겹치지 않는다. 위 작업량 모양은 이 변이를 잡지 못한다.
   it.each([
     [
       "괄호 안 세미콜론",
@@ -254,6 +274,10 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
     [
       "닫히지 않은 괄호와 따옴표",
       `text-decoration:underline;font-family:url("${"a;(".repeat(80_000)}`,
+    ],
+    [
+      "깊은 `[` 스택 뒤 짝 안 맞는 닫는 괄호",
+      `font-weight:bold;font-family:${"[".repeat(80_000)}${");".repeat(80_000)}`,
     ],
   ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
     const started = performance.now();
@@ -442,6 +466,18 @@ const declarationInputShapes: Array<[string, (size: number) => string]> = [
     (size) => `color:red;background:'${"\\\n;\\\r\n;".repeat(size)}`,
   ],
   [
+    "닫히지 않은 `[`·`{`가 깊게 쌓이는 입력",
+    (size) => `color:red;background:${"[;{;".repeat(size)}`,
+  ],
+  [
+    "`[` 블록 안 세미콜론이 많은 입력",
+    (size) => `color:red;background:[${";".repeat(size)}] blue`,
+  ],
+  [
+    "`[` 블록 안 짝 안 맞는 닫는 괄호가 많은 입력",
+    (size) => `color:red;background:[${")};".repeat(size)}`,
+  ],
+  [
     "선언이 많고 !important가 반복된 입력",
     (size) => `color:red${" !important".repeat(size)};`.repeat(2),
   ],
@@ -505,11 +541,18 @@ describe("parseStyleDeclarations의 선형 시간", () => {
   // 닫히지 않은 괄호·따옴표 3.9–30.8초다(변이 세기에 따라 다르다). 선형
   // 구현은 33개 병적 모양 최대 68ms다. 상한 1초는 이 최대보다 약 15배 크고
   // 가장 약한 변이보다 작아, 둘이 겹치지 않는다.
+  // 깊은 `[` 스택 행은 Issue #365가 더했다. 짝 안 맞는 닫는 글자마다 스택
+  // 전체를 훑는 변이는 이 행이 28.0–28.1초로 잡는다(Node, 2026-10-11). 정상 구현은
+  // 단독 실행 테스트 시간 24–27ms다.
   it.each([
     ["괄호 안 세미콜론", `background:url(${";".repeat(80_000)}) red`],
     [
       "닫히지 않은 괄호와 따옴표",
       `color:red;background:url("${"a;(".repeat(80_000)}`,
+    ],
+    [
+      "깊은 `[` 스택 뒤 짝 안 맞는 닫는 괄호",
+      `color:red;background:${"[".repeat(80_000)}${");".repeat(80_000)}`,
     ],
   ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
     const started = performance.now();
@@ -547,6 +590,18 @@ const whiteSpaceInputShapes: Array<[string, (size: number) => string]> = [
   [
     "닫히지 않은 따옴표 뒤 이스케이프된 개행이 아주 많은 입력",
     (size) => `white-space:pre;font-family:'${"\\\n;\\\r\n;".repeat(size)}`,
+  ],
+  [
+    "닫히지 않은 `[`·`{`가 깊게 쌓이는 입력",
+    (size) => `white-space:pre;font-family:${"[;{;".repeat(size)}`,
+  ],
+  [
+    "`[` 블록 안 세미콜론이 많은 입력",
+    (size) => `white-space:pre;font-family:[${";".repeat(size)}]`,
+  ],
+  [
+    "`[` 블록 안 짝 안 맞는 닫는 괄호가 많은 입력",
+    (size) => `white-space:pre;font-family:[${")};".repeat(size)}`,
   ],
   [
     "!important 선언이 아주 많은 입력",
@@ -589,9 +644,19 @@ describe("parseWhiteSpaceMode의 선형 시간", () => {
   // 이어지는 입력"은 같은 변이를 5초 제한 초과로 잡는다(끝나기까지 127초).
   // 선형 구현은 단독 실행 테스트 시간 11–16ms다. 상한 1초는 그보다 약 60배
   // 크고 변이보다 작아 둘이 겹치지 않는다.
-  it("닫히지 않은 괄호와 따옴표 80,000개를 1초 안에 읽는다", () => {
-    const style = `white-space:pre;font-family:url("${"a;(".repeat(80_000)}`;
-
+  // 깊은 `[` 스택 행은 Issue #365가 더했다. 짝 안 맞는 닫는 글자마다 스택
+  // 전체를 훑는 변이는 이 행이 27.9–28.1초로 잡는다(Node, 2026-10-11). 정상
+  // 구현은 단독 실행 테스트 시간 10–12ms다.
+  it.each([
+    [
+      "닫히지 않은 괄호와 따옴표",
+      `white-space:pre;font-family:url("${"a;(".repeat(80_000)}`,
+    ],
+    [
+      "깊은 `[` 스택 뒤 짝 안 맞는 닫는 괄호",
+      `white-space:pre;font-family:${"[".repeat(80_000)}${");".repeat(80_000)}`,
+    ],
+  ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
     const started = performance.now();
     const mode = parseWhiteSpaceMode(style);
     const elapsed = performance.now() - started;

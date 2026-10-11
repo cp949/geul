@@ -92,26 +92,35 @@ const readDeclaration = (
   return undefined;
 };
 
-// `;`로 선언을 자르고 `/* */` 주석을 공백 하나로 바꾼다. 괄호 `()`와 따옴표
-// 안의 `;`에서는 자르지 않는다(`url(data:image/png;base64,...)`). 닫히지 않은
-// 괄호는 입력 끝까지 한 선언이고, 닫히지 않은 주석은 끝까지 주석이다.
+// `;`로 선언을 자르고 `/* */` 주석을 공백 하나로 바꾼다. 블록과 따옴표 안의
+// `;`에서는 자르지 않는다(`url(data:image/png;base64,...)`). 닫히지 않은
+// 블록은 입력 끝까지 한 선언이고, 닫히지 않은 주석은 끝까지 주석이다.
+// 블록은 CSS simple block 규칙을 따른다(Issue #365).
+// - `(`·`[`·`{`가 블록을 연다. 기대하는 닫는 글자를 스택에 넣는다.
+// - 스택 맨 위와 짝 맞는 닫는 글자만 블록을 닫는다. `[)`의 `)`는 `[`를 닫지
+//   않고 블록 안 글자로 남는다. 블록 밖 닫는 글자는 무시한다.
+// - 블록 안에서도 따옴표·주석·이스케이프는 그대로 읽는다.
+// - 스택이 비었을 때만 `;`가 선언을 끝낸다.
+// - 한계: 따옴표 없는 `url(` 안의 짝 없는 `[`·`{`도 블록으로 센다. Chromium은
+//   url 토큰 하나로 읽어 세지 않는다(#364). `url(a[);font-weight:bold`는
+//   굵게가 아니다.
 // 따옴표는 CSS 문자열 토큰 규칙을 따른다(Issue #362).
 // - 개행(LF·CR·FF)이 닫히지 않은 따옴표를 끝낸다. CRLF는 개행 하나다.
 // - 그렇게 끝난 문자열은 bad다. bad 문자열이 든 선언은 결과에 넣지 않는다.
-//   Chromium처럼 그 선언을 버리고 괄호 밖 다음 `;`부터 다시 읽는다.
+//   Chromium처럼 그 선언을 버리고 블록 밖 다음 `;`부터 다시 읽는다.
 // - 백슬래시 뒤 개행(CRLF 포함)은 문자열을 잇는다.
 // - VT·U+2028 같은 다른 글자는 개행이 아니다. 문자열이 이어진다.
 // - 개행 없이 닫히지 않은 따옴표는 입력 끝까지 한 선언이다.
-// 한계: `[`·`{` 블록은 세지 않아 그 안의 `;`에서도 자른다. Chromium은 자르지
-// 않는다. 개행이 따옴표를 끝낸 뒤의 `[;`도 같다.
 // 계측 테스트(G-TST-004)가 큰 문자열의 String 메서드 호출을 세므로 큰 문자열
 // 메서드는 `split(";")` 한 번만 부른다. 이어 붙일 조각과 주석 치환은 조각
 // 단위로, 글자를 대괄호로 읽고 `+=`로 쌓는다.
 // escaped는 조각이 따옴표 밖 `\\`로 끝났다는 표시다. 다음 `;`가 이스케이프된다.
 // bad는 지금 쌓는 선언에 개행으로 끝난 문자열이 있다는 표시다.
+// closers는 열린 블록이 기대하는 닫는 글자 스택이다. 배열 push·pop과 마지막
+// 원소 비교만 쓴다.
 type ScanState = {
   quote: string;
-  depth: number;
+  closers: string[];
   inComment: boolean;
   escaped: boolean;
   bad: boolean;
@@ -169,8 +178,12 @@ const scanPiece = (piece: string, state: ScanState): string => {
     } else {
       keep(character);
       if (character === '"' || character === "'") state.quote = character;
-      else if (character === "(") state.depth += 1;
-      else if (character === ")" && state.depth > 0) state.depth -= 1;
+      else if (character === "(") state.closers.push(")");
+      else if (character === "[") state.closers.push("]");
+      else if (character === "{") state.closers.push("}");
+      else if (character === state.closers[state.closers.length - 1]) {
+        state.closers.pop();
+      }
     }
   }
 
@@ -181,7 +194,7 @@ const splitDeclarations = (style: string): string[] => {
   const declarations: string[] = [];
   const state: ScanState = {
     quote: "",
-    depth: 0,
+    closers: [],
     inComment: false,
     escaped: false,
     bad: false,
@@ -195,7 +208,7 @@ const splitDeclarations = (style: string): string[] => {
     pending = pending === undefined ? scanned : pending + joiner + scanned;
     if (
       state.quote === "" &&
-      state.depth === 0 &&
+      state.closers.length === 0 &&
       !state.inComment &&
       !state.escaped
     ) {
@@ -1024,7 +1037,7 @@ const applyMark = <T>(
 // style 속성에서 인라인 서식 마크(굵게·기울임·밑줄·취소선) 판정에 쓰는
 // font-weight·font-style·text-decoration(-line)·font 줄임 선언만 읽는다.
 // 색 경로(parseStyleDeclarations)와 같은 흐름이다: `splitDeclarations`로
-// 선언을 자르고(따옴표·괄호 안 `;`, `/* */` 주석, 닫히지 않은 따옴표·괄호),
+// 선언을 자르고(따옴표·블록 안 `;`, `/* */` 주석, 닫히지 않은 따옴표·블록),
 // `readDeclaration`으로 이름과 값을 나누고, `splitImportant`로 중요도를
 // 떼어 칸에 쓴다. 입력 길이에 선형이다.
 // - 칸은 굵기·기울임·장식 셋이다. font 줄임은 굵기·기울임 칸에, text-decoration
@@ -1149,7 +1162,7 @@ const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
 
 // style 속성의 `white-space` 선언을 소스 공백 모드로 읽는다(Issue #361).
 // 색 경로·`parseInlineStyleMarks`와 같은 흐름이다. `splitDeclarations`로
-// 선언을 자르고(따옴표·괄호 안 `;`, `/* */` 주석, 이스케이프된 `;`),
+// 선언을 자르고(따옴표·블록 안 `;`, `/* */` 주석, 이스케이프된 `;`),
 // `readDeclaration`으로 이름과 값을 나누고, `splitImportant`로 중요도를 떼어
 // 칸에 쓴다. 입력 길이에 선형이다.
 // - 칸 규칙은 `applyMark`와 같다. `!important` 선언이 칸을 차지하면 일반
@@ -1164,8 +1177,8 @@ const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
 //   `x white-space:pre`·`_white-space:pre`·`*white-space:pre`를 preserve로
 //   읽는다. `white-space:pre;_white-space:normal`은 normal이다. Chromium은
 //   이런 선언을 버린다.
-// - 따옴표 없는 `url(` 안의 `'`와 `/*`도 따옴표·주석으로 읽는다(#364). 뒤
-//   선언을 삼킨다.
+// - 따옴표 없는 `url(` 안의 `'`와 `/*`도 따옴표·주석으로 읽는다(#364). 짝
+//   없는 `[`·`{`도 블록으로 센다(#365). 뒤 선언을 삼킨다.
 export const parseWhiteSpaceMode = (
   style: string,
 ): WhiteSpaceMode | undefined => {
