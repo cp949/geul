@@ -19,7 +19,7 @@
   - 블록을 품어 벗겨지는 `font`·`mark`의 `color`·`style`은 벗기는 쪽이 벗기는 순간 낸다. 읽지 못하는 `font` `color`는 수집기만 낸다.
 - 블록 강등(`SAFE_BLOCK_DOWNGRADED`)은 수집기가 raw 위치로 판정한다. 루트 인라인과 블록을 품은 `font`·`mark`가 대상이다.
   - sanitize가 벗긴 요소의 자식은 sanitized 트리에서 구분되지 않는다. `<section><b>x</b></section>`와 `<b>x</b>`는 sanitize 뒤 같다. 경고는 각각 `section`, `b`다.
-  - 판정 근거는 변환기와 공유한다. 인라인 태그 목록은 `INLINE_PRESENTATION_TAG_NAMES`, 벗길 `font`·`mark`는 `findBlockBearingColorTags`다.
+  - 판정 근거는 변환기와 공유한다. 인라인 태그 목록은 `INLINE_PRESENTATION_TAG_NAMES`, 벗길 `font`·`mark`는 `findBlockBearingColorTags`다. 변환기가 블록으로 읽는 태그 이름은 `IMPORT_BLOCK_TAG_NAMES`(`block-tag-names.ts`), 미디어 마커 값은 `MEDIA_MARKER_TYPES`(`media-type-marker.ts`)다. 수집기가 이 목록을 따로 적지 않는다.
   - 이 밖의 변환 예측을 수집기에 더하지 않는다.
 - warning 순서는 수집기 warning, 변환기 warning, 속성 감사 warning이다. 벗기기 warning은 변환 전 단계라 변환기 warning 맨 앞이다. 깊이 절단 warning(`DEEP_TREE_FLATTENED`)은 수집기 warning 맨 앞이다.
 - raw HAST의 순서나 내용을 변환기로 넘기지 않는다.
