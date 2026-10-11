@@ -101,9 +101,28 @@ const readDeclaration = (
 //   않고 블록 안 글자로 남는다. 블록 밖 닫는 글자는 무시한다.
 // - 블록 안에서도 따옴표·주석·이스케이프는 그대로 읽는다.
 // - 스택이 비었을 때만 `;`가 선언을 끝낸다.
-// - 한계: 따옴표 없는 `url(` 안의 짝 없는 `[`·`{`도 블록으로 센다. Chromium은
-//   url 토큰 하나로 읽어 세지 않는다(#364). `url(a[);font-weight:bold`는
-//   굵게가 아니다.
+// 따옴표 없는 `url(`은 CSS url 토큰이다(Issue #364). `)`까지 한 덩어리로 읽는다.
+// - 따옴표·주석·블록 밖의 `(` 바로 앞 세 글자가 `url`(대소문자 무시)이고 그 앞
+//   글자가 이름 글자(a–z, A–Z, 0–9, `-`, `_`, 비ASCII)·`#`·`@`가 아니면 url
+//   함수다. `)`를 스택에 넣고 url을 pending으로 둔다.
+// - pending에서 공백은 건너뛴다. 다음 글자가 따옴표면 보통 함수 블록이다.
+//   그 밖의 글자면 토큰이다. 조각이 pending으로 끝나면 다음 글자가 `;`라
+//   토큰이다.
+// - 토큰 안에서는 백슬래시가 다음 글자를 이스케이프한다. 이스케이프되지 않은
+//   `)`만 토큰을 닫는다. `'`·`"`·`/*`·`(`·`[`·`{`·`;`는 보통 글자다.
+//   `url(data:image/png;base64,...)`의 `;`도 여기에 든다.
+// - 닫히지 않은 토큰은 입력 끝까지 한 선언이다.
+// - 한계: 값 판독기는 bad url을 모른다. Chromium은 `url(it's.png)`처럼
+//   따옴표·`(`·가운데 공백이 든 url을 bad-url로 보고 그 선언을 버린다. 판독기는
+//   유효 이미지로 읽는다. `color:red;background-color:blue;background:url(it's.png)`
+//   는 Chromium이 배경 파랑이고 우리는 배경을 지운다. `background:url(it's.png) red`
+//   는 Chromium이 배경 없음이고 우리는 빨강이다.
+// - 앞 글자가 이스케이프된 글자이거나 NUL이면 이름의 일부라 url 함수가
+//   아니다(`a\ url(`·`a\url(`). `\url(` 단독은 url 함수다.
+// - 한계: 이름 안의 이스케이프는 읽지 않는다. `\75rl(it's)`·`u\rl(it's)`는
+//   Chromium이 url로 읽고 우리는 아니다. 헥스 이스케이프 뒤 공백도 이름의
+//   일부로 세지 않는다. `\31 url(it's)`는 Chromium이 url이 아니고 우리는 url로
+//   읽는다.
 // 따옴표는 CSS 문자열 토큰 규칙을 따른다(Issue #362).
 // - 개행(LF·CR·FF)이 닫히지 않은 따옴표를 끝낸다. CRLF는 개행 하나다.
 // - 그렇게 끝난 문자열은 bad다. bad 문자열이 든 선언은 결과에 넣지 않는다.
@@ -118,9 +137,14 @@ const readDeclaration = (
 // bad는 지금 쌓는 선언에 개행으로 끝난 문자열이 있다는 표시다.
 // closers는 열린 블록이 기대하는 닫는 글자 스택이다. 배열 push·pop과 마지막
 // 원소 비교만 쓴다.
+// url은 따옴표 없는 url 토큰의 상태다. "none"은 토큰 밖이다. "pending"은 `url(`
+// 뒤 공백만 지난 상태다. "token"은 `)`를 기다리는 토큰 안이다.
+type UrlState = "none" | "pending" | "token";
+
 type ScanState = {
   quote: string;
   closers: string[];
+  url: UrlState;
   inComment: boolean;
   escaped: boolean;
   bad: boolean;
@@ -129,16 +153,73 @@ type ScanState = {
 const isCssNewline = (character: string | undefined): boolean =>
   character === "\n" || character === "\r" || character === "\f";
 
+// CSS 이름 글자다: a–z, A–Z, 0–9, `-`, `_`, NUL, 비ASCII. url 함수 앞 글자
+// 판정에 쓴다. NUL은 전처리에서 U+FFFD가 되어 이름 글자다.
+const isIdentCharacter = (character: string): boolean =>
+  (character >= "a" && character <= "z") ||
+  (character >= "A" && character <= "Z") ||
+  (character >= "0" && character <= "9") ||
+  character === "-" ||
+  character === "_" ||
+  character === "\u0000" ||
+  character >= "\u0080";
+
+const isUrlLetter = (character: string | undefined, lower: string): boolean =>
+  character === lower || character === lower.toUpperCase();
+
+// piece[index]의 `(`가 url 함수를 여는지 본다. 바로 앞 세 글자가 `url`이고 그
+// 앞 글자가 이름 글자·`#`·`@`가 아니어야 한다. `;`는 이름 글자가 아니라 조각
+// 경계 앞은 보지 않아도 된다.
+// 앞 글자가 이스케이프 쌍의 이스케이프된 글자이면 이름의 일부다(`a\ url(`).
+// 이스케이프된 글자의 위치 escapedAt·prevEscapedAt은 가장 최근 둘이다. u가
+// 이스케이프됐으면(`a\url(`) 백슬래시가 이름의 시작이라 한 칸 더 앞을 본다.
+// `\url(` 단독은 `\u`가 u라서 url 함수다.
+const opensUrlFunction = (
+  piece: string,
+  index: number,
+  escapedAt: number,
+  prevEscapedAt: number,
+): boolean => {
+  if (
+    !isUrlLetter(piece[index - 3], "u") ||
+    !isUrlLetter(piece[index - 2], "r") ||
+    !isUrlLetter(piece[index - 1], "l")
+  ) {
+    return false;
+  }
+  const uEscaped = escapedAt === index - 3;
+  const before = (uEscaped ? index - 4 : index - 3) - 1;
+  if (before === (uEscaped ? prevEscapedAt : escapedAt)) return false;
+  const character = piece[before];
+  return (
+    character === undefined ||
+    !(isIdentCharacter(character) || character === "#" || character === "@")
+  );
+};
+
 const scanPiece = (piece: string, state: ScanState): string => {
   // 주석을 만나기 전에는 조각을 그대로 쓴다. out이 정해지면 글자를 쌓는다.
   let out: string | undefined = state.inComment ? "" : undefined;
+  // 앞 조각이 `\`로 끝났으면 잘려 나간 `;`가 이스케이프된 글자다. 위치 -1이다.
+  // escapedAt·prevEscapedAt은 따옴표 밖 이스케이프 쌍에서 이스케이프된 글자의
+  // 가장 최근 두 위치다. 없으면 -3이다.
+  let escapedAt = state.escaped ? -1 : -3;
+  let prevEscapedAt = -3;
   state.escaped = false;
+  // 조각이 pending으로 끝났으면 잘려 나간 `;`가 첫 글자다. 공백도 따옴표도
+  // 아니라 토큰이 된다.
+  if (state.url === "pending") state.url = "token";
   const keep = (character: string): void => {
     if (out !== undefined) out += character;
   };
 
   for (let index = 0; index < piece.length; index += 1) {
     const character = piece[index] as string;
+    // pending은 따옴표·주석과 함께 있지 않다. 따옴표와 `/`는 토큰이나 none으로
+    // 먼저 바뀐다.
+    if (state.url === "pending" && !isCssSpace(character)) {
+      state.url = character === '"' || character === "'" ? "none" : "token";
+    }
     if (state.inComment) {
       if (character === "*" && piece[index + 1] === "/") {
         state.inComment = false;
@@ -160,6 +241,15 @@ const scanPiece = (piece: string, state: ScanState): string => {
         state.quote = "";
         state.bad = true;
       }
+    } else if (state.url === "token") {
+      keep(character);
+      if (character === "\\") {
+        index += 1;
+        keep(piece[index] ?? "");
+      } else if (character === ")") {
+        state.closers.pop();
+        state.url = "none";
+      }
     } else if (character === "/" && piece[index + 1] === "*") {
       if (out === undefined) {
         out = "";
@@ -174,12 +264,18 @@ const scanPiece = (piece: string, state: ScanState): string => {
       keep(character);
       index += 1;
       keep(piece[index] ?? "");
+      prevEscapedAt = escapedAt;
+      escapedAt = index;
       if (index >= piece.length) state.escaped = true;
     } else {
       keep(character);
       if (character === '"' || character === "'") state.quote = character;
-      else if (character === "(") state.closers.push(")");
-      else if (character === "[") state.closers.push("]");
+      else if (character === "(") {
+        state.closers.push(")");
+        if (opensUrlFunction(piece, index, escapedAt, prevEscapedAt)) {
+          state.url = "pending";
+        }
+      } else if (character === "[") state.closers.push("]");
       else if (character === "{") state.closers.push("}");
       else if (character === state.closers[state.closers.length - 1]) {
         state.closers.pop();
@@ -195,6 +291,7 @@ const splitDeclarations = (style: string): string[] => {
   const state: ScanState = {
     quote: "",
     closers: [],
+    url: "none",
     inComment: false,
     escaped: false,
     bad: false,
@@ -1495,8 +1592,8 @@ const readWhiteSpaceValue = (value: string): WhiteSpaceMode | undefined => {
 //   `x white-space:pre`·`_white-space:pre`·`*white-space:pre`를 preserve로
 //   읽는다. `white-space:pre;_white-space:normal`은 normal이다. Chromium은
 //   이런 선언을 버린다.
-// - 따옴표 없는 `url(` 안의 `'`와 `/*`도 따옴표·주석으로 읽는다(#364). 짝
-//   없는 `[`·`{`도 블록으로 센다(#365). 뒤 선언을 삼킨다.
+// - 따옴표 없는 `url(`은 url 토큰으로 읽는다(#364). 안의 `'`·`/*`·`[`·`{`는
+//   뒤 선언을 삼키지 않는다. 단 bad url 선언을 버리지 않는다(분할기 머리 주석).
 export const parseWhiteSpaceMode = (
   style: string,
 ): WhiteSpaceMode | undefined => {

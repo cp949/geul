@@ -1438,3 +1438,225 @@ describe("`[`·`{` 블록 (Issue #365)", () => {
     expect(marks.fontStyle).toBe("italic");
   });
 });
+
+// 기대값은 Chromium 153.0.8010.12 실측이다(Issue #364). 부모 `white-space:pre-line`
+// 안 span에 `setAttribute("style", …)`로 넣고 계산 스타일을 읽었다.
+// `_works/20261011-15-issue364-unquoted-url-token/probe/probe.mjs`가 하네스다.
+// 따옴표 없는 `url(`은 `)`까지 한 덩어리 url 토큰이다. 안의 따옴표·주석·
+// `(`·`[`·`{`·`;`는 보통 글자다.
+describe("따옴표 없는 `url(` 토큰 (Issue #364)", () => {
+  it.each([
+    "background:url(it's.png);color:red",
+    "background:url(a/*b);color:red",
+  ])("parseStyleDeclarations는 %j의 뒤 color를 읽는다", (style) => {
+    expect(parseStyleDeclarations(style).color).toBe("#FF0000");
+  });
+
+  it("parseInlineStyleMarks는 url 토큰 뒤 굵게를 읽는다", () => {
+    expect(
+      parseInlineStyleMarks("background:url(it's.png);font-weight:bold")
+        .fontWeight,
+    ).toBe("bold");
+  });
+
+  it("parseWhiteSpaceMode는 url 토큰 뒤 white-space를 읽는다", () => {
+    expect(
+      parseWhiteSpaceMode("background:url(it's.png);white-space:pre"),
+    ).toBe("preserve");
+  });
+
+  // #362(개행이 끝낸 따옴표)와 #365(블록 스택)가 url 토큰을 몰라 새로 깨뜨린
+  // 행이다. 수정 전에는 `'s`나 `[`가 뒤 선언을 삼켰다.
+  describe("#362·#365가 새로 깨뜨린 행", () => {
+    it("개행이 끝낸 따옴표 뒤 url 안 따옴표는 뒤 color를 삼키지 않는다", () => {
+      expect(
+        parseStyleDeclarations("font-family:'a\nurl(it's);color:red").color,
+      ).toBe("#FF0000");
+    });
+
+    it("개행이 끝낸 따옴표 뒤 url 안 따옴표는 뒤 굵게를 삼키지 않는다", () => {
+      expect(
+        parseInlineStyleMarks("font-family:'a\nurl(it's);font-weight:bold")
+          .fontWeight,
+      ).toBe("bold");
+    });
+
+    it("개행이 끝낸 따옴표 뒤 url 안 따옴표는 뒤 white-space를 삼키지 않는다", () => {
+      expect(
+        parseWhiteSpaceMode("font-family:'a\nurl(it's);white-space:pre"),
+      ).toBe("preserve");
+    });
+
+    it.each(["[", "{"])(
+      "url 안 짝 없는 %s는 뒤 굵게를 삼키지 않는다",
+      (open) => {
+        expect(
+          parseInlineStyleMarks(`font-family:url(a${open});font-weight:bold`)
+            .fontWeight,
+        ).toBe("bold");
+      },
+    );
+
+    it("url 안 짝 없는 [ 뒤 배경색을 읽는다", () => {
+      expect(
+        parseStyleDeclarations("background:url(a[) red;font-weight:bold")
+          .backgroundColor,
+      ).toBe("#FF0000");
+    });
+
+    it("url 안 짝 없는 [ 뒤 굵게를 읽는다", () => {
+      expect(
+        parseInlineStyleMarks("background:url(a[) red;font-weight:bold")
+          .fontWeight,
+      ).toBe("bold");
+    });
+
+    it("background-image의 url 안 짝 없는 [ 뒤 color를 읽는다", () => {
+      expect(
+        parseStyleDeclarations("background-image:url(x[);color:red").color,
+      ).toBe("#FF0000");
+    });
+  });
+
+  // 기대는 parseStyleDeclarations의 color다. 빨강이면 url 토큰이 `)`에서
+  // 끝나 뒤 선언을 읽은 것이고, 없으면 선언 하나로 묶인 것이다.
+  describe("url 토큰 경계", () => {
+    it.each([
+      [
+        "url( 뒤 공백 뒤 따옴표 없는 글자",
+        "background:url( it's.png);color:red",
+      ],
+      ["대문자 URL(", "background:URL(it's);color:red"],
+      ["혼합 대소문자 Url(", "background:Url(it's);color:red"],
+      [
+        "공백 뒤 따옴표 문자열은 보통 함수 블록",
+        "color:red;background:url( 'a;color:blue' )",
+      ],
+      [
+        "개행 뒤 따옴표 문자열은 보통 함수 블록",
+        'color:red;background:url(\n"a;color:blue")',
+      ],
+      ["토큰 안 개행", "background:url(a\nb'c);color:red"],
+      [
+        "이스케이프된 )는 토큰을 닫지 않는다",
+        "background:url(a\\)b'c);color:red",
+      ],
+      ["토큰 안 (는 블록을 열지 않는다", "background:url(a(b'c);color:red"],
+      ["토큰 안 ;는 선언을 끝내지 않는다", "background:url(a;b'c);color:red"],
+      ["image-set 안 url", "background:image-set(url(it's.png) 1x);color:red"],
+      [
+        "[ 블록 안 url 토큰",
+        "background:[url(a');font-weight:bold]);color:red",
+      ],
+    ])("%s: %j의 color는 빨강이다", (_name, style) => {
+      expect(parseStyleDeclarations(style).color).toBe("#FF0000");
+    });
+
+    it.each([
+      ["myurl(", "background:myurl(it's);color:red"],
+      ["#url(", "background:#url(it's);color:red"],
+      ["@url(", "background:@url(it's);color:red"],
+      ["-url(", "background:-url(it's);color:red"],
+      ["1url(", "background:1url(it's);color:red"],
+    ])(
+      "url 함수가 아닌 %s는 따옴표를 연다: %j의 color는 없다",
+      (_name, style) => {
+        expect(parseStyleDeclarations(style).color).toBeUndefined();
+      },
+    );
+  });
+
+  // 앞 글자가 이스케이프 쌍의 끝이거나 NUL이면 `url`은 앞 ident의 일부다.
+  // Chromium은 url 함수로 읽지 않는다(굵기 400). 착수 커밋(#364 전)에는
+  // 따옴표를 열어 같은 값이었다.
+  describe("url 앞 이스케이프 쌍과 NUL", () => {
+    it.each([
+      ["`\\ ` 뒤", "font-family:a\\ url(b'c);font-weight:bold"],
+      ["`\\)` 뒤", "font-family:\\)url(b'c);font-weight:bold"],
+      ["`\\'` 뒤", "font-family:\\'url(b'c);font-weight:bold"],
+      ["`\\\\` 뒤", "font-family:\\\\url(b'c);font-weight:bold"],
+      ["`\\u`로 이스케이프된 u", "font-family:a\\url(b'c);font-weight:bold"],
+      [
+        "이스케이프된 공백 뒤 `\\u`",
+        "font-family:\\ \\url(b'c);font-weight:bold",
+      ],
+      ["`\\\\` 뒤 `\\u`", "font-family:\\\\\\url(b'c);font-weight:bold"],
+      [
+        "조각 경계에서 잘려 나간 `\\;` 뒤",
+        "font-family:\\;url(b'c);font-weight:bold",
+      ],
+      ["이름 뒤 `\\;`", "font-family:a\\;url(b'c);font-weight:bold"],
+      ["NUL 뒤", "font-family:a\u0000url(b'c);font-weight:bold"],
+      ["맨 앞 NUL 뒤", "font-family:\u0000url(b'c);font-weight:bold"],
+    ])("%s의 url(은 url 함수가 아니다: %j는 굵게가 아니다", (_name, style) => {
+      expect(parseInlineStyleMarks(style).fontWeight).toBeUndefined();
+    });
+
+    it("`\\url(` 단독은 url 함수다: 뒤 굵게를 읽는다", () => {
+      expect(
+        parseInlineStyleMarks("font-family:\\url(b'c);font-weight:bold")
+          .fontWeight,
+      ).toBe("bold");
+    });
+  });
+
+  // 분기 판별 행이다. 각 행은 해당 분기를 지운 변이를 잡는다.
+  describe("url 토큰 분기 판별", () => {
+    it.each([
+      ["url( 바로 뒤 따옴표 안 )", "x:url('a)b');font-weight:bold"],
+      ["url( 공백 뒤 따옴표 안 )", "x:url( 'a)b');font-weight:bold"],
+      ["조각 경계를 넘는 pending", "x:url(;'a);font-weight:bold"],
+    ])("%s: %j는 굵게다", (_name, style) => {
+      expect(parseInlineStyleMarks(style).fontWeight).toBe("bold");
+    });
+
+    it.each([
+      ["_", "background:_url(it's);color:red"],
+      ["대문자", "background:Aurl(it's);color:red"],
+      ["비ASCII", "background:éurl(it's);color:red"],
+      ["NUL", "background:a\u0000url(it's);color:red"],
+      ["u가 아닌 첫 글자", "background:xrl(it's);color:red"],
+      ["r이 아닌 둘째 글자", "background:uxl(it's);color:red"],
+      ["l이 아닌 셋째 글자", "background:urx(it's);color:red"],
+    ])("앞 글자·이름 글자 규칙 %s: %j의 color는 없다", (_name, style) => {
+      expect(parseStyleDeclarations(style).color).toBeUndefined();
+    });
+
+    it("주석이 있는 조각에서 토큰 안 이스케이프된 )를 보존한다", () => {
+      expect(
+        parseStyleDeclarations("x:/*c*/url(a\\)b'c);color:red").color,
+      ).toBe("#FF0000");
+    });
+
+    it("주석이 있는 조각에서 토큰 안 이스케이프된 문자가 선언 텍스트에 남는다", () => {
+      const style =
+        "-webkit-text-stroke-width:0px;text-decoration:none;/*c*/x:url(a\\)b);color:red";
+
+      expect(readDumpAuthorDeclarations(style)).toBe(" x:url(a\\)b);color:red");
+    });
+  });
+
+  describe("url 토큰이 ;를 품는다", () => {
+    it.each([
+      "background:url(;color:red);font-weight:bold",
+      "background:url( ;color:red);font-weight:bold",
+    ])("%j는 안의 color를 읽지 않고 뒤 굵게를 읽는다", (style) => {
+      expect(parseStyleDeclarations(style).color).toBeUndefined();
+      expect(parseInlineStyleMarks(style).fontWeight).toBe("bold");
+    });
+
+    it("닫히지 않은 url은 입력 끝까지 한 선언이라 뒤 굵게를 삼킨다", () => {
+      expect(
+        parseInlineStyleMarks("background:url(;font-weight:bold").fontWeight,
+      ).toBeUndefined();
+    });
+
+    it("url(data:…;base64,…)는 기존처럼 뒤 color를 읽는다", () => {
+      expect(
+        parseStyleDeclarations(
+          "background:url(data:image/png;base64,AAAA);color:red",
+        ).color,
+      ).toBe("#FF0000");
+    });
+  });
+});

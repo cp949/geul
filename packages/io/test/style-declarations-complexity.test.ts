@@ -14,8 +14,9 @@
  * 크기 N과 2N 입력의 작업량 증가율이 2 이하여야 한다. 입력 모양은 선언이 아주
  * 많은 입력, 값이 긴 알파벳 run인 입력, `;`가 없는 긴 입력, 공백·토큰이 긴
  * 입력과 font 줄임, 선언 분리(닫히지 않은 따옴표·괄호, 개행이 끝내는
- * 따옴표, `[`·`{` 블록 스택), text-decoration·font-style 값 판정(토큰이
- * 많거나 긴 값, 치환 함수·함수 토큰·괄호 짝)이 만드는 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
+ * 따옴표, `[`·`{` 블록 스택, 따옴표 없는 `url(` 토큰), text-decoration·
+ * font-style 값 판정(토큰이 많거나 긴 값, 치환 함수·함수 토큰·괄호 짝)이 만드는
+ * 모양이다. 기계 속도와 동시 실행 부하에 의존하지 않는다.
  *
  * `parseInlineStyleMarks`와 `parseWhiteSpaceMode`(Issue #361)는
  * `parseStyleDeclarations`와 같은 흐름이다.
@@ -32,7 +33,7 @@
  *   토큰을 받아 대괄호로 읽는 `readNumeric`(css-color.ts)의 루프는 못 센다.
  * - 선언 분할기(`splitDeclarations`)의 대괄호 읽기는 시간 상한 테스트만 덮는다.
  *   `parseStyleDeclarations`·`parseInlineStyleMarks`·`parseWhiteSpaceMode`
- *   각각에 둔다.
+ *   각각에 둔다. 따옴표 없는 `url(` 토큰(Issue #364)도 같다.
  * - 치환 함수 탐색(`hasSubstitutionFunction`)의 대괄호 읽기도
  *   `parseInlineStyleMarks` 시간 상한 테스트만 덮는다(Issue #363).
  * - 괄호 짝 판정(`pairParens`)과 바깥 `)` 사전 검사(`hasStrayCloseParen`)의
@@ -134,6 +135,21 @@ const inputShapes: Array<[string, (size: number) => string]> = [
   [
     "`[` 블록 안 짝 안 맞는 닫는 괄호가 많은 입력",
     (size) => `font-weight:bold;font-family:[${")};".repeat(size)}`,
+  ],
+  // 아래는 따옴표 없는 `url(` 토큰(Issue #364)이 만든 입력 모양이다. 분할기는
+  // `url(`을 만나면 `)`를 앞으로 찾지 않고 글자마다 상태만 바꾼다. 닫는 `)`를
+  // 앞으로 찾는 변이는 닫히지 않은 `url(`이 많은 입력에서 이차 시간이다.
+  [
+    "닫는 `)` 없는 `url(`이 아주 많은 입력",
+    (size) => `font-weight:bold;font-family:${"url(a'".repeat(size)}`,
+  ],
+  [
+    "`url(` 토큰 안 세미콜론이 아주 많은 입력",
+    (size) => `font-weight:bold;font-family:url(${";".repeat(size)})`,
+  ],
+  [
+    "`url(` 뒤 공백 run이 아주 긴 입력 뒤 따옴표",
+    (size) => `font-weight:bold;font-family:url(${" ".repeat(size)}'a;b')`,
   ],
   [
     "text-decoration 토큰이 아주 많은 입력",
@@ -400,6 +416,13 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
   //   작업량 모양과 `--f ` 행은 못 잡는다.
   // 정상 구현은 단독 실행 테스트 시간 32–40ms다. 상한 1초는 그보다 약 25배
   // 크고 변이보다 작아 둘이 겹치지 않는다.
+  // "닫는 `)` 없는 `url(`" 행은 Issue #364가 더했다. `url(`마다 닫는 `)`를 앞으로
+  // 찾고(조각 끝까지 대괄호 루프) 못 찾으면 토큰으로 보지 않는 변이는 이 행이
+  // 26.7초로 잡는다(실측 Node, 2026-10-11, 80,000개). 닫는 `)`가 없으면 `url(`
+  // 80,000개가 각각 입력 끝까지 훑는다. 정상 구현은 단독 실행 테스트 시간 7ms다.
+  // 대괄호 루프는 String 메서드 계측에 보이지 않는다. 같은 변이를
+  // `piece.indexOf(")", index)`로 쓰면 위 작업량 모양 "닫는 `)` 없는 `url(`이 아주
+  // 많은 입력"이 처리 문자 수 증가율 3.998–3.999로 잡는다(상한 2).
   it.each([
     [
       "괄호 안 세미콜론",
@@ -412,6 +435,10 @@ describe("parseInlineStyleMarks의 선형 시간", () => {
     [
       "깊은 `[` 스택 뒤 짝 안 맞는 닫는 괄호",
       `font-weight:bold;font-family:${"[".repeat(80_000)}${");".repeat(80_000)}`,
+    ],
+    [
+      "닫는 `)` 없는 `url(`",
+      `font-weight:bold;font-family:${"url(a'".repeat(80_000)}`,
     ],
     [
       "무효 토큰 뒤 치환 함수 이름과 비슷한 글자",
@@ -631,6 +658,21 @@ const declarationInputShapes: Array<[string, (size: number) => string]> = [
     "`[` 블록 안 짝 안 맞는 닫는 괄호가 많은 입력",
     (size) => `color:red;background:[${")};".repeat(size)}`,
   ],
+  // 아래는 따옴표 없는 `url(` 토큰(Issue #364)이 만든 입력 모양이다. 분할기는
+  // `url(`을 만나면 `)`를 앞으로 찾지 않고 글자마다 상태만 바꾼다. 닫는 `)`를
+  // 앞으로 찾는 변이는 닫히지 않은 `url(`이 많은 입력에서 이차 시간이다.
+  [
+    "닫는 `)` 없는 `url(`이 아주 많은 입력",
+    (size) => `color:red;background:${"url(a'".repeat(size)}`,
+  ],
+  [
+    "`url(` 토큰 안 세미콜론이 아주 많은 입력",
+    (size) => `color:red;background:url(${";".repeat(size)})`,
+  ],
+  [
+    "`url(` 뒤 공백 run이 아주 긴 입력 뒤 따옴표",
+    (size) => `color:red;background:url(${" ".repeat(size)}'a;b')`,
+  ],
   [
     "선언이 많고 !important가 반복된 입력",
     (size) => `color:red${" !important".repeat(size)};`.repeat(2),
@@ -695,6 +737,9 @@ describe("parseStyleDeclarations의 선형 시간", () => {
   // 닫히지 않은 괄호·따옴표 3.9–30.8초다(변이 세기에 따라 다르다). 선형
   // 구현은 33개 병적 모양 최대 68ms다. 상한 1초는 이 최대보다 약 15배 크고
   // 가장 약한 변이보다 작아, 둘이 겹치지 않는다.
+  // "닫는 `)` 없는 `url(`" 행은 Issue #364가 더했다. `url(`마다 닫는 `)`를 앞으로
+  // 찾는 변이는 이 행이 26.6–26.8초로 잡는다(Node, 2026-10-11, 80,000개). 정상
+  // 구현은 단독 실행 테스트 시간 25ms다.
   // 깊은 `[` 스택 행은 Issue #365가 더했다. 짝 안 맞는 닫는 글자마다 스택
   // 전체를 훑는 변이는 이 행이 28.0–28.1초로 잡는다(Node, 2026-10-11). 정상 구현은
   // 단독 실행 테스트 시간 24–27ms다.
@@ -708,6 +753,7 @@ describe("parseStyleDeclarations의 선형 시간", () => {
       "깊은 `[` 스택 뒤 짝 안 맞는 닫는 괄호",
       `color:red;background:${"[".repeat(80_000)}${");".repeat(80_000)}`,
     ],
+    ["닫는 `)` 없는 `url(`", `color:red;background:${"url(a'".repeat(80_000)}`],
   ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
     const started = performance.now();
     parseStyleDeclarations(style);
@@ -757,6 +803,21 @@ const whiteSpaceInputShapes: Array<[string, (size: number) => string]> = [
     "`[` 블록 안 짝 안 맞는 닫는 괄호가 많은 입력",
     (size) => `white-space:pre;font-family:[${")};".repeat(size)}`,
   ],
+  // 아래는 따옴표 없는 `url(` 토큰(Issue #364)이 만든 입력 모양이다. 분할기는
+  // `url(`을 만나면 `)`를 앞으로 찾지 않고 글자마다 상태만 바꾼다. 닫는 `)`를
+  // 앞으로 찾는 변이는 닫히지 않은 `url(`이 많은 입력에서 이차 시간이다.
+  [
+    "닫는 `)` 없는 `url(`이 아주 많은 입력",
+    (size) => `white-space:pre;font-family:${"url(a'".repeat(size)}`,
+  ],
+  [
+    "`url(` 토큰 안 세미콜론이 아주 많은 입력",
+    (size) => `white-space:pre;font-family:url(${";".repeat(size)})`,
+  ],
+  [
+    "`url(` 뒤 공백 run이 아주 긴 입력 뒤 따옴표",
+    (size) => `white-space:pre;font-family:url(${" ".repeat(size)}'a;b')`,
+  ],
   [
     "!important 선언이 아주 많은 입력",
     (size) => "white-space:pre !important;".repeat(size),
@@ -801,6 +862,9 @@ describe("parseWhiteSpaceMode의 선형 시간", () => {
   // 깊은 `[` 스택 행은 Issue #365가 더했다. 짝 안 맞는 닫는 글자마다 스택
   // 전체를 훑는 변이는 이 행이 27.9–28.1초로 잡는다(Node, 2026-10-11). 정상
   // 구현은 단독 실행 테스트 시간 10–12ms다.
+  // "닫는 `)` 없는 `url(`" 행은 Issue #364가 더했다. `url(`마다 닫는 `)`를 앞으로
+  // 찾는 변이는 이 행이 26.6–26.7초로 잡는다(Node, 2026-10-11, 80,000개). 정상
+  // 구현은 단독 실행 테스트 시간 4ms다.
   it.each([
     [
       "닫히지 않은 괄호와 따옴표",
@@ -809,6 +873,10 @@ describe("parseWhiteSpaceMode의 선형 시간", () => {
     [
       "깊은 `[` 스택 뒤 짝 안 맞는 닫는 괄호",
       `white-space:pre;font-family:${"[".repeat(80_000)}${");".repeat(80_000)}`,
+    ],
+    [
+      "닫는 `)` 없는 `url(`",
+      `white-space:pre;font-family:${"url(a'".repeat(80_000)}`,
     ],
   ])("%s 80,000개를 1초 안에 읽는다", (_name, style) => {
     const started = performance.now();
