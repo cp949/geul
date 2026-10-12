@@ -1,5 +1,6 @@
 /**
- * 로컬 프리뷰(ADR 0015)가 남은 미디어 블록이 사라진 뒤 undo로도 redo로도
+ * 로컬 프리뷰(ADR 0015) URL이 문서에서 빠진 뒤(블록이 사라졌거나 블록이
+ * 남은 채 URL만 빠진 경우, Issue #383) undo로도 redo로도
  * 복구 불가능해지는 시점 판정과 정리 신호(Issue #168 roadmap RD-002
  * DELTA-02, 상세 계획 `_works/roadmap/result/RD-002-DELTA-02.md`)를
  * 고정한다. 판정 방식은 `prosemirror-history` 공개 API(`undo`/`redo`/
@@ -13,7 +14,7 @@
  * 트리거로 확장한다. Issue #380부터 판정은 undo뿐 아니라 redo 도달
  * 가능성도 본다 — 마지막 describe가 고정한다.
  */
-import type { Document } from "@cp949/geul-model";
+import type { Block, Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import { describe, expect, it } from "vitest";
@@ -525,5 +526,306 @@ describe("로컬 프리뷰 redo 도달 가능성(Issue #380)", () => {
     expect(localPreviewCleared.map((cleared) => cleared.blockId)).toEqual([
       "m-1",
     ]);
+  });
+});
+
+describe("블록은 남고 로컬 프리뷰 URL만 빠지는 경로(Issue #383)", () => {
+  /**
+   * `uploadFile` 없는 편집기에서 m-1에 `uploadMediaFile`로 프리뷰를 만든다.
+   * `blocks`가 있으면 그 블록들(m-1 포함)을 tail 앞에 둔다.
+   */
+  const mountedWithPreview = async (
+    blocks: Block[] = [mediaBlock("image", "m-1")],
+  ) => {
+    const mounted = mountedWithCleanup(
+      documentOf(...blocks, tailParagraphBlock),
+    );
+    expect(
+      (await mounted.editor.commands.uploadMediaFile("m-1", testFile())).ok,
+    ).toBe(true);
+    const url1 = localPreviewUrlOf(mounted.tiptap, "m-1");
+    expect(url1).toMatch(/^blob:/);
+    return { ...mounted, url1: url1 as string };
+  };
+  const notifiedUrls = (cleared: { localPreviewUrl: string }[]): string[] =>
+    cleared.map((entry) => entry.localPreviewUrl);
+  const countOf = (cleared: { localPreviewUrl: string }[], url: string) =>
+    notifiedUrls(cleared).filter((notified) => notified === url).length;
+  // m-1이 p-1의 자식인 문서에서 p-1을 h-1로 바꾸고 m-1을 같은 id로 다시 넣는다.
+  const replaceParentKeepingChild = (
+    child: Record<string, unknown> = { id: "m-1", type: "image" },
+  ) => [
+    {
+      id: "h-1",
+      type: "heading",
+      level: 1,
+      content: [{ text: "부모" }],
+      children: [child],
+    },
+  ];
+
+  it("D1: replaceBlocks가 같은 id로 다시 넣은 자식 미디어의 프리뷰를 이어받는다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview([
+        paragraphBlock("p-1", "부모", [mediaBlock("image", "m-1")]),
+      ]);
+
+    expect(
+      editor.replaceBlocks(["p-1"], replaceParentKeepingChild() as never).ok,
+    ).toBe(true);
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBe(url1);
+    expect(localPreviewCleared).toEqual([]);
+
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+
+  // 같은 id 최상위 교체(replaceBlocks(["m-1"], [{ id: "m-1" }]))는 프리뷰와 무관하게
+  // 이미 COMMAND_NOT_APPLICABLE로 거절돼 이 describe의 대상이 아니다.
+  it("D1: 제거 대상이 둘이고 각각 프리뷰 자식이 있으면 교체 블록의 두 자식이 각자 프리뷰를 이어받는다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview([
+        paragraphBlock("p-1", "부모1", [mediaBlock("image", "m-1")]),
+        paragraphBlock("p-2", "부모2", [mediaBlock("image", "m-2")]),
+      ]);
+    expect(
+      (await editor.commands.uploadMediaFile("m-2", testFile("b.png"))).ok,
+    ).toBe(true);
+    const url2 = localPreviewUrlOf(tiptap, "m-2");
+
+    expect(
+      editor.replaceBlocks(["p-1", "p-2"], [
+        {
+          id: "h-1",
+          type: "heading",
+          level: 1,
+          content: [{ text: "합침" }],
+          children: [
+            { id: "m-1", type: "image" },
+            { id: "m-2", type: "image" },
+          ],
+        },
+      ] as never).ok,
+    ).toBe(true);
+
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBe(url1);
+    expect(localPreviewUrlOf(tiptap, "m-2")).toBe(url2);
+    expect(localPreviewCleared).toEqual([]);
+
+    editor.destroy();
+  });
+
+  it("D1: 교체 블록이 url을 가지면 프리뷰를 이어받지 않고 그 시점에 정확히 1회 통지한다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview([
+        paragraphBlock("p-1", "부모", [mediaBlock("image", "m-1")]),
+      ]);
+
+    expect(
+      editor.replaceBlocks(
+        ["p-1"],
+        replaceParentKeepingChild({
+          id: "m-1",
+          type: "image",
+          url: "https://example.com/a.png",
+        }) as never,
+      ).ok,
+    ).toBe(true);
+
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBeNull();
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+
+  it("같은 id가 미디어가 아닌 타입으로 바뀌어 남아도 destroy() 뒤 URL이 통지된다", async () => {
+    const { editor, url1, localPreviewCleared } = await mountedWithPreview([
+      paragraphBlock("p-1", "부모", [mediaBlock("image", "m-1")]),
+    ]);
+
+    expect(
+      editor.replaceBlocks(
+        ["p-1"],
+        replaceParentKeepingChild({
+          id: "m-1",
+          type: "paragraph",
+          content: [{ text: "문단" }],
+        }) as never,
+      ).ok,
+    ).toBe(true);
+
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+
+  it("D2: removeBlocks 뒤 같은 id로 insertBlocks하면 destroy() 뒤 지운 블록의 URL이 정확히 1회 통지된다", async () => {
+    const { editor, url1, localPreviewCleared } = await mountedWithPreview();
+
+    expect(editor.removeBlocks(["m-1"]).ok).toBe(true);
+    expect(
+      editor.insertBlocks(
+        [{ id: "m-1", type: "image" }] as never,
+        "tail",
+        "before",
+      ).ok,
+    ).toBe(true);
+    expect(localPreviewCleared).toEqual([]);
+
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+
+  it("D2: 통지 전에 undo를 두 번 하면 m-1이 같은 URL로 돌아오고 통지가 없다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview();
+
+    expect(editor.removeBlocks(["m-1"]).ok).toBe(true);
+    expect(
+      editor.insertBlocks(
+        [{ id: "m-1", type: "image" }] as never,
+        "tail",
+        "before",
+      ).ok,
+    ).toBe(true);
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editor.commands.undo()).toEqual(okResult);
+
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBe(url1);
+    expect(localPreviewCleared).toEqual([]);
+
+    editor.destroy();
+  });
+
+  it("D4: 프리뷰 블록에 uploadMediaFile을 다시 하면 이전 URL은 history를 밀어낸 뒤 destroy() 전에 1회 통지된다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview();
+
+    expect(
+      (await editor.commands.uploadMediaFile("m-1", testFile("b.png"))).ok,
+    ).toBe(true);
+    const url2 = localPreviewUrlOf(tiptap, "m-1");
+    expect(url2).not.toBe(url1);
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+    expect(notifiedUrls(localPreviewCleared)).not.toContain(url2);
+
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+    expect(countOf(localPreviewCleared, url2 as string)).toBe(1);
+  });
+
+  it("D4: 덮어쓴 직후에는 통지가 없고 undo로 이전 URL이 돌아온다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview();
+
+    expect(
+      (await editor.commands.uploadMediaFile("m-1", testFile("b.png"))).ok,
+    ).toBe(true);
+    expect(localPreviewCleared).toEqual([]);
+
+    // 프리뷰만 바뀌는 단계는 모델 diff가 없어 undo가 ok:false를 돌려주지만
+    // PM history는 실제로 되돌린다(기존 동작) — 결과가 아니라 문서를 단언한다.
+    editor.commands.undo();
+
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBe(url1);
+    expect(localPreviewCleared).toEqual([]);
+
+    editor.destroy();
+  });
+
+  it("D4b: replaceMediaBlockFile로 덮어쓴 이전 URL도 destroy() 뒤 통지된다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview();
+
+    expect(
+      (await editor.commands.replaceMediaBlockFile("m-1", testFile("b.png")))
+        .ok,
+    ).toBe(true);
+    expect(localPreviewUrlOf(tiptap, "m-1")).not.toBe(url1);
+
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+
+  it("D5: 프리뷰 적용을 undo한 뒤 새 편집으로 redo 스택이 비면 destroy() 전에 URL이 통지된다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview();
+
+    editor.commands.undo();
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBeNull();
+    expect(localPreviewCleared).toEqual([]);
+
+    tiptap.view.dispatch(
+      tiptap.state.tr.insertText("z", contentTextStart(tiptap, "tail")),
+    );
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+
+  it("url 확정으로 이미 통지한 URL은 history를 밀어내고 destroy()해도 다시 통지되지 않는다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview();
+
+    expect(
+      editor.commands.setMediaBlockUrl("m-1", "https://example.com/a.png").ok,
+    ).toBe(true);
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+
+  it("같은 URL을 가진 노드가 둘이면 하나를 지워도 history를 밀어낸 뒤까지 통지가 없다", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview([
+        mediaBlock("image", "m-1"),
+        mediaBlock("image", "m-2"),
+      ]);
+    // m-1의 프리뷰 attrs를 m-2에 그대로 복사해 URL을 공유시킨다.
+    const sourcePosition = findBlockPosition(tiptap.state.doc, "m-1");
+    const targetPosition = findBlockPosition(tiptap.state.doc, "m-2");
+    const sourceNode =
+      sourcePosition === null ? null : tiptap.state.doc.nodeAt(sourcePosition);
+    const targetNode =
+      targetPosition === null ? null : tiptap.state.doc.nodeAt(targetPosition);
+    if (sourceNode === null || targetNode === null || targetPosition === null)
+      throw new Error("m-1·m-2 조회 실패");
+    tiptap.view.dispatch(
+      tiptap.state.tr.setNodeMarkup(targetPosition, undefined, {
+        ...targetNode.attrs,
+        localPreviewUrl: sourceNode.attrs.localPreviewUrl,
+        localPreviewFile: sourceNode.attrs.localPreviewFile,
+      }),
+    );
+    expect(localPreviewUrlOf(tiptap, "m-2")).toBe(url1);
+
+    expect(editor.commands.deleteBlock("m-1")).toEqual(okResult);
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+    expect(localPreviewCleared).toEqual([]);
+
+    expect(editor.commands.deleteBlock("m-2")).toEqual(okResult);
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
   });
 });
