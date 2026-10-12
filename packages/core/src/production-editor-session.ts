@@ -148,14 +148,14 @@ export class ProductionEditorSession {
   private tiptapEditor: Editor;
   private destroyed = false;
   private mountedElement: HTMLElement | null = null;
-  // Issue #168 roadmap RD-002 DELTA-03 — MediaLocalPreviewLifecycleExtension의
-  // `pending`(문서에서 빠졌지만 복구 불가 판정 전, 키 = URL) 최신 스냅샷
-  // 미러. destroy()가 doc 순회(listLocalPreviews)만으로는 보지 못하는
-  // 이 항목들도 함께 정리 신호를 내기 위해 읽는다 — 그 외 용도로 쓰지 않는다.
-  private pendingUnreachableLocalPreviews: ReadonlyMap<
-    string,
-    PendingLocalPreview
-  > = new Map();
+  // Issue #168 roadmap RD-002 DELTA-03, Issue #390 — 현재 tiptapEditor의
+  // 로컬 프리뷰 대기 목록(문서에서 빠졌지만 복구 불가 판정 전, 키 = URL).
+  // 세션이 편집기마다 새 Map을 만들어 MediaLocalPreviewLifecycleExtension에
+  // 넘기고 그 확장이 제자리에서 바꾼다. destroy()·replaceDocument()가
+  // doc 순회(listLocalPreviews)만으로는 보지 못하는 이 항목들도 함께 정리
+  // 신호를 내기 위해 읽는다 — 그 외 용도로 쓰지 않는다. replaceDocument()는
+  // 구 편집기 스윕이 끝난 뒤에 새 편집기의 Map으로 바꾼다.
+  private localPreviewPending: Map<string, PendingLocalPreview> = new Map();
   // Issue #383 — onLocalPreviewCleanup으로 이미 알린 blob URL. blob URL은
   // createObjectURL마다 유일하므로 URL당 1회 통지를 이 집합이 보장한다.
   private readonly clearedLocalPreviewUrls = new Set<string>();
@@ -306,7 +306,9 @@ export class ProductionEditorSession {
     this.createId = options.createId ?? createRandomDocumentId;
     this.sessionRevision = parsed.value.revision;
     this.currentDocument = cloneDocument(parsed.value);
-    this.tiptapEditor = this.createTiptapEditor(parsed.value);
+    const created = this.createTiptapEditor(parsed.value);
+    this.tiptapEditor = created.editor;
+    this.localPreviewPending = created.pending;
     this.currentDocument = this.readEditorDocument(this.tiptapEditor);
   }
 
@@ -400,13 +402,10 @@ export class ProductionEditorSession {
     }
     // 위 doc 순회는 문서에서 빠졌지만 복구 불가 판정 전이라 doc에 이미 없는
     // 항목은 보지 못한다(구현 중 실측 — "삭제 직후 destroy()" 회귀) —
-    // MediaLocalPreviewLifecycleExtension의 pending 미러를 함께 훑는다.
-    // 두 순회는 겹치지 않는다: pending은 URL이 doc에 없는 항목만 담는다.
+    // 세션이 쥔 대기 목록(localPreviewPending)을 함께 훑는다.
+    // 두 순회는 겹치지 않는다: 대기 목록은 URL이 doc에 없는 항목만 담는다.
     // 겹쳐도 notifyLocalPreviewCleared가 URL당 1회로 막는다.
-    for (const {
-      blockId,
-      attrs,
-    } of this.pendingUnreachableLocalPreviews.values()) {
+    for (const { blockId, attrs } of this.localPreviewPending.values()) {
       this.notifyLocalPreviewCleared(blockId, attrs);
     }
     this.tiptapEditor.destroy();
@@ -545,29 +544,22 @@ export class ProductionEditorSession {
     // Issue #169 roadmap RD-001 DELTA-01 — 구 Editor를 폐기하기 직전, 그
     // 상태에 남아 있던 로컬 프리뷰(ADR 0015) 전체를 destroy()(RD-002
     // DELTA-03)와 동일한 패턴으로 onLocalPreviewCleanup에 통지한다. 새
-    // Editor(replacement)는 자신만의 빈 pending에서 시작하고
-    // EditorState.create()는 appendTransaction을 거치지 않아
-    // notifyLocalPreviewPendingChange가 생성 시점에 호출되지 않으므로,
-    // createTiptapEditor() 호출 뒤에도 this.pendingUnreachableLocalPreviews는
-    // 구 Editor 값 그대로다.
+    // Editor(replacement)는 자신만의 빈 대기 목록(replacement.pending)에서
+    // 시작한다. this.localPreviewPending은 이 스윕이 끝날 때까지 구 Editor의
+    // 대기 목록이어야 하므로 아래에서 스윕 뒤에 바꾼다.
     for (const { blockId, attrs } of listLocalPreviews(
       this.tiptapEditor.state.doc,
     )) {
       this.notifyLocalPreviewCleared(blockId, attrs);
     }
-    for (const {
-      blockId,
-      attrs,
-    } of this.pendingUnreachableLocalPreviews.values()) {
+    for (const { blockId, attrs } of this.localPreviewPending.values()) {
       this.notifyLocalPreviewCleared(blockId, attrs);
     }
-    // 위 스윕이 통지한 항목을 리셋한다 — 리셋하지 않으면 이 세션 필드가
-    // 구 Editor의 pending을 그대로 가리킨 채 남는다. 이후 destroy()가 같은
-    // 항목을 다시 순회한다. 중복 통지는 notifyLocalPreviewCleared가 막지만
-    // 필드는 새 Editor 기준으로 비워 둔다.
-    this.pendingUnreachableLocalPreviews = new Map();
+    // 스윕이 끝났으니 필드를 새 Editor의 대기 목록으로 바꾼다. 구 Editor의
+    // 대기 목록을 계속 가리키면 이후 destroy()가 같은 항목을 다시 순회한다.
+    this.localPreviewPending = replacement.pending;
     this.tiptapEditor.destroy();
-    this.tiptapEditor = replacement;
+    this.tiptapEditor = replacement.editor;
     if (this.mountedElement !== null) {
       this.tiptapEditor.mount(this.mountedElement);
     }
@@ -616,8 +608,14 @@ export class ProductionEditorSession {
       : commandNotApplicable(command);
   }
 
-  private createTiptapEditor(document: BlockDocument): Editor {
-    return createProductionEditor({
+  // 편집기와 그 편집기의 로컬 프리뷰 대기 목록을 함께 돌려준다. 호출자가
+  // 구 편집기 스윕을 마친 뒤 this.localPreviewPending을 바꾼다.
+  private createTiptapEditor(document: BlockDocument): {
+    editor: Editor;
+    pending: Map<string, PendingLocalPreview>;
+  } {
+    const pending = new Map<string, PendingLocalPreview>();
+    const editor = createProductionEditor({
       document,
       createId: this.createId,
       onUpdate: (editor, transaction) =>
@@ -730,14 +728,14 @@ export class ProductionEditorSession {
       ) => {
         this.notifyLocalPreviewCleared(blockId, cleared);
       },
-      // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03) — 그
-      // 확장의 `pending`(문서에서 빠졌지만 복구 불가 판정 전) 스냅샷을 세션
-      // 필드로 미러링해 둔다. destroy()가 doc 순회만으로는 보지 못하는 이
-      // 항목들을 세션 종료 시 함께 정리하기 위해서다(아래 destroy() 참고).
-      notifyLocalPreviewPendingChange: (pending) => {
-        this.pendingUnreachableLocalPreviews = pending;
-      },
+      // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03, Issue
+      // #390) — 이 편집기의 대기 목록(문서에서 빠졌지만 복구 불가 판정 전)을
+      // 세션이 만들어 넘기고 그 확장이 제자리에서 바꾼다. destroy()가 doc
+      // 순회만으로는 보지 못하는 이 항목들을 세션 종료 시 함께 정리하기
+      // 위해서다(destroy()·replaceDocument() 참고).
+      localPreviewPending: pending,
     });
+    return { editor, pending };
   }
 
   // spec §3.3(DOC-010), RD-004-DELTA-02 — canApplyDocumentChange 목록의

@@ -344,8 +344,8 @@ describe("로컬 프리뷰 replaceDocument() 교체 시 정리(Issue #169 roadma
     expect(localPreviewCleared).toEqual([{ blockId: "m-1", ...seededAttrs }]);
   });
 
-  // 세션 필드(pendingUnreachableLocalPreviews)를 통해 통지한 blockId를
-  // replaceDocument()가 리셋하지 않으면, 뒤이은 destroy()가 같은 blockId를
+  // 세션의 대기 목록 필드(localPreviewPending)를 replaceDocument()가 새
+  // 편집기 것으로 바꾸지 않으면, 뒤이은 destroy()가 같은 blockId를
   // 다시 순회해 중복 통지한다 — "정확히 1회"(완료 조건 1)를 어기는 회귀를
   // 고정한다.
   it("replaceDocument()가 통지한 로컬 프리뷰는 뒤이은 destroy()에서 다시 통지되지 않는다", async () => {

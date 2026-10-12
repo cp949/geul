@@ -12,7 +12,7 @@ import {
 } from "./media-local-preview.js";
 
 // 문서에서 빠졌지만 아직 복구 불가 판정을 받지 못한 로컬 프리뷰. 키(URL)는
-// pending Map이 쥐고, blockId는 통지 인자 모양 `(blockId, attrs)`를 유지하려고
+// 대기 목록 Map이 쥐고, blockId는 통지 인자 모양 `(blockId, attrs)`를 유지하려고
 // 빠지기 직전 노드의 값을 보관한다.
 export type PendingLocalPreview = LocalPreviewEntry;
 
@@ -25,19 +25,17 @@ export type MediaLocalPreviewLifecycleOptions = {
   // (MediaDropPasteExtension의 기본값과 동일 근거 —
   // production-editor-assembly.ts가 항상 실제 콜백을 넘긴다).
   notifyUnreachable: (blockId: string, cleared: LocalPreviewAttrs) => void;
-  // Issue #168 roadmap RD-002 DELTA-03 — 빠졌지만 아직 복구 불가 판정을
-  // 받지 못해 `pending`에만 남아 있는 로컬 프리뷰 목록이 바뀔 때마다(추가·
-  // 재등장으로 제거·판정 확정으로 제거) 그 시점의 전체 스냅샷을 알린다.
-  // 키는 URL이다(Issue #383).
-  // `production-editor-session.ts::destroy()`가 세션 종료 시 이 스냅샷을
-  // 함께 훑어야 한다 — `pending`은 doc에 URL이 없는 항목만 담으므로
-  // `listLocalPreviews(doc)`(현재 doc 순회)만으로는 이 항목들을
-  // 볼 수 없다(구현 중 실측 — "삭제 직후·복구 불가 판정 전 destroy()"
-  // 시나리오에서 정리 신호가 전혀 나가지 않는 회귀를 이 옵션으로 막는다).
-  // 미지정이면 no-op.
-  notifyPendingChange?: (
-    pending: ReadonlyMap<string, PendingLocalPreview>,
-  ) => void;
+  // 문서에서 빠졌지만 아직 복구 불가 판정을 받지 못한 로컬 프리뷰의 대기
+  // 목록(키 = URL, Issue #383). 세션이 편집기마다 Map을 만들어 넘기고 이
+  // 확장이 제자리에서 추가·제거한다(Issue #390). 세션이 같은 Map을 읽는다.
+  // `production-editor-session.ts`의 destroy()·replaceDocument()는 doc에
+  // URL이 없는 이 항목들도 훑어야 한다. `listLocalPreviews(doc)`(현재 doc
+  // 순회)만으로는 보이지 않아서다("삭제 직후·복구 불가 판정 전 destroy()"
+  // 시나리오에서 정리 신호가 나가지 않는 회귀를 막는다).
+  // addProseMirrorPlugins()가 편집기 생성당 두 번 호출돼 확장이 Map을 직접
+  // 만들어 세션에 등록하는 방식은 쓸 수 없다. 그래서 세션이 넘긴다.
+  // 미지정이면 확장이 자기 Map을 만든다.
+  pending?: Map<string, PendingLocalPreview>;
 };
 
 // Issue #168 roadmap RD-002 DELTA-02 — 로컬 프리뷰 URL이 문서에서 빠진 뒤
@@ -62,12 +60,11 @@ export const MediaLocalPreviewLifecycleExtension =
 
     addProseMirrorPlugins() {
       const notifyUnreachable = this.options.notifyUnreachable;
-      const notifyPendingChange = this.options.notifyPendingChange;
       // 문서에서 빠졌지만 아직 undo·redo로 복구 가능한지 재판정 대기 중인
-      // 로컬 프리뷰(키 = URL) — 확장 인스턴스(= Tiptap Editor 인스턴스, 세션
-      // 재구성마다 새로 만들어짐)당 하나. BlockIdExtension의 createId 클로저와
-      // 동일한 생애주기(session-scoped, 재구성 시 자동으로 빈 상태에서 시작).
-      const pending = new Map<string, PendingLocalPreview>();
+      // 로컬 프리뷰(키 = URL). 세션이 편집기마다 새 Map을 만들어 넘긴다
+      // (재구성 시 빈 상태에서 시작). 옵션이 없으면 자기 Map을 쓴다.
+      const pending =
+        this.options.pending ?? new Map<string, PendingLocalPreview>();
       // 단일 슬롯 메모 — 직전 호출의 새 문서가 다음 호출의 옛 문서가 되는
       // 흐름이 보통이라 변경당 문서 순회가 한 번이면 된다.
       let lastDoc: ProseMirrorNode | null = null;
@@ -113,15 +110,12 @@ export const MediaLocalPreviewLifecycleExtension =
               return null;
             }
 
-            let changed = false;
-
             // 새로 빠진 URL을 재판정 대기열에 추가한다.
             const fresh = new Set<string>();
             for (const [url, entry] of oldPreviews) {
               if (newPreviews.has(url)) continue;
               pending.set(url, entry);
               fresh.add(url);
-              changed = true;
             }
 
             // 실제 undo·redo로 복구된 URL은 대기열에서 뺀다 — 이후 아무리 새
@@ -129,7 +123,6 @@ export const MediaLocalPreviewLifecycleExtension =
             for (const url of pending.keys()) {
               if (newPreviews.has(url)) {
                 pending.delete(url);
-                changed = true;
               }
             }
 
@@ -166,7 +159,6 @@ export const MediaLocalPreviewLifecycleExtension =
                   if (!isLocalPreviewReachableViaHistory(newState, url)) {
                     pending.delete(url);
                     notifyUnreachable(entry.blockId, entry.attrs);
-                    changed = true;
                   }
                 }
               } finally {
@@ -174,7 +166,6 @@ export const MediaLocalPreviewLifecycleExtension =
               }
             }
 
-            if (changed) notifyPendingChange?.(new Map(pending));
             return null;
           },
         }),

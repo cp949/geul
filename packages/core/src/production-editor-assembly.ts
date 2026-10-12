@@ -424,15 +424,12 @@ export const createProductionEditor = (options: {
     cleared: LocalPreviewAttrs,
   ) => void;
   // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03) — 문서에서
-  // 빠졌지만 아직 복구 불가 판정 전이라 그 확장의 `pending`(키 = URL, Issue
-  // #383)에만 남아 있는 로컬 프리뷰 스냅샷이 바뀔 때마다 호출한다. `production-editor-session.ts::
-  // destroy()`가 이 스냅샷을 세션 필드로 미러링해 뒀다가, doc 순회
-  // (`listLocalPreviews`)로는 보이지 않는 이 항목들도 세션 종료
-  // 시 함께 정리 신호를 낸다. 미지정이면 그 확장 자신의 기본값(no-op)을
-  // 쓴다.
-  notifyLocalPreviewPendingChange?: (
-    pending: ReadonlyMap<string, PendingLocalPreview>,
-  ) => void;
+  // 빠졌지만 아직 복구 불가 판정 전인 로컬 프리뷰의 대기 목록(키 = URL, Issue
+  // #383)이다. 세션이 편집기마다 새 Map을 만들어 넘기고 그 확장이 제자리에서
+  // 바꾼다(Issue #390). 세션은 같은 Map을 읽어 destroy()·replaceDocument()
+  // 때 doc 순회(`listLocalPreviews`)로는 보이지 않는 이 항목들도 함께
+  // 정리 신호를 낸다. 미지정이면 그 확장이 자기 Map을 만든다.
+  localPreviewPending?: Map<string, PendingLocalPreview>;
   // spec §5(EXT-005), RD-002-DELTA-01 — CustomKeyboardShortcutsExtension에
   // 그대로 전달한다(keyboardShortcutsEditor는 customBlockEditor와 동일한
   // 지연 바인딩 Proxy — editor-controller.ts::createEditor 배선 참고).
@@ -795,11 +792,9 @@ export const createProductionEditor = (options: {
         ...(options.notifyLocalPreviewUnreachable === undefined
           ? {}
           : { notifyUnreachable: options.notifyLocalPreviewUnreachable }),
-        ...(options.notifyLocalPreviewPendingChange === undefined
+        ...(options.localPreviewPending === undefined
           ? {}
-          : {
-              notifyPendingChange: options.notifyLocalPreviewPendingChange,
-            }),
+          : { pending: options.localPreviewPending }),
       }),
       LinkPolicyExtension,
       RevisionGuardExtension.configure({
