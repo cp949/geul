@@ -147,7 +147,7 @@ export interface SelectionQuery {
     url: string | null;
     name: string | null;
     caption: string | null;
-    // file은 showPreview attrs 자체가 없어 null이다(MEDIA_PREVIEW_TOGGLE_
+    // file·iframe은 showPreview 필드가 없어 null이다(MEDIA_PREVIEW_TOGGLE_
     // NOT_SUPPORTED 대상과 동일 kind 경계). image/video/audio는 attrs
     // 미설정(null)이 기본 true를 뜻하는 실제 유효값을 보고한다(슬라이스5
     // RD-002 DELTA-02, react MediaToolbar의 preview 토글 버튼이 소비한다).

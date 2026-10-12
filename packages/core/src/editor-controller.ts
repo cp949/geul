@@ -244,8 +244,9 @@ export const createEditor = (
         name: typeof node.attrs.name === "string" ? node.attrs.name : null,
         caption:
           typeof node.attrs.caption === "string" ? node.attrs.caption : null,
-        showPreview:
-          node.type.name === "file" ? null : node.attrs.showPreview !== false,
+        showPreview: mediaBlockTypeHasField(node.type.name, "showPreview")
+          ? node.attrs.showPreview !== false
+          : null,
         textAlignment:
           mediaBlockTypeHasField(node.type.name, "textAlignment") &&
           typeof node.attrs.textAlignment === "string"

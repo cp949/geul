@@ -295,7 +295,8 @@ describe("에디터 컨트롤러 선택 영역 조회", () => {
         url: null,
         name: null,
         caption: null,
-        showPreview: kind === "file" ? null : true,
+        // showPreview 필드가 없는 file·iframe은 null이다.
+        showPreview: kind === "file" || kind === "iframe" ? null : true,
         textAlignment: null,
       });
     },

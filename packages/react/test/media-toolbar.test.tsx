@@ -199,7 +199,8 @@ const filledIframeBlock: SelectionMediaBlock = {
   url: "https://www.youtube.com/embed/x",
   name: "임베드",
   caption: null,
-  showPreview: true,
+  // showPreview 필드가 없는 iframe은 core가 null로 보고한다.
+  showPreview: null,
   textAlignment: null,
 };
 
