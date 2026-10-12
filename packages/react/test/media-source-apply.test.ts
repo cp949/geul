@@ -2,11 +2,15 @@
  * media-source-apply.ts의 규칙을 직접 겨냥한 스위트. File Panel과 Media
  * Toolbar가 이 규칙을 같이 쓴다. 두 컴포넌트의 오케스트레이션은
  * file-panel.test.tsx와 media-toolbar*.test.tsx가 검증하고, 이 파일은 그
- * 아래 순수 규칙만 편집기 마운트 없이 겨냥한다(ADR-0007).
+ * 아래 순수 규칙만 편집기 마운트 없이 겨냥한다(ADR-0007). 가짜 commands로는
+ * core 시그니처와 어긋나도 못 잡으므로, 마지막 스위트는 실제 core 명령으로
+ * 라우팅과 name 적용을 확인한다.
  */
 
 import {
+  createEditor,
   DEFAULT_DICTIONARY,
+  type Block,
   type EditorController,
   type EditorError,
   type MediaBlockKind,
@@ -156,5 +160,79 @@ describe("applyMediaUrl", () => {
       ok: false,
       rejectedMessage: DEFAULT_DICTIONARY.status.unsupportedMediaUrl,
     });
+  });
+});
+
+describe("applyMediaUrl(실제 core 명령)", () => {
+  const mediaBlock = (kind: "image" | "iframe"): Block => ({
+    id: "m1",
+    type: kind,
+    url: "https://www.youtube.com/embed/old",
+    name: "old",
+  });
+
+  const realEditor = (kind: "image" | "iframe") =>
+    createEditor({
+      initialDocument: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [mediaBlock(kind)],
+      },
+      iframeEmbed: {
+        providers: [
+          {
+            name: "YouTube",
+            match: { type: "wildcard", pattern: "*.youtube.com" },
+          },
+        ],
+      },
+    });
+
+  const blockOf = (editor: EditorController) => editor.getDocument().blocks[0];
+
+  it("iframe는 setIframeSrc 경로로 허용 URL과 name을 함께 적용한다", () => {
+    const editor = realEditor("iframe");
+    const result = applyMediaUrl(
+      editor,
+      {
+        blockId: "m1",
+        kind: "iframe",
+        draft: "https://www.youtube.com/embed/new",
+      },
+      DEFAULT_DICTIONARY,
+    );
+    expect(result).toEqual({ ok: true, name: "new" });
+    expect(blockOf(editor)).toMatchObject({
+      url: "https://www.youtube.com/embed/new",
+      name: "new",
+    });
+  });
+
+  it("iframe 정책이 거절한 URL은 거절 문구를 돌려주고 문서를 바꾸지 않는다", () => {
+    const editor = realEditor("iframe");
+    const before = editor.getDocument();
+    const result = applyMediaUrl(
+      editor,
+      { blockId: "m1", kind: "iframe", draft: "https://vimeo.com/embed/x" },
+      DEFAULT_DICTIONARY,
+    );
+    expect(result).toEqual({
+      ok: false,
+      rejectedMessage:
+        DEFAULT_DICTIONARY.status.iframeUrlRejected.notWhitelisted,
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("image는 name을 넘겨도 거절된 URL이면 문서를 바꾸지 않는다", () => {
+    const editor = realEditor("image");
+    const before = editor.getDocument();
+    const result = applyMediaUrl(
+      editor,
+      { blockId: "m1", kind: "image", draft: "javascript:alert(1)" },
+      DEFAULT_DICTIONARY,
+    );
+    expect(result.ok).toBe(false);
+    expect(editor.getDocument()).toEqual(before);
   });
 });
