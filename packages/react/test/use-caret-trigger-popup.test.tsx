@@ -10,6 +10,9 @@
  *
  * 편집기는 mountBlockEditor로 마운트하고 캐럿 배치·selectionchange는 공용
  * helper를 쓴다(G-TST-001, G-TST-002).
+ *
+ * 열림 판정은 줄바꿈(hardBreak)을 `\n`으로 읽은 텍스트를 본다(Issue #385).
+ * 줄바꿈 뒤 글자가 앞 글자와 이어 붙은 질의로 열리지 않는다.
  */
 
 import { cleanup, fireEvent, screen } from "@testing-library/react";
@@ -235,6 +238,66 @@ describe("useCaretTriggerPopup 열림 판정", () => {
     act(() => rendered.handle().setItemCount(5));
     act(() => rendered.handle().popup.refresh());
     expect(readState()?.highlightedIndex).toBe(1);
+  });
+});
+
+/**
+ * 블록 텍스트를 실제 명령으로 세우고 캐럿을 놓은 뒤 훅에 알린다.
+ * typeIntoBlock은 컨트롤러 text가 입력과 같다고 단언하므로, 줄바꿈이 든
+ * 입력은 이 helper로 세운다. hardBreak가 든 `text`는 입력과 같은 문자열이다.
+ */
+const setLineBreakText = (
+  rendered: ReturnType<typeof mountProbe>,
+  text: string,
+) => {
+  const blockId = rendered.blockIds[0];
+  const block = rendered.blocks[0];
+  if (blockId === undefined || block === undefined) {
+    throw new Error("입력할 블록을 찾지 못했다");
+  }
+  const typed = rendered.editor.commands.setText(blockId, text);
+  if (!typed.ok) throw new Error("블록 텍스트 fixture 준비 실패");
+  placeCaret(block);
+  // 전제: 컨트롤러가 이 캐럿을 이 블록으로 본다. 캐럿이 닿지 않은 채
+  // "열리지 않는다"로 통과하는 부재 단언을 막는다.
+  expect(rendered.editor.getCaretBlockContext()?.blockId).toBe(blockId);
+  fireSelectionChange();
+};
+
+describe("useCaretTriggerPopup 열림 판정 — 줄바꿈(Issue #385)", () => {
+  it("슬래시 뒤 줄바꿈과 글자(/ 줄바꿈 a)는 한 질의로 이어 붙지 않아 열지 않는다", () => {
+    const rendered = mountProbe();
+
+    setLineBreakText(rendered, "/\na");
+
+    expect(readState()).toBeNull();
+  });
+
+  it('줄바꿈 없는 "/a"는 { query: "a" }로 연다(보존)', () => {
+    const rendered = mountProbe();
+
+    setLineBreakText(rendered, "/a");
+
+    expect(readState()).toMatchObject({ query: "a" });
+  });
+
+  it("줄 첫머리가 아닌 슬래시(x 줄바꿈 /)는 열지 않는다(보존)", () => {
+    const rendered = mountProbe();
+
+    setLineBreakText(rendered, "x\n/");
+
+    expect(readState()).toBeNull();
+  });
+
+  it('열린 "/" 뒤에 줄바꿈만 붙어도 닫는다', () => {
+    const rendered = mountProbe();
+    setLineBreakText(rendered, "/");
+    // 전제: 줄바꿈 전에는 열려 있다.
+    expect(readState()).toMatchObject({ query: "" });
+
+    setLineBreakText(rendered, "/\n");
+
+    expect(readState()).toBeNull();
   });
 });
 

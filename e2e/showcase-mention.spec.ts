@@ -386,3 +386,28 @@ test("IME 조합 중 Escape는 picker를 닫지 않는다 (Issue #247)", async (
 
   await expect(menu).toBeVisible();
 });
+
+// Issue #385: 인라인 원소(mention)는 textContent에서 빈 문자열이라 mention 뒤
+// "@a"가 블록 텍스트 전체 "@a"로 읽혔다. picker가 열리고 후보를 확정하면
+// selectItem이 블록을 비워 기존 mention을 지웠다. 이제 원소 자리가 U+FFFC로
+// 읽혀 트리거 모양이 아니다.
+test("mention을 삽입한 블록에서 '@a'를 쳐도 picker가 열리지 않고 mention이 남는다 (Issue #385)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openMentionExample(page);
+
+  await editable.click();
+  await page.keyboard.type("@grace");
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(menu).not.toBeVisible();
+  const mention = editable.locator('[data-geul-mention="true"]');
+  await expect(mention).toHaveText("@Grace Hopper");
+
+  await page.keyboard.type("@a");
+
+  await expect(editable.locator("p")).toContainText("@a");
+  await expect(menu).not.toBeVisible();
+  await expect(mention).toHaveCount(1);
+  await expect(mention).toHaveText("@Grace Hopper");
+});

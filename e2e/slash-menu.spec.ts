@@ -639,3 +639,48 @@ test("블록 추가 버튼으로 연 메뉴에서 키보드로 항목을 고르�
   await expect(editable.locator("h1")).toHaveCount(1);
   await expect(editable.locator("p").first()).toHaveText("first block");
 });
+
+// Issue #385: getCaretBlockContext().text가 hardBreak를 지워 `/` 다음 줄의
+// 글자가 앞 줄과 한 질의로 이어 붙었다. Escape로 닫은 `/`는 같은 텍스트일
+// 때만 억제되므로, 줄바꿈 뒤 글자가 "/a"로 읽히면 메뉴가 다시 열렸다.
+test("Escape로 닫은 '/' 뒤에 Shift+Enter로 줄을 바꾸고 글자를 쳐도 메뉴가 다시 열리지 않는다 (Issue #385)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+
+  await editable.click();
+  await page.keyboard.type("/");
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).not.toBeVisible();
+
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("a");
+
+  // 전제: 줄바꿈이 실제로 들어갔다. 없으면 "/a" 질의라 열려야 맞다.
+  await expect(editable.locator("p br")).toHaveCount(1);
+  await expect(editable.locator("p")).toHaveText("/a");
+  await expect(menu).not.toBeVisible();
+});
+
+// Issue #385: 메뉴가 열린 채 Shift+Enter를 누르면 Enter와 같이 후보를 확정한다
+// (handleMenuKeyDown은 Shift를 판정에 넣지 않는다). 줄바꿈이 들어가지 않아
+// "/\na" 문단이 만들어지지 않고, 이 경로는 수정 전에도 메뉴가 닫힌다. 줄바꿈
+// 판정이 이 경로를 열어 두지 않음을 보존 행으로 고정한다.
+test("메뉴가 열린 채 Shift+Enter 뒤 글자를 쳐도 메뉴가 열려 있지 않다 (Issue #385)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const menu = page.getByRole("listbox", { name: "Slash menu" });
+
+  await editable.click();
+  await page.keyboard.type("/");
+  await expect(menu).toBeVisible();
+
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("a");
+
+  await expect(menu).not.toBeVisible();
+  await expect(editable.locator("p br")).toHaveCount(0);
+});
