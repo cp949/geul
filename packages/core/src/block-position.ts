@@ -51,6 +51,15 @@ export const findEditableBlockContent = (
     : { position: contentPosition, node: contentNode };
 };
 
+// attrs를 node에 setNodeMarkup으로 적용해도 아무것도 바뀌지 않는지 판정한다.
+// 같은 값 재적용이 dispatch되면 문서는 그대로인데 빈 history 단위가 남아 다음
+// undo를 삼킨다(Issue #375). 속성 setter가 검증을 마친 뒤 dispatch 직전에
+// 호출한다. attrs는 node.attrs를 스프레드한 완전한 attrs여야 한다.
+export const hasSameMarkup = (
+  node: ProseMirrorNode,
+  attrs: Record<string, unknown>,
+): boolean => node.hasMarkup(node.type, attrs);
+
 // 캐럿(state.selection.$from)에서 가장 가까운 blockContainer 조상의
 // blockId를 찾는다. depth 역순으로 올라가며 첫 blockContainer를 찾으면 그
 // attrs.blockId를 반환한다 — 스키마상 blockContainer는 항상 유효한

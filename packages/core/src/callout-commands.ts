@@ -2,7 +2,7 @@ import { isValidInlineText, type Result } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 
-import { findEditableBlockContent } from "./block-position.js";
+import { findEditableBlockContent, hasSameMarkup } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 
 const commandNotApplicable = (command: string): Result<never, EditorError> => ({
@@ -35,10 +35,18 @@ export const setCalloutIconCommand = (
     return commandNotApplicable("setCalloutIcon");
   }
 
-  const transaction = editor.state.tr.setNodeMarkup(found.position, undefined, {
-    ...found.node.attrs,
-    icon,
-  });
+  const updatedAttrs = { ...found.node.attrs, icon };
+  // 같은 아이콘 재적용은 빈 history 단위를 남기지 않게 dispatch 전에 거절한다
+  // (Issue #375).
+  if (hasSameMarkup(found.node, updatedAttrs)) {
+    return commandNotApplicable("setCalloutIcon");
+  }
+
+  const transaction = editor.state.tr.setNodeMarkup(
+    found.position,
+    undefined,
+    updatedAttrs,
+  );
   editor.view.dispatch(closeHistory(transaction));
   return { ok: true, value: undefined };
 };

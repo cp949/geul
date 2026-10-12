@@ -21,6 +21,8 @@ import {
   documentOf,
   editorState,
   editorWithTable,
+  expectSameValueReapplyIsNoop,
+  mounted,
   mountTiptapEditor,
   notApplicable,
   okResult,
@@ -220,5 +222,18 @@ describe("caret·선택 컨텍스트의 callout 보고", () => {
       blockId: "callout-1",
       blockType: { type: "callout" },
     });
+  });
+});
+
+describe("setCalloutIcon 같은 값 재적용(Issue #375, G-EDT-001)", () => {
+  it("변경 뒤 같은 아이콘 재적용은 COMMAND_NOT_APPLICABLE이고 undo 1회가 직전 변경을 되돌린다", () => {
+    const fixture = mounted(
+      documentOf(calloutBlock("callout-1", "안내"), tailParagraphBlock),
+    );
+    expectSameValueReapplyIsNoop(
+      fixture,
+      () => fixture.editor.commands.setCalloutIcon("callout-1", "💡"),
+      "setCalloutIcon",
+    );
   });
 });

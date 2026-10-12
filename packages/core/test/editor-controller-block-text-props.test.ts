@@ -5,14 +5,17 @@
  * 왕복시킨다. 값 검증·원자성·undo는 `editor-controller-inline-color.test.ts`
  * (RD-002 DELTA-01)·`toggle-collapse-commands.test.ts`의 기존 계약과
  * 동형이다 — 대상이 선택/mark가 아니라 blockId로 지정한 블록 attrs라는 점만
- * 다르다.
+ * 다르다. 같은 값 재적용이 빈 undo 단위를 남기지 않는 계약(Issue #375)도
+ * 이 파일 끝의 표가 고정한다.
  */
 import type { Block } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
+import type { EditorController } from "../src/index.js";
 import {
   documentOf,
   dividerBlock,
   editorState,
+  expectSameValueReapplyIsNoop,
   listItemBlock,
   mounted,
   notApplicable,
@@ -350,4 +353,39 @@ describe("TextBlockProps 적용 대상 판정 공통 계약", () => {
       textAlignment: "center",
     });
   });
+});
+
+describe("같은 값 재적용은 history 단위를 남기지 않는다(Issue #375, G-EDT-001)", () => {
+  it.each([
+    {
+      command: "setBlockTextColor",
+      apply: (editor: EditorController) =>
+        editor.commands.setBlockTextColor("p-1", "#AABBCC"),
+    },
+    {
+      command: "setBlockBackgroundColor",
+      apply: (editor: EditorController) =>
+        editor.commands.setBlockBackgroundColor("p-1", "#AABBCC"),
+    },
+    {
+      command: "setBlockTextAlignment",
+      apply: (editor: EditorController) =>
+        editor.commands.setBlockTextAlignment("p-1", "center"),
+    },
+  ])(
+    "$command: 변경 뒤 같은 값 재적용은 COMMAND_NOT_APPLICABLE이고 undo 1회가 직전 변경을 되돌린다",
+    ({ command, apply }) => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "본문"),
+          paragraphBlock("tail", "꼬리"),
+        ),
+      );
+      expectSameValueReapplyIsNoop(
+        fixture,
+        () => apply(fixture.editor),
+        command,
+      );
+    },
+  );
 });

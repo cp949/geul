@@ -6,14 +6,18 @@
  * setNodeMarkup 1회" 골격은 동일하다(block-attribute-commands.ts
  * runSetMediaShowPreviewCommand 참고). setCodeBlockCaption은 값이 string이라
  * (boolean처럼 값공간이 닫히지 않는다) setMediaBlockCaption과 같은 이유로
- * 별도 형식 검증이 없다.
+ * 별도 형식 검증이 없다. 같은 값 재적용이 빈 undo 단위를 남기지 않는
+ * 계약(Issue #375)도 이 파일 끝의 표가 고정한다.
  */
 import { describe, expect, it } from "vitest";
+
+import type { EditorController } from "../src/index.js";
 
 import {
   codeBlockBlock,
   documentOf,
   editorState,
+  expectSameValueReapplyIsNoop,
   mounted,
   notApplicable,
   okResult,
@@ -162,4 +166,34 @@ describe("setCodeBlockCaption", () => {
     expect(editorState(editor, tiptap)).toEqual(before);
     expect(changes).toEqual([]);
   });
+});
+
+describe("같은 값 재적용은 history 단위를 남기지 않는다(Issue #375, G-EDT-001)", () => {
+  it.each([
+    {
+      command: "setCodeBlockWrap",
+      apply: (editor: EditorController) =>
+        editor.commands.setCodeBlockWrap("code-1", true),
+    },
+    {
+      command: "setCodeBlockCaption",
+      apply: (editor: EditorController) =>
+        editor.commands.setCodeBlockCaption("code-1", "설명"),
+    },
+  ])(
+    "$command: 변경 뒤 같은 값 재적용은 COMMAND_NOT_APPLICABLE이고 undo 1회가 직전 변경을 되돌린다",
+    ({ command, apply }) => {
+      const fixture = mounted(
+        documentOf(
+          codeBlockBlock("code-1", "const a = 1", "javascript"),
+          tailParagraphBlock,
+        ),
+      );
+      expectSameValueReapplyIsNoop(
+        fixture,
+        () => apply(fixture.editor),
+        command,
+      );
+    },
+  );
 });

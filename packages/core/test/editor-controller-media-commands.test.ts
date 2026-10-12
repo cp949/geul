@@ -25,13 +25,18 @@ import type { Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
-import { createEditor, type MediaBlockKind } from "../src/index.js";
+import {
+  createEditor,
+  type EditorController,
+  type MediaBlockKind,
+} from "../src/index.js";
 import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
   childParagraphBlock,
   documentOf,
   editorState,
   expectMediaBlockNodeSelection,
+  expectSameValueReapplyIsNoop,
   firstParagraphBlock,
   mediaBlock,
   mounted,
@@ -1143,5 +1148,118 @@ describe("iframe 삭제/복제/이동/Turn into 배제(RD-002 DELTA-03, 완료 �
       notApplicable("setBlockType"),
     );
     expect(editorState(editor, tiptap)).toEqual(before);
+  });
+});
+
+describe("같은 값 재적용은 history 단위를 남기지 않는다(Issue #375, G-EDT-001)", () => {
+  const blockUrl = "https://example.com/b.bin";
+  const embedUrl = "https://www.youtube.com/embed/x";
+  const mountWithIframePolicy = (initialDocument: Document) =>
+    mountedWithIframeEmbed(initialDocument, { providers: YOUTUBE_WHITELIST });
+
+  it.each([
+    {
+      command: "setMediaBlockUrl",
+      block: mediaBlock("file", "m-1", {
+        url: "https://example.com/a.bin",
+        name: "a.bin",
+      }),
+      apply: (editor: EditorController) =>
+        editor.commands.setMediaBlockUrl("m-1", blockUrl, "b.bin"),
+    },
+    {
+      command: "setMediaBlockName",
+      block: mediaBlock("file", "m-1", { name: "a.bin" }),
+      apply: (editor: EditorController) =>
+        editor.commands.setMediaBlockName("m-1", "b.bin"),
+    },
+    {
+      command: "setMediaBlockCaption",
+      block: mediaBlock("image", "m-1"),
+      apply: (editor: EditorController) =>
+        editor.commands.setMediaBlockCaption("m-1", "설명"),
+    },
+    {
+      command: "setMediaBlockBackgroundColor",
+      block: mediaBlock("image", "m-1"),
+      apply: (editor: EditorController) =>
+        editor.commands.setMediaBlockBackgroundColor("m-1", "#AABBCC"),
+    },
+    {
+      command: "setIframeSrc",
+      block: mediaBlock("iframe", "m-1", { url: "https://vimeo.com/x" }),
+      apply: (editor: EditorController) =>
+        editor.commands.setIframeSrc("m-1", embedUrl, "임베드"),
+    },
+    {
+      command: "setMediaPreviewWidth",
+      block: mediaBlock("image", "m-1"),
+      apply: (editor: EditorController) =>
+        editor.commands.setMediaPreviewWidth("m-1", 320),
+    },
+    {
+      command: "setMediaShowPreview",
+      block: mediaBlock("image", "m-1"),
+      apply: (editor: EditorController) =>
+        editor.commands.setMediaShowPreview("m-1", false),
+    },
+    {
+      command: "setMediaTextAlignment",
+      block: mediaBlock("image", "m-1"),
+      apply: (editor: EditorController) =>
+        editor.commands.setMediaTextAlignment("m-1", "center"),
+    },
+  ])(
+    "$command: 변경 뒤 같은 값 재적용은 COMMAND_NOT_APPLICABLE이고 undo 1회가 직전 변경을 되돌린다",
+    ({ command, block, apply }) => {
+      const fixture = mountWithIframePolicy(
+        documentOf(block, tailParagraphBlock),
+      );
+      expectSameValueReapplyIsNoop(
+        fixture,
+        () => apply(fixture.editor),
+        command,
+      );
+    },
+  );
+
+  it("url은 같고 name만 다르면 no-op이 아니라 적용된다", () => {
+    const { editor, tiptap, changes } = mounted(
+      documentOf(
+        mediaBlock("file", "m-1", { url: blockUrl, name: "a.bin" }),
+        tailParagraphBlock,
+      ),
+    );
+    const before = editorState(editor, tiptap);
+
+    expect(editor.commands.setMediaBlockUrl("m-1", blockUrl, "b.bin")).toEqual(
+      okResult,
+    );
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("file", "m-1", { url: blockUrl, name: "b.bin" }),
+      tailParagraphBlock,
+    ]);
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["m-1"], reason: "local" },
+    ]);
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+
+  it("현재 iframe URL이 정책상 막힌 상태에서 같은 URL을 재적용하면 IFRAME_URL_NOT_ALLOWED가 우선한다", () => {
+    const { editor, tiptap, changes } = mountedWithIframeEmbed(
+      documentOf(mediaBlock("iframe", "m-1", { url: embedUrl })),
+    );
+    const before = editorState(editor, tiptap);
+
+    expect(editor.commands.setIframeSrc("m-1", embedUrl)).toEqual({
+      ok: false,
+      error: {
+        code: "IFRAME_URL_NOT_ALLOWED",
+        reason: "NOT_WHITELISTED_AND_CUSTOM_DISABLED",
+      },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
   });
 });

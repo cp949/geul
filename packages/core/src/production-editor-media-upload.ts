@@ -7,7 +7,7 @@ import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
-import { findBlockPosition } from "./block-position.js";
+import { findBlockPosition, hasSameMarkup } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import {
   createLocalPreviewAttrs,
@@ -144,15 +144,21 @@ export class MediaUploadTracker {
             localPreviewFile: node.attrs.localPreviewFile as File,
           }
         : null;
+    const nextAttrs = {
+      ...node.attrs,
+      url,
+      ...(name === undefined ? {} : { name }),
+      ...(staleLocalPreview === null
+        ? {}
+        : { localPreviewUrl: null, localPreviewFile: null }),
+    };
+    // Issue #375 — 결과가 현재 attrs와 같으면 dispatch하지 않는다. 빈 history
+    // 단위가 남아 다음 undo를 삼킨다. 로컬 프리뷰가 남은 블록은 attrs가
+    // 달라 이 검사를 지나친다.
+    if (hasSameMarkup(node, nextAttrs)) {
+      return false;
+    }
     const committed = this.host.runDocumentCommand(command, "local", () => {
-      const nextAttrs = {
-        ...node.attrs,
-        url,
-        ...(name === undefined ? {} : { name }),
-        ...(staleLocalPreview === null
-          ? {}
-          : { localPreviewUrl: null, localPreviewFile: null }),
-      };
       const transaction = this.host.editor.state.tr.setNodeMarkup(
         position,
         undefined,

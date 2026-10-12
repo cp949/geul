@@ -12,6 +12,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import {
   findBlockPosition,
   findEditableBlockContent,
+  hasSameMarkup,
 } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import { type MediaBlockKind } from "./media-block-kind.js";
@@ -75,11 +76,15 @@ export const createBlockAttributeCommands = (
       const error = validate(value);
       if (error !== null) return { ok: false, error };
     }
+    const updatedAttrs = nextAttrs(node.attrs, value);
+    // 같은 값 재적용은 빈 history 단위를 남기지 않게 dispatch 전에 거절한다
+    // (Issue #375).
+    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
     return session.runDocumentCommand(command, "local", () => {
       const transaction = session.editor.state.tr.setNodeMarkup(
         position,
         undefined,
-        nextAttrs(node.attrs, value),
+        updatedAttrs,
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
@@ -149,6 +154,7 @@ export const createBlockAttributeCommands = (
       if (error !== null) return { ok: false, error };
     }
     const updatedAttrs = nextAttrs(node.attrs, value);
+    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
     const clearedLocalPreview =
       typeof node.attrs.localPreviewUrl === "string" &&
       updatedAttrs.localPreviewUrl === null
@@ -211,11 +217,13 @@ export const createBlockAttributeCommands = (
         },
       };
     }
+    const updatedAttrs = { ...node.attrs, previewWidth: width };
+    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
     return session.runDocumentCommand(command, "local", () => {
       const transaction = session.editor.state.tr.setNodeMarkup(
         position,
         undefined,
-        { ...node.attrs, previewWidth: width },
+        updatedAttrs,
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
@@ -252,11 +260,13 @@ export const createBlockAttributeCommands = (
         error: { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" },
       };
     }
+    const updatedAttrs = { ...node.attrs, showPreview: show };
+    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
     return session.runDocumentCommand(command, "local", () => {
       const transaction = session.editor.state.tr.setNodeMarkup(
         position,
         undefined,
-        { ...node.attrs, showPreview: show },
+        updatedAttrs,
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
@@ -289,11 +299,15 @@ export const createBlockAttributeCommands = (
     if (target.node.type.name !== "codeBlock") {
       return commandNotApplicable(command);
     }
+    const updatedAttrs = { ...target.node.attrs, wrap };
+    if (hasSameMarkup(target.node, updatedAttrs)) {
+      return commandNotApplicable(command);
+    }
     return session.runDocumentCommand(command, "local", () => {
       const transaction = session.editor.state.tr.setNodeMarkup(
         target.position,
         undefined,
-        { ...target.node.attrs, wrap },
+        updatedAttrs,
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
@@ -322,11 +336,15 @@ export const createBlockAttributeCommands = (
     if (target.node.type.name !== "codeBlock") {
       return commandNotApplicable(command);
     }
+    const updatedAttrs = { ...target.node.attrs, caption };
+    if (hasSameMarkup(target.node, updatedAttrs)) {
+      return commandNotApplicable(command);
+    }
     return session.runDocumentCommand(command, "local", () => {
       const transaction = session.editor.state.tr.setNodeMarkup(
         target.position,
         undefined,
-        { ...target.node.attrs, caption },
+        updatedAttrs,
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
@@ -364,11 +382,13 @@ export const createBlockAttributeCommands = (
     if (alignment !== null && !isCanonicalCellAlign(alignment)) {
       return { ok: false, error: { code: "INVALID_ALIGN", align: alignment } };
     }
+    const updatedAttrs = { ...node.attrs, textAlignment: alignment };
+    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
     return session.runDocumentCommand(command, "local", () => {
       const transaction = session.editor.state.tr.setNodeMarkup(
         position,
         undefined,
-        { ...node.attrs, textAlignment: alignment },
+        updatedAttrs,
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
@@ -413,11 +433,17 @@ export const createBlockAttributeCommands = (
         error: { code: "IFRAME_URL_NOT_ALLOWED", reason: decision.reason },
       };
     }
+    const updatedAttrs = {
+      ...node.attrs,
+      url,
+      ...(name === undefined ? {} : { name }),
+    };
+    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
     return session.runDocumentCommand(command, "local", () => {
       const transaction = session.editor.state.tr.setNodeMarkup(
         position,
         undefined,
-        { ...node.attrs, url, ...(name === undefined ? {} : { name }) },
+        updatedAttrs,
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;

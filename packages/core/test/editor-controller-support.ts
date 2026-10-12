@@ -22,6 +22,7 @@ import {
   type IdFactory,
   type InlineContent,
   type NestableBlockType,
+  type Result,
   type TableBlock,
 } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
@@ -32,12 +33,16 @@ import { findBlockPosition } from "../src/block-position.js";
 import {
   createEditor,
   type EditorController,
+  type EditorError,
   type MediaBlockKind,
 } from "../src/index.js";
 import {
   documentOf,
+  editorState,
   mountTiptapEditor,
+  notApplicable,
   paragraphBlock,
+  restored,
   sequentialIds,
 } from "./list-item-block-type-support.js";
 
@@ -517,4 +522,39 @@ export const expectDividerNodeSelection = (
  */
 export const unusedIdFactory: IdFactory = () => {
   throw new Error("createId는 모든 블록에 이미 id가 있을 때 호출되면 안 된다");
+};
+
+/**
+ * 속성 setter의 같은 값 재적용이 빈 history 단위를 남기지 않는지 단언한다
+ * (Issue #375, G-EDT-001). apply는 같은 인자로 두 번 불린다.
+ * 순서는 첫 적용 ok → 재적용 notApplicable(command) → 재적용 전후
+ * editorState·changes 동일 → undo 1회가 첫 적용 이전으로 복원이다.
+ * 빈 단위가 남았다면 마지막 undo가 그 단위를 소비해 실패한다.
+ */
+export const expectSameValueReapplyIsNoop = (
+  fixture: {
+    editor: EditorController;
+    tiptap: TiptapEditor;
+    changes: readonly {
+      revision: number;
+      changedBlockIds: readonly string[];
+      reason: string;
+    }[];
+  },
+  apply: () => Result<void, EditorError>,
+  command: string,
+): void => {
+  const { editor, tiptap, changes } = fixture;
+  const before = editorState(editor, tiptap);
+
+  expect(apply()).toEqual({ ok: true, value: undefined });
+  const applied = editorState(editor, tiptap);
+  const appliedChanges = [...changes];
+
+  expect(apply()).toEqual(notApplicable(command));
+  expect(editorState(editor, tiptap)).toEqual(applied);
+  expect(changes).toEqual(appliedChanges);
+
+  expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+  expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
 };

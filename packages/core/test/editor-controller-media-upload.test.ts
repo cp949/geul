@@ -720,6 +720,50 @@ describe("replaceMediaBlockFile — 성공", () => {
       },
     ]);
   });
+
+  // Issue #375 — 업로드 콜백이 현재와 같은 url(및 name)을 돌려주면 attrs가
+  // 그대로라 setNodeMarkup이 빈 history 단위만 남기고 다음 undo를 삼킨다.
+  it.each([
+    [
+      "url과 name이 모두 같다",
+      { url: "https://example.com/a.bin", name: "a.bin" },
+    ],
+    ["url만 같고 name은 미지정이다", { url: "https://example.com/a.bin" }],
+  ])(
+    "결과가 현재 attrs와 같으면(%s) 문서와 history를 바꾸지 않아 undo가 직전 변경을 되돌린다",
+    async (_label, uploaded) => {
+      const { uploadFile, pending } = controllableUploadFile();
+      const { editor, tiptap, changes } = mountedWithUpload(
+        documentOf(
+          mediaBlock("file", "m-1", {
+            url: "https://example.com/a.bin",
+            name: "a.bin",
+          }),
+          tailParagraphBlock,
+        ),
+        { uploadFile },
+      );
+      const before = editorState(editor, tiptap);
+      expect(editor.commands.setMediaBlockCaption("m-1", "c")).toEqual(
+        okResult,
+      );
+      const applied = editorState(editor, tiptap);
+      const appliedChanges = [...changes];
+
+      const replacePromise = editor.commands.replaceMediaBlockFile(
+        "m-1",
+        testFile("a.bin"),
+      );
+      pending[0]!.resolve({ status: "success", ...uploaded });
+      expect(await replacePromise).toEqual(okResult);
+
+      expect(editor.getMediaUploadState("m-1")).toBeNull();
+      expect(editorState(editor, tiptap)).toEqual(applied);
+      expect(changes).toEqual(appliedChanges);
+      expect(editor.commands.undo()).toEqual(okResult);
+      expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+    },
+  );
 });
 
 describe("replaceMediaBlockFile — 실패·취소", () => {
