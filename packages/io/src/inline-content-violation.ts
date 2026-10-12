@@ -2,8 +2,8 @@ import {
   type Block,
   type InlineContent,
   isKnownBlockType,
-  isLeafBlock,
   isKnownTextMarkType,
+  isLeafBlock,
   isTextRunItem,
 } from "@cp949/geul-model";
 
