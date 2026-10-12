@@ -16,6 +16,7 @@ import {
   paragraphBlock,
   restored,
   sequentialIds,
+  tailParagraphBlock,
 } from "./editor-controller-support.js";
 
 const twoParagraphDocument = () =>
@@ -591,6 +592,414 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — replaceBl
       "block-2",
       "block-3",
     ]);
+  });
+
+  describe("제거 대상과 같은 id의 블록 삽입(Issue #386)", () => {
+    /** 기대 문서를 새 편집기로 로드해 PM 문서 JSON을 얻는다. */
+    const tiptapDocumentOf = (document: ReturnType<typeof documentOf>) => {
+      const expected = mounted(document);
+      return editorState(expected.editor, expected.tiptap).tiptapDocument;
+    };
+
+    it("최상위 블록을 같은 id로 교체하면 성공하고 새 블록이 원래 자리에 하나만 남는다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "a"),
+          paragraphBlock("p-2", "two"),
+          tailParagraphBlock,
+        ),
+      );
+      const { editor, tiptap } = fixture;
+
+      const result = editor.replaceBlocks(
+        ["p-1"],
+        [paragraphBlock("p-1", "b")],
+      );
+
+      expect(result).toEqual({
+        ok: true,
+        value: {
+          insertedBlocks: [paragraphBlock("p-1", "b")],
+          removedBlocks: [paragraphBlock("p-1", "a")],
+        },
+      });
+      expect(editor.getDocument().blocks).toEqual([
+        paragraphBlock("p-1", "b"),
+        paragraphBlock("p-2", "two"),
+        tailParagraphBlock,
+      ]);
+      expect(editorState(editor, tiptap).tiptapDocument).toEqual(
+        tiptapDocumentOf(
+          documentOf(
+            paragraphBlock("p-1", "b"),
+            paragraphBlock("p-2", "two"),
+            tailParagraphBlock,
+          ),
+        ),
+      );
+    });
+
+    it("부모의 유일한 자식을 같은 id로 교체하면 부모 구조가 유지된다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "parent", [paragraphBlock("c-1", "a")]),
+          tailParagraphBlock,
+        ),
+      );
+      const { editor, tiptap } = fixture;
+
+      const result = editor.replaceBlocks(
+        ["c-1"],
+        [paragraphBlock("c-1", "b")],
+      );
+
+      expect(result.ok).toBe(true);
+      const expected = documentOf(
+        paragraphBlock("p-1", "parent", [paragraphBlock("c-1", "b")]),
+        tailParagraphBlock,
+      );
+      expect(editor.getDocument().blocks).toEqual(expected.blocks);
+      expect(editorState(editor, tiptap).tiptapDocument).toEqual(
+        tiptapDocumentOf(expected),
+      );
+    });
+
+    it("형제 여럿 중 하나를 같은 id로 교체하면 형제 순서가 유지된다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "parent", [
+            paragraphBlock("c-1", "one"),
+            paragraphBlock("c-2", "a"),
+            paragraphBlock("c-3", "three"),
+          ]),
+          tailParagraphBlock,
+        ),
+      );
+      const { editor, tiptap } = fixture;
+
+      const result = editor.replaceBlocks(
+        ["c-2"],
+        [paragraphBlock("c-2", "b")],
+      );
+
+      expect(result.ok).toBe(true);
+      const expected = documentOf(
+        paragraphBlock("p-1", "parent", [
+          paragraphBlock("c-1", "one"),
+          paragraphBlock("c-2", "b"),
+          paragraphBlock("c-3", "three"),
+        ]),
+        tailParagraphBlock,
+      );
+      expect(editor.getDocument().blocks).toEqual(expected.blocks);
+      expect(editorState(editor, tiptap).tiptapDocument).toEqual(
+        tiptapDocumentOf(expected),
+      );
+    });
+
+    it("앵커가 아닌 제거 대상과 같은 id로 삽입하면 앵커 자리에 새 블록만 남는다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "one"),
+          paragraphBlock("p-2", "two"),
+          tailParagraphBlock,
+        ),
+      );
+      const { editor, tiptap } = fixture;
+
+      const result = editor.replaceBlocks(
+        ["p-1", "p-2"],
+        [paragraphBlock("p-2", "new")],
+      );
+
+      expect(result.ok).toBe(true);
+      const expected = documentOf(
+        paragraphBlock("p-2", "new"),
+        tailParagraphBlock,
+      );
+      expect(editor.getDocument().blocks).toEqual(expected.blocks);
+      expect(editorState(editor, tiptap).tiptapDocument).toEqual(
+        tiptapDocumentOf(expected),
+      );
+    });
+
+    it("삽입 블록의 자식이 제거 대상 id를 재사용해도 그 자식이 남는다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "one"),
+          paragraphBlock("p-2", "two"),
+          tailParagraphBlock,
+        ),
+      );
+      const { editor, tiptap } = fixture;
+
+      const result = editor.replaceBlocks(
+        ["p-1"],
+        [paragraphBlock("x", "x", [paragraphBlock("p-1", "c")])],
+      );
+
+      expect(result.ok).toBe(true);
+      const expected = documentOf(
+        paragraphBlock("x", "x", [paragraphBlock("p-1", "c")]),
+        paragraphBlock("p-2", "two"),
+        tailParagraphBlock,
+      );
+      expect(editor.getDocument().blocks).toEqual(expected.blocks);
+      expect(editorState(editor, tiptap).tiptapDocument).toEqual(
+        tiptapDocumentOf(expected),
+      );
+    });
+
+    it("제거 대상의 옛 자식 id를 삽입 블록의 자식이 재사용하면 새 자식만 남는다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "old", [paragraphBlock("c-1", "옛 자식")]),
+          tailParagraphBlock,
+        ),
+      );
+      const { editor, tiptap } = fixture;
+
+      const result = editor.replaceBlocks(
+        ["p-1"],
+        [paragraphBlock("x", "x", [paragraphBlock("c-1", "새 자식")])],
+      );
+
+      expect(result.ok).toBe(true);
+      const expected = documentOf(
+        paragraphBlock("x", "x", [paragraphBlock("c-1", "새 자식")]),
+        tailParagraphBlock,
+      );
+      expect(editor.getDocument().blocks).toEqual(expected.blocks);
+      expect(editorState(editor, tiptap).tiptapDocument).toEqual(
+        tiptapDocumentOf(expected),
+      );
+    });
+
+    it("같은 id 교체는 undo 1회로 원복되고 redo로 다시 적용된다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "a"),
+          paragraphBlock("p-2", "two"),
+          tailParagraphBlock,
+        ),
+      );
+      const { editor, tiptap, changes } = fixture;
+      const before = editorState(editor, tiptap);
+
+      expect(
+        editor.replaceBlocks(["p-1"], [paragraphBlock("p-1", "b")]).ok,
+      ).toBe(true);
+      const applied = editorState(editor, tiptap);
+      expect(changes).toHaveLength(1);
+
+      expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+      expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+
+      expect(editor.commands.redo()).toEqual({ ok: true, value: undefined });
+      expect(editorState(editor, tiptap)).toEqual({
+        ...applied,
+        document: { ...applied.document, revision: 3 },
+      });
+    });
+
+    it("같은 id·내용으로 최상위 블록을 교체하면 거절되고 undo 1회가 직전 변경을 되돌린다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "one"),
+          paragraphBlock("p-2", "two"),
+          tailParagraphBlock,
+        ),
+      );
+
+      expectReapplyIsNoop(
+        fixture,
+        () => fixture.editor.commands.setBlockTextColor("tail", "#AABBCC"),
+        () =>
+          fixture.editor.replaceBlocks(["p-1"], [paragraphBlock("p-1", "one")]),
+        "replaceBlocks",
+      );
+    });
+
+    it("같은 id·내용으로 중첩 블록을 교체하면 거절되고 undo 1회가 직전 변경을 되돌린다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "parent", [
+            paragraphBlock("c-1", "one"),
+            paragraphBlock("c-2", "two"),
+          ]),
+          tailParagraphBlock,
+        ),
+      );
+
+      expectReapplyIsNoop(
+        fixture,
+        () => fixture.editor.commands.setBlockTextColor("tail", "#AABBCC"),
+        () =>
+          fixture.editor.replaceBlocks(["c-2"], [paragraphBlock("c-2", "two")]),
+        "replaceBlocks",
+      );
+    });
+
+    it("여러 블록을 같은 id·내용·순서로 교체하면 거절되고 undo 1회가 직전 변경을 되돌린다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "one"),
+          paragraphBlock("p-2", "two"),
+          tailParagraphBlock,
+        ),
+      );
+
+      expectReapplyIsNoop(
+        fixture,
+        () => fixture.editor.commands.setBlockTextColor("tail", "#AABBCC"),
+        () =>
+          fixture.editor.replaceBlocks(
+            ["p-1", "p-2"],
+            [paragraphBlock("p-1", "one"), paragraphBlock("p-2", "two")],
+          ),
+        "replaceBlocks",
+      );
+    });
+
+    it("인접한 같은 서식 run으로 쪼갠 같은 내용의 재교체는 거절되고 selection·undo 단위가 그대로다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("p-1", "one"),
+          paragraphBlock("p-2", "two"),
+          tailParagraphBlock,
+        ),
+      );
+
+      // 모델은 run을 합치지 않고 PM은 합친다 — 모델 기준 가드를 지나도 PM
+      // 문서가 같으면 dispatch하지 않아야 한다.
+      expectReapplyIsNoop(
+        fixture,
+        () => fixture.editor.commands.setBlockTextColor("tail", "#AABBCC"),
+        () =>
+          fixture.editor.replaceBlocks(
+            ["p-1"],
+            [
+              {
+                id: "p-1",
+                type: "paragraph",
+                content: [{ text: "o" }, { text: "ne" }],
+              },
+            ],
+          ),
+        "replaceBlocks",
+      );
+    });
+
+    it("앵커가 문서 순서상 첫 제거 대상이 아니면 앵커 자리에 삽입한다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("a", "A"),
+          paragraphBlock("b", "B"),
+          paragraphBlock("c", "C"),
+          tailParagraphBlock,
+        ),
+      );
+      const { editor, tiptap } = fixture;
+
+      const result = editor.replaceBlocks(
+        ["c", "a"],
+        [paragraphBlock("n", "N")],
+      );
+
+      expect(result.ok).toBe(true);
+      const expected = documentOf(
+        paragraphBlock("b", "B"),
+        paragraphBlock("n", "N"),
+        tailParagraphBlock,
+      );
+      expect(editor.getDocument().blocks).toEqual(expected.blocks);
+      expect(editorState(editor, tiptap).tiptapDocument).toEqual(
+        tiptapDocumentOf(expected),
+      );
+    });
+
+    it("앵커가 첫 제거 대상이 아니어도 제거 대상 id를 모두 같은 id로 다시 넣을 수 있다", () => {
+      const fixture = mounted(
+        documentOf(
+          paragraphBlock("a", "A"),
+          paragraphBlock("b", "B"),
+          paragraphBlock("c", "C"),
+          tailParagraphBlock,
+        ),
+      );
+      const { editor, tiptap } = fixture;
+
+      const result = editor.replaceBlocks(
+        ["c", "a"],
+        [paragraphBlock("a", "A2"), paragraphBlock("c", "C2")],
+      );
+
+      expect(result.ok).toBe(true);
+      const expected = documentOf(
+        paragraphBlock("b", "B"),
+        paragraphBlock("a", "A2"),
+        paragraphBlock("c", "C2"),
+        tailParagraphBlock,
+      );
+      expect(editor.getDocument().blocks).toEqual(expected.blocks);
+      expect(editorState(editor, tiptap).tiptapDocument).toEqual(
+        tiptapDocumentOf(expected),
+      );
+    });
+
+    it.each([
+      {
+        title: "조상과 자손을 함께 제거하면",
+        removeIds: ["p-1", "c-1"],
+        inserted: [paragraphBlock("n", "new")],
+        error: { code: "COMMAND_NOT_APPLICABLE", command: "replaceBlocks" },
+      },
+      {
+        title: "자손을 먼저 적은 조상과 자손 제거도",
+        removeIds: ["c-1", "p-1"],
+        inserted: [paragraphBlock("n", "new")],
+        error: { code: "COMMAND_NOT_APPLICABLE", command: "replaceBlocks" },
+      },
+      {
+        title: "같은 id를 두 번 제거하면",
+        removeIds: ["p-1", "p-1"],
+        inserted: [paragraphBlock("n", "new")],
+        error: { code: "COMMAND_NOT_APPLICABLE", command: "replaceBlocks" },
+      },
+      {
+        title: "제거하지 않는 id와 겹치는 블록을 삽입하면",
+        removeIds: ["p-1"],
+        inserted: [paragraphBlock("tail", "dup")],
+        error: { code: "DOCUMENT_INVALID", message: "Duplicate id: tail" },
+      },
+    ])(
+      "$title 거절되고 문서·selection·change·undo 단위가 그대로다",
+      ({ removeIds, inserted, error }) => {
+        const fixture = mounted(
+          documentOf(
+            paragraphBlock("p-1", "parent", [paragraphBlock("c-1", "child")]),
+            tailParagraphBlock,
+          ),
+        );
+        const { editor, tiptap, changes } = fixture;
+        const beforePrior = editorState(editor, tiptap);
+        expect(editor.commands.setBlockTextColor("tail", "#AABBCC").ok).toBe(
+          true,
+        );
+        const before = editorState(editor, tiptap);
+        const beforeChanges = [...changes];
+
+        expect(editor.replaceBlocks(removeIds, inserted)).toEqual({
+          ok: false,
+          error,
+        });
+
+        expect(editorState(editor, tiptap)).toEqual(before);
+        expect(changes).toEqual(beforeChanges);
+        expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+        expect(editorState(editor, tiptap)).toEqual(restored(beforePrior, 2));
+      },
+    );
   });
 });
 

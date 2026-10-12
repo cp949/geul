@@ -581,8 +581,23 @@ describe("블록은 남고 로컬 프리뷰 URL만 빠지는 경로(Issue #383)"
     expect(countOf(localPreviewCleared, url1)).toBe(1);
   });
 
-  // 같은 id 최상위 교체(replaceBlocks(["m-1"], [{ id: "m-1" }]))는 프리뷰와 무관하게
-  // 이미 COMMAND_NOT_APPLICABLE로 거절돼 이 describe의 대상이 아니다.
+  it("D1: 최상위 블록을 같은 id로 교체해도 프리뷰를 이어받고 destroy() 전까지 통지가 없다(Issue #386)", async () => {
+    const { editor, tiptap, url1, localPreviewCleared } =
+      await mountedWithPreview();
+
+    expect(
+      editor.replaceBlocks(["m-1"], [
+        { id: "m-1", type: "image", caption: "새 캡션" },
+      ] as never).ok,
+    ).toBe(true);
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBe(url1);
+    expect(localPreviewCleared).toEqual([]);
+
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+
   it("D1: 제거 대상이 둘이고 각각 프리뷰 자식이 있으면 교체 블록의 두 자식이 각자 프리뷰를 이어받는다", async () => {
     const { editor, tiptap, url1, localPreviewCleared } =
       await mountedWithPreview([
