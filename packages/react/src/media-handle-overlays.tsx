@@ -10,6 +10,10 @@ import { BlockSideMenuMenu } from "./block-side-menu-menu.js";
 import type { BlockMenuState, DragState } from "./block-side-menu-types.js";
 import { isElementNode, isHtmlElement } from "./dom-node.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
+import {
+  isPointerWithinHoverMargins,
+  type HoverMargins,
+} from "./hover-margin.js";
 import { isHiddenBlockElement } from "./hidden-block.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
@@ -49,6 +53,12 @@ const interactButtonSelector = "[data-geul-iframe-interact-button]";
 // media에서 이 오버레이로 이동하는 도중(왼쪽 방향) hover가 풀리면 안 된다는
 // 이유가 동일해서다.
 const MEDIA_HANDLE_OFFSET_PX = 56;
+const MEDIA_HANDLE_HOVER_MARGINS: HoverMargins = {
+  left: MEDIA_HANDLE_OFFSET_PX,
+  right: 0,
+  top: 0,
+  bottom: 0,
+};
 
 // `readPageRect(hoverElement)`가 읽던 hoverElement는 `data-geul-media-kind`
 // div, 즉 항상 블록 전체 폭(예: paragraph와 같은 content 폭)인 래퍼다.
@@ -168,15 +178,12 @@ export const MediaHandleOverlays = ({
           "data-geul-block-id",
           currentId,
         );
-        const rect = blockElement?.getBoundingClientRect();
         if (
-          rect !== undefined &&
-          rect.width > 0 &&
-          rect.height > 0 &&
-          event.clientX >= rect.left - MEDIA_HANDLE_OFFSET_PX &&
-          event.clientX <= rect.right &&
-          event.clientY >= rect.top &&
-          event.clientY <= rect.bottom
+          isPointerWithinHoverMargins(
+            blockElement?.getBoundingClientRect(),
+            event,
+            MEDIA_HANDLE_HOVER_MARGINS,
+          )
         ) {
           return;
         }

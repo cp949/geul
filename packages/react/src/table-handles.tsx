@@ -22,11 +22,10 @@ import {
   TableHandleOverlays,
 } from "./table-handle-overlays.js";
 import {
-  HANDLE_HOVER_MARGIN,
   TABLE_GRIP_MENU_DISMISS_ALLOW_SELECTORS,
   TABLE_GRIP_MENU_SELECTOR,
   TABLE_HOVER_IGNORE_SELECTORS,
-  TABLE_HOVER_MARGIN_LEFT_PX,
+  TABLE_HOVER_MARGINS,
   TABLE_MENU_DISMISS_ALLOW_SELECTORS,
   TABLE_MENU_SELECTOR,
 } from "./table-handle-constants.js";
@@ -53,6 +52,7 @@ import {
   readScrollClipBoxes,
 } from "./scroll-clip.js";
 import { isElementNode, isHtmlElement } from "./dom-node.js";
+import { isPointerWithinHoverMargins } from "./hover-margin.js";
 import {
   COLLAPSED_HIDDEN_ATTRIBUTE,
   isHiddenBlockElement,
@@ -438,15 +438,12 @@ export const TableHandles = ({ onBlockAdded }: TableHandlesProps = {}) => {
       const currentId = hoverTableIdRef.current;
       if (currentId !== null && element !== null) {
         const table = findTable(element, currentId);
-        const rect = table?.getBoundingClientRect();
         if (
-          rect !== undefined &&
-          rect.width > 0 &&
-          rect.height > 0 &&
-          event.clientX >= rect.left - TABLE_HOVER_MARGIN_LEFT_PX &&
-          event.clientX <= rect.right + HANDLE_HOVER_MARGIN &&
-          event.clientY >= rect.top - HANDLE_HOVER_MARGIN &&
-          event.clientY <= rect.bottom + HANDLE_HOVER_MARGIN
+          isPointerWithinHoverMargins(
+            table?.getBoundingClientRect(),
+            event,
+            TABLE_HOVER_MARGINS,
+          )
         ) {
           // 표 안은 아니지만(candidate === null) 여백 안 — hoverTableId는
           // 유지해야 그립으로 이동하는 도중 클러스터가 안 사라진다. 하지만

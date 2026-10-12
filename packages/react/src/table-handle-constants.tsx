@@ -1,5 +1,6 @@
 import { Grip, GripHorizontal, GripVertical, Plus } from "lucide-react";
 
+import type { HoverMargins } from "./hover-margin.js";
 import { iconProps } from "./icon-props.js";
 
 // spec §8(EXT-009), RD-002-DELTA-08 — 라벨 문구는 core Dictionary.handle이
@@ -113,6 +114,15 @@ export const tableCornerPlusOffsetPx =
 // 아래 다음 블록까지 번짐)이 난다. 블록은 좌우로 나란히 배치되지 않고
 // 세로로만 쌓이므로 왼쪽으로 넓히는 쪽은 그 위험이 없다.
 export const TABLE_HOVER_MARGIN_LEFT_PX = -tableCornerGripOffsetPx;
+
+// 표 hover 유지 여백. 왼쪽만 코너 그립까지 닿는 값이고 나머지 세 방향은
+// HANDLE_HOVER_MARGIN이다(table-handles.tsx의 hover 유지 판정이 쓴다).
+export const TABLE_HOVER_MARGINS: HoverMargins = {
+  left: TABLE_HOVER_MARGIN_LEFT_PX,
+  right: HANDLE_HOVER_MARGIN,
+  top: HANDLE_HOVER_MARGIN,
+  bottom: HANDLE_HOVER_MARGIN,
+};
 
 // 메뉴 패널 루트(table-handle-menu.tsx)에 붙는 안정 셀렉터. 아래 두 배열과
 // table-handles.tsx의 초점 판정(Issue #65 항목4)이 모두 이 문자열을

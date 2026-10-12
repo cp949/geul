@@ -17,6 +17,10 @@ import type {
   DragState,
 } from "./block-side-menu-types.js";
 import { findElementByAttribute } from "./find-by-attribute.js";
+import {
+  isPointerWithinHoverMargins,
+  type HoverMargins,
+} from "./hover-margin.js";
 import { useFixedPlacement } from "./fixed-placement.js";
 import { isHiddenBlockElement } from "./hidden-block.js";
 import { IconButton } from "./icon-button.js";
@@ -53,6 +57,12 @@ const blockGutterButtonClassName = "geul-block-gutter__button";
 // 넘어간 뒤에도 이전 블록의 거터가 안 사라지는 dead-zone 역전 버그가
 // 난다(사용자 스크린샷, 표가 문단 바로 아래일 때 재현).
 const BLOCK_GUTTER_HOVER_MARGIN = 56;
+const BLOCK_GUTTER_HOVER_MARGINS: HoverMargins = {
+  left: BLOCK_GUTTER_HOVER_MARGIN,
+  right: 0,
+  top: 0,
+  bottom: 0,
+};
 
 // useDismissibleOverlay allow-list. 모듈 스코프 상수로 둔다.
 // 소유자 셀렉터를 맨 앞에 둔다. 블록 메뉴와 media 메뉴가 같은
@@ -140,15 +150,12 @@ export const BlockSideMenu = ({ onBlockAdded }: BlockSideMenuProps) => {
           "data-geul-block-id",
           currentId,
         );
-        const rect = blockElement?.getBoundingClientRect();
         if (
-          rect !== undefined &&
-          rect.width > 0 &&
-          rect.height > 0 &&
-          event.clientX >= rect.left - BLOCK_GUTTER_HOVER_MARGIN &&
-          event.clientX <= rect.right &&
-          event.clientY >= rect.top &&
-          event.clientY <= rect.bottom
+          isPointerWithinHoverMargins(
+            blockElement?.getBoundingClientRect(),
+            event,
+            BLOCK_GUTTER_HOVER_MARGINS,
+          )
         ) {
           return;
         }
