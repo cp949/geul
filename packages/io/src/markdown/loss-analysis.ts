@@ -11,6 +11,7 @@ import {
 import { computeColumnAlignments } from "./column-align.js";
 import {
   firstChildMergesIntoOwnContent,
+  isBulletLineReadAsThematicBreak,
   isCheckboxAnchorLost,
   isGfmContainerLikeBlockType,
 } from "./gfm-container-shape.js";
@@ -216,6 +217,22 @@ const collectTableLosses = (
   }
 };
 
+// NESTED_CHILDREN 메시지를 모양별로 고른다. 종류는 하나이고 원인만 다르다.
+// 빈 목록 항목의 마커 줄이 thematic break로 읽히는 두 모양(Issue #392)은 첫
+// 자식이 divider인지로 가른다. 사슬 모양은 첫 자식이 bulletListItem이다.
+const nestedChildrenMessage = (block: Block): string => {
+  if (!isGfmContainerLikeBlockType(block.type)) {
+    return `Block ${block.id} has nested children; GFM export flattens them into sibling blocks`;
+  }
+  if (isBulletLineReadAsThematicBreak(block)) {
+    return block.type === "bulletListItem" &&
+      block.children?.[0]?.type === "divider"
+      ? `Block ${block.id} is an empty list item whose first child is a divider; GFM can read its marker line as a thematic break`
+      : `Block ${block.id} starts a chain of nested empty list items; GFM can read the marker line as a thematic break`;
+  }
+  return `Block ${block.id} has empty content and a first child that GFM cannot tell apart from the block's own content`;
+};
+
 // 블록 하나의 손실을 모으고 children을 재귀 순회한다. 목록 항목·quote의
 // children은 mdast가 직접 표현하므로 손실 없이 순회한다. 단, 빈 own content 뒤
 // 첫 자식이 mdast paragraph로 나가면(paragraph, image, callout, 미디어) GFM이
@@ -357,14 +374,13 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
   if (
     hasChildren &&
     (!isGfmContainerLikeBlockType(block.type) ||
-      firstChildMergesIntoOwnContent(block))
+      firstChildMergesIntoOwnContent(block) ||
+      isBulletLineReadAsThematicBreak(block))
   ) {
     losses.push({
       kind: "NESTED_CHILDREN",
       blockId: block.id,
-      message: isGfmContainerLikeBlockType(block.type)
-        ? `Block ${block.id} has empty content and a first child that GFM cannot tell apart from the block's own content`
-        : `Block ${block.id} has nested children; GFM export flattens them into sibling blocks`,
+      message: nestedChildrenMessage(block),
     });
   } else if (isCheckboxAnchorLost(block)) {
     // mdast-util-gfm-task-list-item은 listItem의 첫 자식이 paragraph일 때만

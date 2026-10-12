@@ -143,3 +143,36 @@ export const isCheckboxAnchorLost = (block: Block): boolean => {
     (first === undefined || MDAST_NODE_KIND[first.type] !== "paragraph")
   );
 };
+
+// 빈 bulletListItem이 첫 자식 사슬로 몇 단 이어지는지 센다. 끝이 자식 없는 빈
+// bulletListItem일 때만 단수를 돌려주고, 끝이 다른 모양이면 0이다. 끝에 자식이
+// 붙으면 마커 줄 뒤에 다른 글자가 따라 나가 thematic break가 되지 않는다.
+const emptyBulletChainDepth = (block: Block): number => {
+  let depth = 0;
+  let current: Block = block;
+  for (;;) {
+    if (current.type !== "bulletListItem" || !isEmptyContent(current.content)) {
+      return 0;
+    }
+    depth += 1;
+    const first = current.children?.[0];
+    if (first === undefined) return depth;
+    current = first;
+  }
+};
+
+// 빈 bulletListItem이 낸 마커 줄이 재가져오기 때 thematic break로 읽히는 두
+// 모양을 판정한다. 모양만 보고 마커는 보지 않는다. 마커는 remark-stringify가
+// 직전 목록의 bullet을 보고 고르므로 여기서 따라 하면 라이브러리 동작과 어긋날
+// 위험이 크다. 그래서 마커가 `*`라 안전한 `* ---`도 참이다(거짓 경고).
+// - 첫 자식이 divider: 마커가 `-`일 때 `- ---`가 thematic break 한 줄이 된다.
+// - 첫 자식 사슬이 3단 이상: `* * *`가 thematic break 한 줄이 된다.
+// numberedListItem(`1. ---`)과 quote(`> ---`)는 마커가 달라 안전하다.
+export const isBulletLineReadAsThematicBreak = (block: Block): boolean => {
+  if (block.type !== "bulletListItem" || !isEmptyContent(block.content)) {
+    return false;
+  }
+  return (
+    block.children?.[0]?.type === "divider" || emptyBulletChainDepth(block) >= 3
+  );
+};
