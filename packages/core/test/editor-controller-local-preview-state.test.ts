@@ -5,7 +5,8 @@
  * 로컬 프리뷰(localPreviewUrl·localPreviewFile)는 저장 모델에 없는 PM 전용
  * attrs다. 거절 Result를 돌려주는 명령은 PM 상태를 바꾸지 않아야 하고,
  * 모델에서 노드를 다시 만드는 updateBlock은 프리뷰를 blockId로 이어받아야
- * 한다. url이 생기면 프리뷰를 정리하고 정리 전 값으로 통지한다.
+ * 한다. url이 생기면 프리뷰를 정리하고, URL이 undo·redo로 못 돌아올 때
+ * 정리 전 값으로 통지한다(Issue #382).
  *
  * duplicateBlock은 복제본(하위 블록 포함)에 같은 File로 새 blob URL을
  * 발급해 두 블록이 URL을 공유하지 않게 한다(Issue #378).
@@ -23,8 +24,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
+  BEYOND_DEPTH_AND_OVERFLOW,
   documentOf,
   editorState,
+  growUndoHistory,
   mediaBlock,
   mountedWithLocalPreviewCleanup,
   notApplicable,
@@ -83,7 +86,7 @@ describe("setMediaBlockUrl — 로컬 프리뷰와 거절", () => {
     expect(localPreviewCleared).toEqual([]);
   });
 
-  it("프리뷰만 있는 노드에 새 url을 적용하면 프리뷰를 정리하고 통지를 1회 낸다(회귀 방지)", () => {
+  it("프리뷰만 있는 노드에 새 url을 적용하면 프리뷰를 정리하고 history를 밀어낸 뒤 통지를 1회 낸다(회귀 방지)", () => {
     const { editor, tiptap, localPreviewCleared } =
       mountedWithLocalPreviewCleanup(
         documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
@@ -98,6 +101,10 @@ describe("setMediaBlockUrl — 로컬 프리뷰와 거절", () => {
       localPreviewUrl: null,
       localPreviewFile: null,
     });
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+
     expect(localPreviewCleared).toEqual([
       {
         blockId: "m-1",
@@ -137,7 +144,7 @@ describe("updateBlock — 로컬 프리뷰 이어받기", () => {
     );
   });
 
-  it("updateBlock으로 url을 주면 프리뷰를 정리하고 정리 전 값으로 통지를 1회 낸다", () => {
+  it("updateBlock으로 url을 주면 프리뷰를 정리하고 history를 밀어낸 뒤 정리 전 값으로 통지를 1회 낸다", () => {
     const { editor, tiptap, localPreviewCleared } =
       mountedWithLocalPreviewCleanup(
         documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
@@ -153,6 +160,10 @@ describe("updateBlock — 로컬 프리뷰 이어받기", () => {
       localPreviewUrl: null,
       localPreviewFile: null,
     });
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+
     expect(localPreviewCleared).toEqual([
       {
         blockId: "m-1",
@@ -286,6 +297,9 @@ describe("duplicateBlock — 로컬 프리뷰", () => {
     const duplicateBefore = previewAttrsOf(tiptap, "id-1");
 
     expect(editor.commands.setMediaBlockUrl("m-1", imageUrl)).toEqual(okResult);
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
 
     expect(localPreviewCleared).toHaveLength(1);
     expect(localPreviewCleared[0]?.blockId).toBe("m-1");

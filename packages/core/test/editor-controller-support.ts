@@ -26,6 +26,7 @@ import {
   type TableBlock,
 } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
+import { closeHistory } from "@tiptap/pm/history";
 import type { NodeType, Schema } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { expect } from "vitest";
@@ -38,6 +39,7 @@ import {
   type MediaBlockKind,
 } from "../src/index.js";
 import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
+import { contentTextStart } from "./block-test-support.js";
 import {
   documentOf,
   editorState,
@@ -637,3 +639,24 @@ export const seedLocalPreview = (
   });
   tiptap.view.dispatch(transaction);
 };
+
+/**
+ * `tail` 문단(tailParagraphBlock)의 콘텐츠 시작에 독립 undo 이벤트를
+ * `count`개 강제로 쌓는다. 매 트랜잭션을 `closeHistory`로 감싸 인접성·
+ * `newGroupDelay` 타이밍과 무관하게 매번 새 그룹이 되게 한다. 항상 같은
+ * 위치(문단 콘텐츠 시작)에 prepend하므로 반복 중 위치를 다시 조회할 필요가
+ * 없다. 로컬 프리뷰 URL이 undo·redo로 못 돌아오는 시점을 만들 때 쓴다.
+ */
+export const growUndoHistory = (tiptap: TiptapEditor, count: number): void => {
+  const insertAt = contentTextStart(tiptap, "tail");
+  for (let index = 0; index < count; index += 1) {
+    const transaction = closeHistory(tiptap.state.tr.insertText("x", insertAt));
+    tiptap.view.dispatch(transaction);
+  }
+};
+
+/**
+ * 기본 `history` depth(100) + 비공개 DEPTH_OVERFLOW(20) 이후에도 여유를 둔
+ * 값 — 실제 eviction이 반드시 일어났음을 보장한다.
+ */
+export const BEYOND_DEPTH_AND_OVERFLOW = 130;

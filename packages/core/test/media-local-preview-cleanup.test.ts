@@ -16,16 +16,19 @@
  */
 import type { Block, Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
-import { closeHistory } from "@tiptap/pm/history";
+import { redo, undo } from "@tiptap/pm/history";
 import { describe, expect, it } from "vitest";
 import { contentTextStart } from "./block-test-support.js";
 import { findBlockPosition } from "../src/block-position.js";
 import { createEditor, type CreateEditorOptions } from "../src/index.js";
 import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
+  BEYOND_DEPTH_AND_OVERFLOW,
   documentOf,
+  growUndoHistory,
   localPreviewUrlOf,
   mediaBlock,
+  mountedWithLocalPreviewCleanup,
   mountTiptapEditor,
   okResult,
   paragraphBlock,
@@ -62,27 +65,6 @@ const mountedWithCleanup = (
   return { editor, localPreviewCleared, ...mountTiptapEditor(editor) };
 };
 
-/**
- * `tail` 문단(tailParagraphBlock)의 콘텐츠 시작에 독립 undo 이벤트를
- * `count`개 강제로 쌓는다. 매 트랜잭션을 `closeHistory`로 감싸 인접성·
- * `newGroupDelay` 타이밍과 무관하게 매번 새 그룹이 되게 한다(history.ts
- * `applyTransaction` — `closeHistory` meta가 그 트랜잭션 자신의
- * `prevTime`을 0으로 리셋한 뒤 같은 호출에서 newGroup을 판정하므로
- * 트랜잭션 자신이 새 그룹이 된다, RD-002-DELTA-02.md "적용 가이드" 근거).
- * 항상 같은 위치(문단 콘텐츠 시작)에 prepend하므로 반복 중 위치를 다시
- * 조회할 필요가 없다 — 삽입은 그 위치 뒤에만 누적된다.
- */
-const growUndoHistory = (tiptap: TiptapEditor, count: number): void => {
-  const insertAt = contentTextStart(tiptap, "tail");
-  for (let index = 0; index < count; index += 1) {
-    const transaction = closeHistory(tiptap.state.tr.insertText("x", insertAt));
-    tiptap.view.dispatch(transaction);
-  }
-};
-
-// 기본 `history` depth(100) + 비공개 DEPTH_OVERFLOW(20) 이후에도 여유를 둔
-// 값 — 실제 eviction이 반드시 일어났음을 보장한다.
-const BEYOND_DEPTH_AND_OVERFLOW = 130;
 // depth(100)에 못 미치는 중간 지점 — 아직 evict되지 않았어야 한다.
 const WELL_UNDER_DEPTH = 50;
 
@@ -631,7 +613,7 @@ describe("블록은 남고 로컬 프리뷰 URL만 빠지는 경로(Issue #383)"
     editor.destroy();
   });
 
-  it("D1: 교체 블록이 url을 가지면 프리뷰를 이어받지 않고 그 시점에 정확히 1회 통지한다", async () => {
+  it("D1: 교체 블록이 url을 가지면 프리뷰를 이어받지 않고 history를 밀어낸 뒤 정확히 1회 통지한다", async () => {
     const { editor, tiptap, url1, localPreviewCleared } =
       await mountedWithPreview([
         paragraphBlock("p-1", "부모", [mediaBlock("image", "m-1")]),
@@ -649,9 +631,11 @@ describe("블록은 남고 로컬 프리뷰 URL만 빠지는 경로(Issue #383)"
     ).toBe(true);
 
     expect(localPreviewUrlOf(tiptap, "m-1")).toBeNull();
-    expect(countOf(localPreviewCleared, url1)).toBe(1);
+    // undo로 URL이 돌아올 수 있어 통지는 도달 불가 판정 뒤에 나간다(Issue #382).
+    expect(localPreviewCleared).toEqual([]);
 
     growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
     editor.destroy();
 
     expect(countOf(localPreviewCleared, url1)).toBe(1);
@@ -748,9 +732,8 @@ describe("블록은 남고 로컬 프리뷰 URL만 빠지는 경로(Issue #383)"
     ).toBe(true);
     expect(localPreviewCleared).toEqual([]);
 
-    // 프리뷰만 바뀌는 단계는 모델 diff가 없어 undo가 ok:false를 돌려주지만
-    // PM history는 실제로 되돌린다(기존 동작) — 결과가 아니라 문서를 단언한다.
-    editor.commands.undo();
+    // 프리뷰만 바뀌는 단계도 undo는 ok다(Issue #382).
+    expect(editor.commands.undo()).toEqual(okResult);
 
     expect(localPreviewUrlOf(tiptap, "m-1")).toBe(url1);
     expect(localPreviewCleared).toEqual([]);
@@ -792,24 +775,25 @@ describe("블록은 남고 로컬 프리뷰 URL만 빠지는 경로(Issue #383)"
     expect(countOf(localPreviewCleared, url1)).toBe(1);
   });
 
-  it("url 확정으로 이미 통지한 URL은 history를 밀어내고 destroy()해도 다시 통지되지 않는다", async () => {
+  it("url 확정 뒤 history를 밀어내 통지한 URL은 destroy()해도 다시 통지되지 않는다", async () => {
     const { editor, tiptap, url1, localPreviewCleared } =
       await mountedWithPreview();
 
     expect(
       editor.commands.setMediaBlockUrl("m-1", "https://example.com/a.png").ok,
     ).toBe(true);
-    expect(countOf(localPreviewCleared, url1)).toBe(1);
+    expect(localPreviewCleared).toEqual([]);
 
     growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
     editor.destroy();
 
     expect(countOf(localPreviewCleared, url1)).toBe(1);
   });
 
-  it("url 확정 직후 history를 밀어내지 않고 destroy()해도 같은 URL을 다시 통지하지 않는다", async () => {
-    // 확정 직후에는 lifecycle pending에 URL이 한 번 남는다(통지가 dispatch 뒤라
-    // isCleared가 아직 false다). 이때 destroy() 스윕의 중복은 세션 dedupe만 막는다.
+  it("url 확정 직후 history를 밀어내지 않고 destroy()하면 같은 URL을 1회만 통지한다", async () => {
+    // 확정 직후에는 통지 없이 lifecycle pending에 URL이 남는다. destroy() 스윕이
+    // 그 URL을 1회 통지한다.
     const { editor, url1, localPreviewCleared } = await mountedWithPreview();
 
     expect(
@@ -855,5 +839,262 @@ describe("블록은 남고 로컬 프리뷰 URL만 빠지는 경로(Issue #383)"
     editor.destroy();
 
     expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+});
+
+describe("url 확정으로 바뀐 프리뷰 attrs와 undo·redo(Issue #382 D3)", () => {
+  const CONFIRMED_URL = "https://example.com/a.png";
+
+  /**
+   * url 확정 경로의 공통 불변식이다. 통지는 즉시 나가지 않고 도달 판정이
+   * 맡는다. 확정 직후와 undo·redo 사이에는 통지가 없고, undo로 `url1`이
+   * 문서에 돌아온다. history를 depth 너머로 키우면 `url1` 통지가 정확히 1회
+   * 나가고 그때 문서에 `url1`이 없다.
+   */
+  const expectUndoableUrlConfirm = (
+    context: {
+      tiptap: TiptapEditor;
+      url1: string;
+      localPreviewCleared: { localPreviewUrl: string }[];
+    },
+    undoStep: () => unknown,
+    redoStep: () => unknown,
+  ) => {
+    const { tiptap, url1, localPreviewCleared } = context;
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBeNull();
+    expect(localPreviewCleared).toEqual([]);
+
+    expect(undoStep()).toEqual(okResult);
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBe(url1);
+    expect(localPreviewCleared).toEqual([]);
+
+    expect(redoStep()).toEqual(okResult);
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBeNull();
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+
+    expect(localPreviewCleared.map((entry) => entry.localPreviewUrl)).toEqual([
+      url1,
+    ]);
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBeNull();
+    expect(JSON.stringify(tiptap.getJSON())).not.toContain(url1);
+  };
+
+  const mountedWithPreview = async (
+    overrides: Pick<CreateEditorOptions, "uploadFile"> = {},
+    blocks: Block[] = [mediaBlock("image", "m-1")],
+  ) => {
+    const mounted = mountedWithCleanup(
+      documentOf(...blocks, tailParagraphBlock),
+      overrides,
+    );
+    if (overrides.uploadFile === undefined) {
+      expect(
+        (await mounted.editor.commands.uploadMediaFile("m-1", testFile())).ok,
+      ).toBe(true);
+    } else {
+      seedLocalPreview(mounted.tiptap, "m-1", testFile());
+    }
+    const url1 = localPreviewUrlOf(mounted.tiptap, "m-1");
+    expect(url1).toMatch(/^blob:/);
+    return { ...mounted, url1: url1 as string };
+  };
+
+  it("setMediaBlockUrl로 url을 확정해도 즉시 통지하지 않고 undo로 프리뷰가 돌아오며 통지는 도달 불가 뒤 1회다", async () => {
+    const context = await mountedWithPreview();
+    const { editor } = context;
+
+    expect(editor.commands.setMediaBlockUrl("m-1", CONFIRMED_URL).ok).toBe(
+      true,
+    );
+
+    expectUndoableUrlConfirm(
+      context,
+      () => editor.commands.undo(),
+      () => editor.commands.redo(),
+    );
+  });
+
+  it("updateBlock로 url을 확정해도 즉시 통지하지 않고 undo로 프리뷰가 돌아오며 통지는 도달 불가 뒤 1회다", async () => {
+    const context = await mountedWithPreview();
+    const { editor } = context;
+
+    expect(
+      editor.updateBlock("m-1", {
+        type: "image",
+        url: CONFIRMED_URL,
+      } as never).ok,
+    ).toBe(true);
+
+    expectUndoableUrlConfirm(
+      context,
+      () => editor.commands.undo(),
+      () => editor.commands.redo(),
+    );
+  });
+
+  it("replaceBlocks로 같은 id의 url 있는 블록으로 교체해도 즉시 통지하지 않고 undo로 프리뷰가 돌아오며 통지는 도달 불가 뒤 1회다", async () => {
+    const context = await mountedWithPreview();
+    const { editor } = context;
+
+    expect(
+      editor.replaceBlocks(["m-1"], [
+        { id: "m-1", type: "image", url: CONFIRMED_URL },
+      ] as never).ok,
+    ).toBe(true);
+
+    expectUndoableUrlConfirm(
+      context,
+      () => editor.commands.undo(),
+      () => editor.commands.redo(),
+    );
+  });
+
+  it("업로드 완료로 url을 확정해도 즉시 통지하지 않고 undo로 프리뷰가 돌아오며 통지는 도달 불가 뒤 1회다", async () => {
+    const context = await mountedWithPreview({
+      uploadFile: async () => ({ status: "success", url: CONFIRMED_URL }),
+    });
+    const { editor } = context;
+
+    expect((await editor.commands.uploadMediaFile("m-1", testFile())).ok).toBe(
+      true,
+    );
+
+    expectUndoableUrlConfirm(
+      context,
+      () => editor.commands.undo(),
+      () => editor.commands.redo(),
+    );
+  });
+
+  it("키보드 경로(PM undo·redo 직접 호출)로 되돌려도 setMediaBlockUrl 뒤 같은 불변식이 성립한다", async () => {
+    const context = await mountedWithPreview();
+    const { editor, tiptap } = context;
+
+    expect(editor.commands.setMediaBlockUrl("m-1", CONFIRMED_URL).ok).toBe(
+      true,
+    );
+
+    expectUndoableUrlConfirm(
+      context,
+      () => ({
+        ok: undo(tiptap.state, tiptap.view.dispatch),
+        value: undefined,
+      }),
+      () => ({
+        ok: redo(tiptap.state, tiptap.view.dispatch),
+        value: undefined,
+      }),
+    );
+  });
+});
+
+describe("프리뷰 적용 step의 undo·redo Result(Issue #382 D6)", () => {
+  const mountedWithPreview = async () => {
+    const mounted = mountedWithLocalPreviewCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    expect(
+      (await mounted.editor.commands.uploadMediaFile("m-1", testFile())).ok,
+    ).toBe(true);
+    const url1 = localPreviewUrlOf(mounted.tiptap, "m-1");
+    expect(url1).toMatch(/^blob:/);
+    return { ...mounted, url1: url1 as string };
+  };
+
+  it("프리뷰 적용 직후 undo()는 ok이고 PM 프리뷰가 사라지며 onChange와 revision은 그대로다", async () => {
+    const { editor, tiptap, changes } = await mountedWithPreview();
+    const revision = editor.getDocument().revision;
+
+    expect(editor.commands.undo()).toEqual(okResult);
+
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBeNull();
+    expect(changes).toEqual([]);
+    expect(editor.getDocument().revision).toBe(revision);
+  });
+
+  it("프리뷰 적용을 undo한 뒤 redo()는 ok이고 PM 프리뷰가 돌아오며 통지와 onChange는 없다", async () => {
+    const { editor, tiptap, url1, changes, localPreviewCleared } =
+      await mountedWithPreview();
+    const revision = editor.getDocument().revision;
+    expect(editor.commands.undo()).toEqual(okResult);
+
+    expect(editor.commands.redo()).toEqual(okResult);
+
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBe(url1);
+    expect(localPreviewCleared).toEqual([]);
+    expect(changes).toEqual([]);
+    expect(editor.getDocument().revision).toBe(revision);
+  });
+
+  it("빈 history의 undo()와 redo()는 COMMAND_NOT_APPLICABLE이다", () => {
+    const { editor, changes } = mountedWithLocalPreviewCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+
+    expect(editor.commands.undo()).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "undo" },
+    });
+    expect(editor.commands.redo()).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "redo" },
+    });
+    expect(changes).toEqual([]);
+  });
+
+  it("모델 변경이 있는 undo()·redo()는 onChange를 reason과 함께 1회씩 낸다", async () => {
+    const { editor, changes } = await mountedWithPreview();
+    expect(
+      editor.commands.setMediaBlockUrl("m-1", "https://example.com/a.png").ok,
+    ).toBe(true);
+    const before = changes.length;
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(changes.slice(before).map((change) => change.reason)).toEqual([
+      "undo",
+    ]);
+
+    expect(editor.commands.redo()).toEqual(okResult);
+    expect(changes.slice(before).map((change) => change.reason)).toEqual([
+      "undo",
+      "redo",
+    ]);
+  });
+
+  it("onBeforeChange가 undo·redo를 거절하면 PM이 안 바뀌고 COMMAND_NOT_APPLICABLE이다", () => {
+    const gate = { reject: false };
+    const { editor, tiptap, changes } = mountedWithLocalPreviewCleanup(
+      documentOf(
+        mediaBlock("image", "m-1", { url: "https://example.com/a.png" }),
+        tailParagraphBlock,
+      ),
+      { onBeforeChange: () => (gate.reject ? false : undefined) },
+    );
+    expect(editor.commands.deleteBlock("m-1")).toEqual(okResult);
+    const afterDelete = tiptap.state;
+    const changeCount = changes.length;
+
+    gate.reject = true;
+    expect(editor.commands.undo()).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "undo" },
+    });
+    expect(tiptap.state).toBe(afterDelete);
+    expect(changes).toHaveLength(changeCount);
+
+    gate.reject = false;
+    expect(editor.commands.undo()).toEqual(okResult);
+    const afterUndo = tiptap.state;
+    const undoneCount = changes.length;
+
+    gate.reject = true;
+    expect(editor.commands.redo()).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "redo" },
+    });
+    expect(tiptap.state).toBe(afterUndo);
+    expect(changes).toHaveLength(undoneCount);
   });
 });

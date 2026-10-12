@@ -30,12 +30,14 @@ import {
   type MediaBlockKind,
 } from "../src/index.js";
 import {
+  BEYOND_DEPTH_AND_OVERFLOW,
   childParagraphBlock,
   documentOf,
   editorState,
   expectMediaBlockNodeSelection,
   expectSameValueReapplyIsNoop,
   firstParagraphBlock,
+  growUndoHistory,
   mediaBlock,
   mountedWithLocalPreviewCleanup,
   mounted,
@@ -305,13 +307,13 @@ describe("setMediaBlockUrl", () => {
   });
 
   // Issue #168 roadmap RD-001 DELTA-05 — url 확정 시 로컬 프리뷰(ADR 0015)
-  // 정리. runSetMediaBlockAttrCommand(공유 본체)가 localPreviewUrl 전환
-  // (문자열→null)을 감지해 신호를 발생시킨다 — command 문자열이 아니라
-  // attrs 상태로 판정하므로 아래 "다른 setter는 영향 없음" 테스트가 그
-  // 판정 방식 자체를 고정한다.
-  it("대상에 로컬 프리뷰가 있었으면 성공 시 attrs를 null로 정리하고 onLocalPreviewCleanup을 정리 전 값 그대로 1회 호출한다", () => {
+  // 정리. Issue #382부터 attrs는 즉시 null로 정리하지만 통지는 URL이
+  // undo·redo로 못 돌아올 때 나간다(MediaLocalPreviewLifecycleExtension).
+  it("대상에 로컬 프리뷰가 있었으면 성공 시 attrs를 null로 정리하고 history를 밀어낸 뒤 onLocalPreviewCleanup을 정리 전 값 그대로 1회 호출한다", () => {
     const { editor, tiptap, localPreviewCleared } =
-      mountedWithLocalPreviewCleanup(documentOf(mediaBlock("image", "m-1")));
+      mountedWithLocalPreviewCleanup(
+        documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      );
     const staleFile = testFile();
     seedLocalPreview(tiptap, "m-1", staleFile);
 
@@ -323,6 +325,10 @@ describe("setMediaBlockUrl", () => {
     const node = position === null ? null : tiptap.state.doc.nodeAt(position);
     expect(node?.attrs.localPreviewUrl).toBeNull();
     expect(node?.attrs.localPreviewFile).toBeNull();
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+
     expect(localPreviewCleared).toEqual([
       {
         blockId: "m-1",
@@ -426,7 +432,7 @@ describe("setMediaBlockUrl의 name 인자(url+name 원자 적용, Issue #374, G-
     expect(editor.commands.undo().ok).toBe(false);
   });
 
-  it("로컬 프리뷰가 있던 블록에 name을 지정해도 정리 신호를 기존과 같게 1회 낸다", () => {
+  it("로컬 프리뷰가 있던 블록에 name을 지정해도 history를 밀어낸 뒤 정리 신호를 1회 낸다", () => {
     const { editor, tiptap, localPreviewCleared } =
       mountedWithLocalPreviewCleanup(mediaDocument("image"));
     const staleFile = testFile();
@@ -442,6 +448,11 @@ describe("setMediaBlockUrl의 name 인자(url+name 원자 적용, Issue #374, G-
     expect(node?.attrs.name).toBe(newName);
     expect(node?.attrs.localPreviewUrl).toBeNull();
     expect(node?.attrs.localPreviewFile).toBeNull();
+    // undo로 URL이 돌아올 수 있어 통지는 도달 불가 판정 뒤에 나간다(Issue #382).
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+
     expect(localPreviewCleared).toEqual([
       {
         blockId: "m-1",

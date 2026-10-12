@@ -52,7 +52,7 @@ const CaptureEditor = (props: {
 };
 
 describe("EditorProvider — onLocalPreviewCleanup 배선(Issue #168 roadmap RD-002 DELTA-03)", () => {
-  it("url이 확정되면 로컬 프리뷰 Blob URL이 revoke되고 화면은 새 url로 전환된다", async () => {
+  it("url이 확정되면 화면은 새 url로 전환되고 Blob URL은 undo로 못 돌아올 때 revoke된다", async () => {
     let controller: EditorController | undefined;
     const view = render(
       <EditorProvider initialDocument={mediaDocument}>
@@ -75,11 +75,47 @@ describe("EditorProvider — onLocalPreviewCleanup 배선(Issue #168 roadmap RD-
       ),
     ).toEqual({ ok: true, value: undefined });
 
-    expect(mockRevokeObjectURL).toHaveBeenCalledOnce();
-    expect(mockRevokeObjectURL).toHaveBeenCalledWith(createdUrl);
     expect(host.querySelector("img")?.getAttribute("src")).toBe(
       "https://example.com/photo.png",
     );
+    // undo로 URL이 돌아올 수 있어 확정 직후에는 revoke하지 않는다(Issue #382).
+    expect(mockRevokeObjectURL).not.toHaveBeenCalled();
+
+    // history depth(100) + overflow(20)를 넘겨 확정 step을 밀어낸다.
+    for (let index = 0; index < 130; index += 1) {
+      controller?.commands.setText("block-2", `tail ${index}`);
+    }
+
+    expect(mockRevokeObjectURL).toHaveBeenCalledOnce();
+    expect(mockRevokeObjectURL).toHaveBeenCalledWith(createdUrl);
+
+    view.unmount();
+  });
+
+  it("url 확정을 undo하면 revoke 없이 로컬 프리뷰 Blob URL이 화면에 돌아온다", async () => {
+    let controller: EditorController | undefined;
+    const view = render(
+      <EditorProvider initialDocument={mediaDocument}>
+        <CaptureEditor onCapture={(e) => (controller = e)} />
+        <EditorContent />
+      </EditorProvider>,
+    );
+    const host = screen.getByRole("textbox", { name: "Editor" });
+
+    await controller?.commands.uploadMediaFile("block-1", testFile());
+    const createdUrl = mockCreateObjectURL.mock.results[0]?.value as string;
+    controller?.commands.setMediaBlockUrl(
+      "block-1",
+      "https://example.com/photo.png",
+    );
+
+    expect(controller?.commands.undo()).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    expect(mockRevokeObjectURL).not.toHaveBeenCalled();
+    expect(host.querySelector("img")?.getAttribute("src")).toBe(createdUrl);
 
     view.unmount();
   });

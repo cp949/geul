@@ -22,8 +22,10 @@ import {
   type MediaUploadState,
 } from "../src/index.js";
 import {
+  BEYOND_DEPTH_AND_OVERFLOW,
   documentOf,
   editorState,
+  growUndoHistory,
   mediaBlock,
   mountTiptapEditor,
   notApplicable,
@@ -223,12 +225,12 @@ describe("uploadMediaFile — 성공", () => {
 
 /**
  * url이 확정되는 순간(성공) 남아 있던 로컬 프리뷰(ADR 0015) attrs를 core가
- * 정리하고 `onLocalPreviewCleanup`으로 알린다(Issue #168 roadmap RD-001
- * DELTA-05). 실제 `URL.revokeObjectURL` 호출은 이 신호의 소비자(RD-002)
- * 몫이다.
+ * 정리하고, URL이 undo·redo로 못 돌아올 때 `onLocalPreviewCleanup`으로
+ * 알린다(Issue #168 roadmap RD-001 DELTA-05, 통지 시점은 Issue #382). 실제
+ * `URL.revokeObjectURL` 호출은 이 신호의 소비자(RD-002) 몫이다.
  */
 describe("uploadMediaFile — url 확정 시 로컬 프리뷰 정리(RD-001 DELTA-05)", () => {
-  it("대상에 로컬 프리뷰가 있었으면 성공 시 attrs를 null로 정리하고 onLocalPreviewCleanup을 정리 전 값 그대로 1회 호출한다", async () => {
+  it("대상에 로컬 프리뷰가 있었으면 성공 시 attrs를 null로 정리하고 history를 밀어낸 뒤 onLocalPreviewCleanup을 정리 전 값 그대로 1회 호출한다", async () => {
     const { uploadFile, pending } = controllableUploadFile();
     const { editor, tiptap, localPreviewCleared } = mountedWithUpload(
       documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
@@ -248,6 +250,11 @@ describe("uploadMediaFile — url 확정 시 로컬 프리뷰 정리(RD-001 DELT
     const node = position === null ? null : tiptap.state.doc.nodeAt(position);
     expect(node?.attrs.localPreviewUrl).toBeNull();
     expect(node?.attrs.localPreviewFile).toBeNull();
+    // undo로 URL이 돌아올 수 있어 통지는 도달 불가 판정 뒤에 나간다(Issue #382).
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+
     expect(localPreviewCleared).toEqual([
       {
         blockId: "m-1",
@@ -843,7 +850,7 @@ describe("replaceMediaBlockFile — 성공", () => {
   // 시 로컬 프리뷰 정리"가 이미 그 본체를 고정했으므로 여기서는 command가
   // replaceMediaBlockFile이어도 같은 정리·신호가 그대로 동작함만 1개
   // 테스트로 확인한다(RD-001 DELTA-05 완료 조건 C).
-  it("대상에 로컬 프리뷰가 있었으면 교체 성공 시에도 attrs를 정리하고 onLocalPreviewCleanup을 호출한다", async () => {
+  it("대상에 로컬 프리뷰가 있었으면 교체 성공 시에도 attrs를 정리하고 history를 밀어낸 뒤 onLocalPreviewCleanup을 호출한다", async () => {
     const { uploadFile, pending } = controllableUploadFile();
     const { editor, tiptap, localPreviewCleared } = mountedWithUpload(
       documentOf(
@@ -868,6 +875,10 @@ describe("replaceMediaBlockFile — 성공", () => {
     const position = findBlockPosition(tiptap.state.doc, "m-1");
     const node = position === null ? null : tiptap.state.doc.nodeAt(position);
     expect(node?.attrs.localPreviewUrl).toBeNull();
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+
     expect(localPreviewCleared).toEqual([
       {
         blockId: "m-1",
