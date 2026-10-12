@@ -67,7 +67,11 @@ export type MarkdownLoss = {
     // RD-003. top-level CustomBlock(model, RD-002-DELTA-01) 중
     // customBlockToMarkdown에 등록되지 않은 타입(spec §4.5) — 등록된
     // 타입은 이 kind를 갖지 않는다(정상 렌더).
-    | "CUSTOM_BLOCK_LOST";
+    | "CUSTOM_BLOCK_LOST"
+    // Issue #393. bold·italic·strike·code mark가 붙은 빈 글자 런은 마커만
+    // (`****` 등) 나가 재가져오기 때 divider·codeBlock·글자로 구조가 바뀔 수 있다.
+    // 런이 content 어디에 있든 보고하고, 블록·셀당 1건이다.
+    | "EMPTY_MARKED_RUN";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -103,6 +107,22 @@ const hasInlineCodeNewline = (content: InlineContent): boolean =>
       isTextRunItem(item) &&
       item.text.includes("\n") &&
       (item.marks ?? []).some((mark) => mark.type === "code"),
+  );
+
+// Issue #393. link 단독과 mark 없는 빈 런은 마커가 나가지 않아 대상이 아니다.
+// underline·색 mark는 각자의 kind가 이미 보고한다.
+const hasEmptyMarkedRun = (content: InlineContent): boolean =>
+  content.some(
+    (item) =>
+      isTextRunItem(item) &&
+      item.text === "" &&
+      (item.marks ?? []).some(
+        (mark) =>
+          mark.type === "bold" ||
+          mark.type === "italic" ||
+          mark.type === "strike" ||
+          mark.type === "code",
+      ),
   );
 
 const collectTableLosses = (
@@ -176,6 +196,13 @@ const collectTableLosses = (
           kind: "INLINE_CODE_NEWLINE",
           ...location,
           message: `Cell ${cell.id} contains inline code with a newline`,
+        });
+      }
+      if (hasEmptyMarkedRun(cell.content)) {
+        losses.push({
+          kind: "EMPTY_MARKED_RUN",
+          ...location,
+          message: `Cell ${cell.id} contains an empty text run with bold, italic, strike or code formatting; GFM export writes only the markers`,
         });
       }
       if (hasColorMark(cell.content)) {
@@ -292,6 +319,13 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       kind: "INLINE_CODE_NEWLINE",
       blockId: block.id,
       message: `Block ${block.id} contains inline code with a newline`,
+    });
+  }
+  if (hasEmptyMarkedRun(block.content)) {
+    losses.push({
+      kind: "EMPTY_MARKED_RUN",
+      blockId: block.id,
+      message: `Block ${block.id} contains an empty text run with bold, italic, strike or code formatting; GFM export writes only the markers`,
     });
   }
   // RD-004 DELTA-03. table/divider/codeBlock은 위에서 이미 반환했으므로
