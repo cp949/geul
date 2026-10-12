@@ -8,6 +8,10 @@
  *
  * computeCornerClusterTop: 코너 클러스터(표 그립·Plus)의 세로 자리 공식이다
  * (Issue #396). geometry 값만 받는 순수 함수라 같은 파일에서 검증한다.
+ *
+ * computeTableGripMenuPosition: 표 그립 메뉴의 앵커 좌표다(Issue #396). 기대값은
+ * 상수에서 계산하지 않고 리터럴로 적는다. 공식이 상수와 함께 어긋나는 것을 잡는다.
+ * 기준 상수는 tableCornerGripOffsetPx -70, 버튼 크기 24, 메뉴 간격 4다.
  */
 
 import { describe, expect, it } from "vitest";
@@ -15,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import type { TableGeometry } from "../src/table-handle-geometry.js";
 import {
   computeCornerClusterTop,
+  computeTableGripMenuPosition,
   pickMenuOpenHandleNodes,
 } from "../src/table-handle-helpers.js";
 
@@ -167,5 +172,77 @@ describe("computeCornerClusterTop", () => {
     const geometry = makeGeometry([]);
 
     expect(computeCornerClusterTop(geometry)).toBe(geometry.top - 12);
+  });
+});
+
+describe("computeTableGripMenuPosition", () => {
+  const noScroll = { x: 0, y: 0 };
+  // 첫 행 세로 중앙 220 - 12 = 그립 top 208, 그립 bottom 232.
+  const normalRows = [
+    { rowId: "r1", index: 0, top: 200, height: 40 },
+    { rowId: "r2", index: 1, top: 240, height: 40 },
+  ];
+
+  it("스크롤이 없으면 그립 버튼 왼쪽 끝과 아래쪽 4px에 앵커를 둔다", () => {
+    const position = computeTableGripMenuPosition(
+      makeGeometry(normalRows),
+      "table-1",
+      noScroll,
+    );
+
+    // left: 100 + (-70), top: 208 + 24 + 4.
+    expect(position).toEqual({ left: 30, top: 236 });
+  });
+
+  it("스크롤 오프셋만큼 좌표에서 뺀다", () => {
+    const position = computeTableGripMenuPosition(
+      makeGeometry(normalRows),
+      "table-1",
+      { x: 30, y: 50 },
+    );
+
+    expect(position).toEqual({ left: 0, top: 186 });
+  });
+
+  it("첫 행이 높아도 그립 버튼 아래쪽에서 4px 띄운다", () => {
+    const position = computeTableGripMenuPosition(
+      makeGeometry([{ rowId: "r1", index: 0, top: 200, height: 100 }]),
+      "table-1",
+      noScroll,
+    );
+
+    // 그립 top 200 + 50 - 12 = 238, bottom 262. 메뉴 top 262 + 4.
+    expect(position).toEqual({ left: 30, top: 266 });
+  });
+
+  it("rows가 빈 배열이어도 던지지 않고 표 상단 기준 값을 낸다", () => {
+    const position = computeTableGripMenuPosition(
+      makeGeometry([]),
+      "table-1",
+      noScroll,
+    );
+
+    // 그립 top 200 - 12 = 188, bottom 212. 메뉴 top 212 + 4.
+    expect(position).toEqual({ left: 30, top: 216 });
+  });
+
+  it("활성 표가 메뉴를 연 표와 다르면 null이다", () => {
+    expect(
+      computeTableGripMenuPosition(
+        makeGeometry(normalRows),
+        "table-2",
+        noScroll,
+      ),
+    ).toBeNull();
+  });
+
+  it("geometry가 null이면 null이다", () => {
+    expect(computeTableGripMenuPosition(null, "table-1", noScroll)).toBeNull();
+  });
+
+  it("tableGripMenuTableId가 null이면 null이다", () => {
+    expect(
+      computeTableGripMenuPosition(makeGeometry(normalRows), null, noScroll),
+    ).toBeNull();
   });
 });

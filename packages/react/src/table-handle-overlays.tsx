@@ -431,8 +431,8 @@ export const TableHandleOverlays = ({
           addBlock을 재사용한다)가 같은 "안쪽" 자리를 맡는다 — 옛 순서
           (Plus 바깥·Grip 안쪽, RD-004)는 일반 gutter와 반대였다(사용자
           스크린샷 지적, "hello 행과 표 행의 Plus 좌우가 다르다"). top은
-          표 상단이 아니라 cornerClusterTop(첫 행 세로 중앙, 위 선언부
-          주석)을 쓴다 — 표 위 대각선 자리(이전 top - 28)는 Notion과
+          표 상단이 아니라 cornerClusterTop(첫 행 세로 중앙,
+          table-handle-helpers.ts의 computeCornerClusterTop)을 쓴다 — 표 위 대각선 자리(이전 top - 28)는 Notion과
           달랐다(사용자 스크린샷 지적, "세로 위치가 테이블 첫번째 행과
           안 맞아"). 같은 높이가 된 row handle hit box(아래 첫 주석, 왼쪽
           -18~+12)와 겹치지 않으려면 TABLE_INDENT_PX가 대략 12px 이상이어야

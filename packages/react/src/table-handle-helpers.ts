@@ -1,6 +1,9 @@
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@cp949/geul-core";
 
-import { CORNER_BUTTON_SIZE_PX } from "./table-handle-constants.js";
+import {
+  CORNER_BUTTON_SIZE_PX,
+  tableCornerGripOffsetPx,
+} from "./table-handle-constants.js";
 import {
   readGeometryFor,
   type TableGeometry,
@@ -195,11 +198,19 @@ export const computeMenuPosition = (
       };
 };
 
-// Issue #174 RD-003 — 표 그립 메뉴는 그립 버튼(table-handle-overlays.tsx,
-// left: geometry.left - 24, top: geometry.top - 24, height 20px)의 바로
-// 아래에 연다. geometry.tableBlockId가 tableGripMenuTableId와 다르면(다른
-// 표로 활성이 넘어갔거나 표가 사라진 경우) null을 돌려줘 호출부가 메뉴를
-// 렌더하지 않게 한다.
+// 그립 버튼 아래쪽과 표 그립 메뉴 사이 간격이다. 블록 메뉴·미디어 메뉴가
+// 트리거 아래에 두는 간격(TRIGGER_MENU_GAP_PX, 4)과 같다.
+const TABLE_GRIP_MENU_GAP_PX = 4;
+
+// Issue #174 RD-003, Issue #396 — 표 그립 메뉴는 그립 버튼의 바로 아래에
+// 연다. 앵커는 버튼 자리와 같은 공식이다.
+// - 가로: 버튼 왼쪽 끝(geometry.left + tableCornerGripOffsetPx).
+// - 세로: 버튼 아래쪽(computeCornerClusterTop + 버튼 크기) + 간격.
+// 버튼 자리는 오버레이와 이 함수가 같은 상수와 함수를 쓴다. 한쪽만 바뀌어
+// 어긋나던 결함(Issue #396)을 막는다.
+// geometry.tableBlockId가 tableGripMenuTableId와 다르면(다른 표로 활성이
+// 넘어갔거나 표가 사라진 경우) null을 돌려줘 호출부가 메뉴를 렌더하지
+// 않게 한다.
 export const computeTableGripMenuPosition = (
   geometry: TableGeometry | null,
   tableGripMenuTableId: string | null,
@@ -208,8 +219,12 @@ export const computeTableGripMenuPosition = (
   if (tableGripMenuTableId === null || geometry === null) return null;
   if (geometry.tableBlockId !== tableGripMenuTableId) return null;
   return {
-    left: geometry.left - 24 - scrollOffset.x,
-    top: geometry.top - 4 - scrollOffset.y,
+    left: geometry.left + tableCornerGripOffsetPx - scrollOffset.x,
+    top:
+      computeCornerClusterTop(geometry) +
+      CORNER_BUTTON_SIZE_PX +
+      TABLE_GRIP_MENU_GAP_PX -
+      scrollOffset.y,
   };
 };
 

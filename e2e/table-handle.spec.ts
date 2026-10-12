@@ -1002,6 +1002,54 @@ test("표 그립 메뉴로 제목 행을 토글하고 표를 복제한다 (Issue
   );
 });
 
+// Issue #396 — 그립 메뉴 앵커가 낡은 좌표(표 모서리 대각선 기준)라 메뉴가
+// 그립 버튼보다 위에 걸치고 Plus와 겹쳤다. 단위 테스트는 좌표 공식만 잡고,
+// 실제 레이아웃의 버튼 상자와 겹치는지는 여기서만 잡는다. 메뉴는 fixed라
+// geometry 수렴과 viewport clamp가 끝날 때까지 expect.poll로 기다린다.
+// demo 레이아웃은 그립이 뷰포트 왼쪽 끝에 붙어 메뉴가 8px 여백 clamp로
+// 오른쪽으로 밀린다. 가로 정렬은 단언하지 않는다.
+test("표 그립 메뉴가 그립 버튼 바로 아래에 열리고 그립·Plus를 가리지 않는다 (Issue #396)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const table = await insertTable(page, editable);
+
+  await table.locator("td").first().hover();
+  const grip = page.locator("[data-geul-table-grip]");
+  const plus = page.locator("[data-geul-table-quick-insert]");
+  const menu = page.locator("[data-geul-table-grip-menu]");
+  await expect(grip).toBeVisible();
+  await grip.click();
+  await expect(menu).toBeVisible();
+
+  const overlaps = (
+    a: { x: number; y: number; width: number; height: number },
+    b: { x: number; y: number; width: number; height: number },
+  ): boolean =>
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height;
+
+  await expect
+    .poll(async () => {
+      const [gripBox, plusBox, menuBox] = await Promise.all([
+        grip.boundingBox(),
+        plus.boundingBox(),
+        menu.boundingBox(),
+      ]);
+      if (gripBox === null || plusBox === null || menuBox === null) {
+        return "box-missing";
+      }
+      return {
+        menuBelowGrip: menuBox.y >= gripBox.y + gripBox.height,
+        overlapsGrip: overlaps(menuBox, gripBox),
+        overlapsPlus: overlaps(menuBox, plusBox),
+      };
+    })
+    .toEqual({ menuBelowGrip: true, overlapsGrip: false, overlapsPlus: false });
+});
+
 // Issue #176 — jsdom은 레이아웃을 계산하지 않아 clientWidth가 항상 0이다
 // (table-grip-menu.test.tsx는 Object.defineProperty로 흉내만 낸다). 실제
 // 재분배가 실제 편집 영역 폭과 맞아떨어지는지는 진짜 레이아웃이 있는
