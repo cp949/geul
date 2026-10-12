@@ -32,7 +32,8 @@ export type MediaLocalPreviewLifecycleOptions = {
   // URL이 없는 이 항목들도 훑어야 한다. `listLocalPreviews(doc)`(현재 doc
   // 순회)만으로는 보이지 않아서다("삭제 직후·복구 불가 판정 전 destroy()"
   // 시나리오에서 정리 신호가 나가지 않는 회귀를 막는다).
-  // addProseMirrorPlugins()가 편집기 생성당 두 번 호출돼 확장이 Map을 직접
+  // addProseMirrorPlugins()는 편집기 하나에서 여러 번 호출되고(마운트한
+  // 편집기 생성에서 2번 실측) 호출마다 새 Map이 생긴다. 확장이 Map을 직접
   // 만들어 세션에 등록하는 방식은 쓸 수 없다. 그래서 세션이 넘긴다.
   // 미지정이면 확장이 자기 Map을 만든다.
   pending?: Map<string, PendingLocalPreview>;

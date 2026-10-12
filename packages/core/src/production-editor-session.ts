@@ -383,31 +383,9 @@ export class ProductionEditorSession {
       // 자체를 막을 이유가 없다 — currentDocument는 마지막으로 성공한
       // 값을 유지한 채 나머지 파괴 절차를 계속한다.
     }
-    // Issue #168 roadmap RD-002 DELTA-03 — 세션이 영구히 사라지기 직전, 아직
-    // 정리되지 않은 로컬 프리뷰(ADR 0015)가 남아 있으면 같은
-    // onLocalPreviewCleanup 채널로 알려 react(RD-002)가 남은 Blob URL을
-    // revoke할 기회를 준다. MediaLocalPreviewLifecycleExtension의 복구 불가
-    // 판정과 달리 재판정이 필요 없다 — 세션이 끝나면 그 뒤로는 undo도
-    // 불가능해지므로 doc에 남은 로컬 프리뷰는 전부 무조건 정리 대상이다.
-    // unmount()(재마운트 가능한 DOM 분리)가 아니라 destroy()에만 건다 —
-    // external ownership이 같은 컨트롤러를 유지한 채 EditorContent를 껐다
-    // 켤 수 있어(RD-002.md "결정"), unmount()마다 정리 신호를 내면 재마운트
-    // 시 이미 revoke된 Blob URL을 다시 그리려 해 이미지가 깨진다. doc은
-    // tiptapEditor.destroy() 이전 상태를 읽어야 하므로 반드시 그 호출보다
-    // 앞에 둔다.
-    for (const { blockId, attrs } of listLocalPreviews(
-      this.tiptapEditor.state.doc,
-    )) {
-      this.notifyLocalPreviewCleared(blockId, attrs);
-    }
-    // 위 doc 순회는 문서에서 빠졌지만 복구 불가 판정 전이라 doc에 이미 없는
-    // 항목은 보지 못한다(구현 중 실측 — "삭제 직후 destroy()" 회귀) —
-    // 세션이 쥔 대기 목록(localPreviewPending)을 함께 훑는다.
-    // 두 순회는 겹치지 않는다: 대기 목록은 URL이 doc에 없는 항목만 담는다.
-    // 겹쳐도 notifyLocalPreviewCleared가 URL당 1회로 막는다.
-    for (const { blockId, attrs } of this.localPreviewPending.values()) {
-      this.notifyLocalPreviewCleared(blockId, attrs);
-    }
+    // 정리 신호는 tiptapEditor.destroy() 이전 상태를 읽어야 하므로 그 호출보다
+    // 앞에 둔다. unmount()에는 걸지 않는다(sweepLocalPreviews 참고).
+    this.sweepLocalPreviews();
     this.tiptapEditor.destroy();
     this.mountedElement = null;
     this.destroyed = true;
@@ -508,6 +486,32 @@ export class ProductionEditorSession {
     this.options.onLocalPreviewCleanup?.(blockId, cleared);
   }
 
+  // 현재 Editor에 남은 로컬 프리뷰(ADR 0015)를 모두 onLocalPreviewCleanup으로
+  // 알린다. destroy()(Issue #168 roadmap RD-002 DELTA-03)와
+  // replaceDocument()(Issue #169 roadmap RD-001 DELTA-01)가 구 Editor를
+  // 폐기하기 직전에 부른다.
+  // 복구 불가 판정과 달리 재판정이 필요 없다. 폐기 뒤에는 undo도 불가능하다.
+  // doc 스캔 뒤 대기 목록 순서로 훑는다.
+  // doc 스캔은 대기 목록 항목을 보지 못한다. 그 URL은 doc에 이미 없다
+  // ("삭제 직후 destroy()" 회귀).
+  // 두 순회는 겹치지 않는다. 겹쳐도 notifyLocalPreviewCleared가 URL당 1회로
+  // 막는다.
+  // unmount()에는 걸지 않는다. external ownership이 같은 컨트롤러로 마운트를
+  // 껐다 켤 수 있고(RD-002.md "결정"), 이미 revoke된 Blob URL은 다시 그릴 수
+  // 없다.
+  private sweepLocalPreviews(): void {
+    for (const { blockId, attrs } of listLocalPreviews(
+      this.tiptapEditor.state.doc,
+    )) {
+      this.notifyLocalPreviewCleared(blockId, attrs);
+    }
+    // 복사해서 훑는다. 정리 콜백이 동기로 undo하면 확장이 이 Map에서 항목을
+    // 지운다. 그대로 순회하면 되살아난 항목의 통지를 건너뛴다.
+    for (const { blockId, attrs } of [...this.localPreviewPending.values()]) {
+      this.notifyLocalPreviewCleared(blockId, attrs);
+    }
+  }
+
   // spec §4 — uploadMediaFile/replaceMediaBlockFile(editor-controller.ts)와
   // MediaDropPasteExtension의 drop/paste 트리거(RD-002 DELTA-02) 공용
   // 본체다. 실제 상태 기계는 production-editor-media-upload.ts::
@@ -541,22 +545,10 @@ export class ProductionEditorSession {
     }
 
     const replacement = this.createTiptapEditor(parsed.value);
-    // Issue #169 roadmap RD-001 DELTA-01 — 구 Editor를 폐기하기 직전, 그
-    // 상태에 남아 있던 로컬 프리뷰(ADR 0015) 전체를 destroy()(RD-002
-    // DELTA-03)와 동일한 패턴으로 onLocalPreviewCleanup에 통지한다. 새
-    // Editor(replacement)는 자신만의 빈 대기 목록(replacement.pending)에서
-    // 시작한다. this.localPreviewPending은 이 스윕이 끝날 때까지 구 Editor의
-    // 대기 목록이어야 하므로 아래에서 스윕 뒤에 바꾼다.
-    for (const { blockId, attrs } of listLocalPreviews(
-      this.tiptapEditor.state.doc,
-    )) {
-      this.notifyLocalPreviewCleared(blockId, attrs);
-    }
-    for (const { blockId, attrs } of this.localPreviewPending.values()) {
-      this.notifyLocalPreviewCleared(blockId, attrs);
-    }
-    // 스윕이 끝났으니 필드를 새 Editor의 대기 목록으로 바꾼다. 구 Editor의
-    // 대기 목록을 계속 가리키면 이후 destroy()가 같은 항목을 다시 순회한다.
+    // 구 Editor를 폐기하기 직전에 스윕한다. 필드 교체는 반드시 스윕 뒤다.
+    // 먼저 바꾸면 스윕이 새 Editor의 빈 대기 목록을 본다.
+    // 바꾸지 않으면 이후 destroy()가 구 Editor의 대기 목록을 다시 훑는다.
+    this.sweepLocalPreviews();
     this.localPreviewPending = replacement.pending;
     this.tiptapEditor.destroy();
     this.tiptapEditor = replacement.editor;

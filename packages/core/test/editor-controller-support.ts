@@ -574,10 +574,17 @@ export const expectSameValueReapplyIsNoop = (
 export const mountedWithLocalPreviewCleanup = (
   initialDocument: Document,
   overrides: Partial<
-    Pick<CreateEditorOptions, "onBeforeChange" | "createId" | "onChange">
+    Pick<
+      CreateEditorOptions,
+      "onBeforeChange" | "createId" | "onChange" | "onLocalPreviewCleanup"
+    >
   > = {},
 ) => {
-  const { onChange: hostOnChange, ...restOverrides } = overrides;
+  const {
+    onChange: hostOnChange,
+    onLocalPreviewCleanup: hostOnLocalPreviewCleanup,
+    ...restOverrides
+  } = overrides;
   const changes: {
     revision: number;
     changedBlockIds: readonly string[];
@@ -596,8 +603,10 @@ export const mountedWithLocalPreviewCleanup = (
       changes.push(event);
       hostOnChange?.(event);
     },
-    onLocalPreviewCleanup: (blockId, cleared) =>
-      localPreviewCleared.push({ blockId, ...cleared }),
+    onLocalPreviewCleanup: (blockId, cleared) => {
+      localPreviewCleared.push({ blockId, ...cleared });
+      hostOnLocalPreviewCleanup?.(blockId, cleared);
+    },
   });
   return {
     editor,
