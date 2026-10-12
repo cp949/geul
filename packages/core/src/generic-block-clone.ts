@@ -1,5 +1,16 @@
-import type { TableColumn } from "@cp949/geul-model";
+import { isMediaBlockType, type TableColumn } from "@cp949/geul-model";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { createLocalPreviewAttrs } from "./media-local-preview.js";
+
+// 프리뷰를 가진 미디어 노드면 attrs의 프리뷰 2종을 새 blob URL로 바꾼다.
+const renewLocalPreview = (node: ProseMirrorNode): Record<string, unknown> =>
+  isMediaBlockType(node.type.name) &&
+  typeof node.attrs.localPreviewUrl === "string"
+    ? {
+        ...node.attrs,
+        ...createLocalPreviewAttrs(node.attrs.localPreviewFile as File),
+      }
+    : node.attrs;
 
 // Issue #125 D6·D7 — duplicateBlock이 하위 트리(표라면 column/row/cell id까지)를
 // 재귀적으로 복제하며 새 id를 부여한다. node 자신의 새 blockId는 호출부가
@@ -19,6 +30,9 @@ import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 //
 // divider 같은 leaf 노드(blockContainer도 table도 아님)는 마지막 분기로
 // 떨어져 attrs.blockId만 새로 부여한다 — 기존 divider 복제 동작과 동일하다.
+//
+// 미디어 노드의 로컬 프리뷰(ADR-0015)는 복제하지 않고 같은 File로 새 blob
+// URL을 발급한다 — 블록마다 독립된 revoke 생애주기를 가진다(Issue #378).
 export const cloneBlockSubtreeWithFreshIds = (
   node: ProseMirrorNode,
   blockId: string,
@@ -67,7 +81,7 @@ export const cloneBlockSubtreeWithFreshIds = (
 
   if (node.type.name !== "blockContainer" || node.childCount < 2) {
     return node.type.create(
-      { ...node.attrs, blockId },
+      { ...renewLocalPreview(node), blockId },
       node.content,
       node.marks,
     );
