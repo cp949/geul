@@ -13,7 +13,11 @@
  * "url과 프리뷰가 공존하는 노드"는 프로덕션 불변식상 도달하지 않는다 —
  * seedLocalPreview로 심은 상태에서만 만든다(계약 고정용).
  */
-import type { ParagraphBlock } from "@cp949/geul-model";
+import {
+  isMediaBlock,
+  type Block,
+  type ParagraphBlock,
+} from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
 import {
@@ -46,6 +50,13 @@ const previewAttrsOf = (
     localPreviewFile: node.attrs.localPreviewFile as unknown,
   };
 };
+
+/** 블록 목록의 후손 중 미디어 블록 id를 문서 순서로 모은다. */
+const mediaIdsOf = (blocks: readonly Block[]): string[] =>
+  blocks.flatMap((block) => [
+    ...(isMediaBlock(block) ? [block.id] : []),
+    ...mediaIdsOf("children" in block ? (block.children ?? []) : []),
+  ]);
 
 describe("setMediaBlockUrl — 로컬 프리뷰와 거절", () => {
   it("url과 프리뷰가 공존하는 노드에 같은 url을 setMediaBlockUrl로 적용하면 거절되고 PM 상태가 바뀌지 않는다", () => {
@@ -322,5 +333,59 @@ describe("duplicateBlock — 로컬 프리뷰", () => {
     expect(copied.localPreviewUrl).toEqual(expect.any(String));
     expect(copied.localPreviewUrl).not.toBe(original.localPreviewUrl);
     expect(copied.localPreviewFile).toBe(file);
+  });
+
+  it.each(["file", "video", "audio"] as const)(
+    "%s 미디어를 복제해도 복제본은 새 blob URL과 같은 File을 가진다",
+    (kind) => {
+      const { editor, tiptap } = mountedWithLocalPreviewCleanup(
+        documentOf(mediaBlock(kind, "m-1"), tailParagraphBlock),
+      );
+      const file = testFile();
+      seedLocalPreview(tiptap, "m-1", file);
+      const original = previewAttrsOf(tiptap, "m-1");
+
+      expect(editor.commands.duplicateBlock("m-1").ok).toBe(true);
+
+      const duplicate = previewAttrsOf(tiptap, "id-1");
+      expect(duplicate.localPreviewUrl).toEqual(expect.any(String));
+      expect(duplicate.localPreviewUrl).not.toBe(original.localPreviewUrl);
+      expect(duplicate.localPreviewFile).toBe(file);
+    },
+  );
+
+  it("형제와 손자 깊이의 미디어도 모두 서로 다른 새 blob URL을 받는다", () => {
+    const { editor, tiptap } = mountedWithLocalPreviewCleanup(
+      documentOf(
+        paragraphBlock("p-1", "부모", [
+          mediaBlock("image", "m-1"),
+          paragraphBlock("p-2", "중간", [mediaBlock("video", "m-2")]),
+        ]),
+        tailParagraphBlock,
+      ),
+    );
+    const file = testFile();
+    seedLocalPreview(tiptap, "m-1", file);
+    seedLocalPreview(tiptap, "m-2", file);
+    const originalUrls = ["m-1", "m-2"].map(
+      (id) => previewAttrsOf(tiptap, id).localPreviewUrl,
+    );
+
+    expect(editor.commands.duplicateBlock("p-1").ok).toBe(true);
+
+    const copiedParent = editor
+      .getDocument()
+      .blocks.find(
+        (block): block is ParagraphBlock =>
+          block.id !== "p-1" && block.type === "paragraph",
+      );
+    const copiedMediaIds = mediaIdsOf(copiedParent?.children ?? []);
+    expect(copiedMediaIds).toHaveLength(2);
+    const copiedUrls = copiedMediaIds.map((id) => {
+      const copied = previewAttrsOf(tiptap, id);
+      expect(copied.localPreviewFile).toBe(file);
+      return copied.localPreviewUrl;
+    });
+    expect(new Set([...originalUrls, ...copiedUrls]).size).toBe(4);
   });
 });
