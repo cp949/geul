@@ -222,9 +222,13 @@ describe("isKnownBlockType", () => {
   });
 });
 
-// 대입 시점의 선언 타입 좁힘을 피해 Block·Block | CustomBlock 유니온 그대로
-// 돌려준다. 타입 좁힘 테스트가 predicate의 효과만 보게 한다.
+/**
+ * 대입 시점의 선언 타입 좁힘을 피해 Block 유니온 그대로 돌려준다.
+ * 타입 좁힘 테스트가 predicate의 효과만 보게 한다.
+ */
 const widen = (block: Block): Block => block;
+
+/** `widen`과 같되 Block | CustomBlock 유니온 그대로 돌려준다. */
 const widenOrCustom = (block: Block | CustomBlock): Block | CustomBlock =>
   block;
 

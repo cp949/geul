@@ -29,7 +29,7 @@ _Avoid_: 저장된 셀 객체
 _Avoid_: 병합 셀의 모든 좌표, 가상 셀
 
 **리프 블록**:
-`children` 필드가 없는 블록이다. `divider`, `codeBlock`, 미디어 블록 5종이 해당한다. 표(`table`)도 `children`이 없지만 행과 셀을 가지므로 리프 블록이 아니다. 판정은 model의 블록 종류 표(`BLOCK_FAMILY`)가 소유한다.
+`children` 필드가 없는 `Block`이다. `divider`, `codeBlock`, 미디어 블록 5종이 해당한다. 표(`table`)도 `children`이 없지만 행과 셀을 가지므로 리프 블록이 아니다. `CustomBlock`은 `Block`이 아니므로 해당하지 않는다. 판정은 model의 블록 종류 표(`BLOCK_FAMILY`)가 소유한다.
 _Avoid_: 말단 블록, atom 블록
 
 ## 변환 계약
