@@ -166,7 +166,7 @@ function Editor() {
 | keydown 배선(`handleMenuKeyDown` 순서) | 배치(`readCaretBounds`와 `useClampedMenuPosition`) |
 | Escape·바깥 클릭 닫기 | |
 
-`state`는 `{ blockId, query, highlightedIndex }` 또는 `null`이다. 좌표는 담지 않는다. 열려 있는 동안 렌더에서 `readCaretBounds(element)`로 읽는다. 스크롤·resize처럼 렌더 없이 캐럿이 움직이면 `refresh()`로 다시 그리게 한다. 후보 목록이 바뀌면 `refresh()`가 `highlightedIndex`도 마지막 후보로 줄인다. 확정 뒤에는 `close()`를 부른다. `dismiss()`는 같은 텍스트로 다시 열지 않게 닫는다. `open(blockId, "")`는 트리거 문자 없이 연다. `parseQuery`·`getItemCount`·`navigate`·`onActivate`는 매 렌더 새 함수여도 된다. `allowSelectors`는 모듈 스코프 상수로 넘긴다.
+`state`는 `{ blockId, query, highlightedIndex }` 또는 `null`이다. 좌표는 담지 않는다. 열려 있는 동안 렌더에서 `readCaretBounds(element)`로 읽는다. 스크롤·resize처럼 렌더 없이 캐럿이 움직이면 `refresh()`로 다시 그리게 한다. 후보 목록이 바뀌면 `refresh()`가 `highlightedIndex`도 마지막 후보로 줄인다. `refresh()`는 이벤트 핸들러나 `useEffect` 본문에서 부른다. 확정 뒤에는 `close()`를 부른다. `dismiss()`는 같은 텍스트로 다시 열지 않게 닫는다. `open(blockId, "")`는 트리거 문자 없이 연다. `parseQuery`·`getItemCount`·`navigate`·`onActivate`는 매 렌더 새 함수여도 된다. `allowSelectors`는 모듈 스코프 상수로 넘긴다.
 
 ```tsx
 import {

@@ -291,6 +291,26 @@ describe("useCaretTriggerPopup dismiss·close·open", () => {
     expect(readState()).toBeNull();
   });
 
+  it('close()는 open(blockId, "")의 명시 열기 기록도 지워 빈 텍스트 블록에서 다시 열리지 않는다', () => {
+    const rendered = mountProbe({ blockIds: ["alpha", "beta"] });
+    const blockId = rendered.blockIds[0];
+    const block = rendered.blocks[0];
+    if (blockId === undefined || block === undefined) {
+      throw new Error("블록을 찾지 못했다");
+    }
+    const cleared = rendered.editor.commands.setText(blockId, "");
+    if (!cleared.ok) throw new Error("빈 블록 fixture 준비 실패");
+    placeCaret(block);
+    act(() => rendered.handle().popup.open(blockId, ""));
+    expect(readState()).not.toBeNull();
+
+    act(() => rendered.handle().popup.close());
+    expect(readState()).toBeNull();
+    fireSelectionChange();
+
+    expect(readState()).toBeNull();
+  });
+
   it("refresh()는 열려 있을 때 새 state 객체를 커밋해 다시 렌더하고 닫혀 있으면 아무것도 하지 않는다", () => {
     const rendered = mountProbe();
     const closedRenders = readRenders();
@@ -367,6 +387,19 @@ describe("useCaretTriggerPopup 키보드", () => {
       false,
     );
     expect(readState()?.highlightedIndex).toBe(1);
+  });
+
+  it("한 act 안의 연속 이동 키도 앞 키의 결과 위에서 이동한다", () => {
+    const rendered = mountProbe();
+    typeIntoBlock(rendered, 0, "/ab");
+
+    // 한 act는 렌더를 미룬다. 두 번째 키가 렌더 전 state를 보면 1에 머문다.
+    act(() => {
+      fireEvent.keyDown(rendered.editable, { key: "ArrowDown" });
+      fireEvent.keyDown(rendered.editable, { key: "ArrowDown" });
+    });
+
+    expect(readState()?.highlightedIndex).toBe(2);
   });
 
   it("navigate가 null을 돌려주면 키를 막지 않고 state를 바꾸지 않는다", () => {

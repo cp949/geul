@@ -123,7 +123,8 @@ export const useCaretTriggerPopup = ({
    * 열려 있으면 새 state 객체를 커밋한다. 좌표를 렌더에서 읽는 소비자가 다시
    * 그리게 한다. 후보 수가 줄었으면 `highlightedIndex`도 마지막 후보로 줄인다.
    * 후보 목록이 바뀌는 소비자(예: `items` prop 변경)가 부른다. 닫혀 있으면
-   * 아무것도 하지 않는다.
+   * 아무것도 하지 않는다. 이벤트 핸들러나 `useEffect` 본문에서 부른다. 렌더
+   * 본문이나 layout effect에서 부르면 `getItemCount`가 이전 렌더의 클로저를 본다.
    */
   const refresh = useCallback(() => {
     const current = stateRef.current;
