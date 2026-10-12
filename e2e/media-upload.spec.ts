@@ -122,7 +122,7 @@ test("업로드 중 블록을 undo로 지우면 완료 결과를 무시한다(�
   // File Panel을 닫고(업로드 자체는 core session에서 계속 진행 —
   // media-file-panel.spec.ts "삽입을 undo 1회로 복원한다"와 같은 이유로
   // Escape 먼저) 곧바로 undo해 블록을 통째로 지운다. 결과가 도착할
-  // 시점엔 대상 블록이 이미 없어 core의 stillExists 가드가 적용을
+  // 시점엔 대상 블록이 이미 없어 core의 경합 가드(sameTarget)가 적용을
   // 무시해야 한다.
   await page.keyboard.press("Escape");
   await expect(editable).toBeFocused();
