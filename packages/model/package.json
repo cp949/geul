@@ -1,6 +1,6 @@
 {
   "name": "@cp949/geul-model",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "geul 에디터의 독자 문서 JSON 스키마와 검증 — 프레임워크·DOM 비의존",
   "license": "MIT",
   "repository": {

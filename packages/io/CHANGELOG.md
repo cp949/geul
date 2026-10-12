@@ -1,5 +1,37 @@
 # @cp949/geul-io
 
+## 0.2.2
+
+### Patch Changes
+
+- b3481e8: markdown strict 내보내기가 두 모양을 `MARKDOWN_LOSS_NOT_ALLOWED`로 거절하고, lossy 내보내기가 같은 경고를 낸다.
+
+  - 내용이 비고 자식이 없는 체크 항목: `CHECKED_STATE_LOST`. 체크박스를 붙일 문단이 없어 `*`만 나가고 checked가 사라진다.
+  - 내용이 빈 목록 항목·인용의 첫 자식이 이미지(callout 포함): `NESTED_CHILDREN`. 이미지가 mdast 문단으로 나가 재가져오기 때 own content로 뭉치고 자식이 사라진다.
+  - mark 없는 빈 글자 런만 가진 content(`[{ text: "" }]`)도 빈 content와 같게 판정한다. 이 입력의 lossy 출력은 빈 단락을 만들지 않아 깨진 markdown이 나오지 않는다. 이 입력은 lossy 출력이 바뀌는 유일한 경우다.
+  - 내용이 빈 `checkListItem`의 첫 자식이 이미지·callout·미디어이면 경고 kind가 `CHECKED_STATE_LOST`에서 `NESTED_CHILDREN`으로 바뀐다. 체크박스는 첫 자식 문단이 받으므로 유지된다.
+  - `NESTED_CHILDREN`·`CHECKED_STATE_LOST`의 `message` 문구가 컨테이너 모양에 맞게 바뀐다.
+  - 그 밖의 lossy 출력은 바뀌지 않는다. 경고만 더해진다.
+  - 신규 export는 없다.
+  - 알려진 제한([Issue #392](https://github.com/cp949/geul/issues/392)): 내용이 빈 `bulletListItem`의 첫 자식이 `divider`이고 앞 형제가 다른 종류의 목록이면 `- ---`이 나가 thematic break로 재가져온다. 내용이 빈 `bulletListItem`을 3단으로 중첩해도 `* * *`이 나가 같다. 두 경우 모두 strict가 거절하지 않고 `analyzeMarkdownLoss`가 비어 있다.
+
+- e6bb98d: markdown strict 내보내기가 mark 달린 빈 글자 런을 `MARKDOWN_LOSS_NOT_ALLOWED`로 거절하고, lossy 내보내기가 같은 경고를 낸다.
+
+  - 대상: `bold`, `italic`, `strike`, `code` 중 하나가 붙은 빈 글자 런(`{ text: "", marks }`). 마커만(`****` 등) 나가 재가져오기 때 divider·codeBlock·글자로 구조가 바뀔 수 있다.
+  - 런이 content 중간에 끼어도(`a` + 빈 bold 런 + `b`) 보고한다. 블록 content와 표 셀 content 모두 본다.
+  - 신규 경고 kind `EMPTY_MARKED_RUN`을 `MarkdownLoss`에 추가한다. 블록당 1건, 표는 셀당 1건이다.
+  - 판정은 런 단위라 같은 mark 런이 빈 런을 양쪽에서 감싸 왕복이 일치하는 입력(`******a******`)도 거절한다.
+  - `link` 단독 빈 런과 mark 없는 빈 런은 대상이 아니다.
+  - `underline`·`textColor`·`backgroundColor` 빈 런은 기존 kind(`UNDERLINE`, `INLINE_COLOR`)만 낸다.
+  - lossy 출력은 바뀌지 않는다. 경고만 더해진다.
+  - 알려진 제한([Issue #394](https://github.com/cp949/geul/issues/394)): 빈 글자 런 바로 뒤에 `bold`+`italic` 또는 `bold`+`code` 런이 오면 출력에 `&#xNAN;`이 섞여 재가져오기 글자가 달라진다. strict가 거절하지 않는다.
+  - 알려진 제한([Issue #395](https://github.com/cp949/geul/issues/395)): 같은 mark를 가진 인접 글자 런(`**a****b**`)은 재가져오기 때 구분자 글자가 본문에 섞인다. strict가 거절하지 않는다.
+  - 위 제한 3건은 에디터 조작으로 만들어지는 입력인지 확인하지 않았다. 모델 검증이 허용하는 입력이다.
+
+- Updated dependencies [0ab355a]
+- Updated dependencies [79de709]
+  - @cp949/geul-model@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

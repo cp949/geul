@@ -1,5 +1,64 @@
 # @cp949/geul-react
 
+## 0.2.2
+
+### Patch Changes
+
+- 6864588: 캐럿 트리거 popup(`/`, `:`, `@`)의 상태 기계를 `useCaretTriggerPopup` 훅 한 곳으로 모으고 공개한다. 동작은 바뀌지 않는다.
+
+  - react: 신규 export는 `useCaretTriggerPopup`, `UseCaretTriggerPopupOptions`, `CaretTriggerPopupState`, `readCaretBounds`다.
+  - react: `SlashMenu`와 `EmojiPicker`는 이 훅으로 옮겼다. 열림·닫기·키보드 동작은 같다.
+  - react: `SlashMenu`의 `items`가 바뀌어 후보 수가 줄면 강조 항목이 마지막 후보로 줄어드는 동작은 그대로다.
+
+- 778d0da: `uploadFile`을 등록하지 않은 편집기에서 iframe URL을 바꿀 수 없던 결함을 고친다.
+
+  - MediaToolbar: iframe 블록의 more 메뉴가 업로드 설정과 무관하게 Replace 항목을 보여 준다. 누르면 Upload 탭 없이 Iframe URL 입력이 열린다.
+  - MediaToolbar: image·video·audio·file 블록은 그대로다. `uploadFile`이 없으면 Replace 항목을 보여 주지 않는다.
+
+- 3214eb6: 미디어 Replace와 File Panel의 Embed에서 지금과 같은 URL을 저장하면 사용자가 정한 name이 URL 끝 segment로 덮어써지던 결함을 고친다.
+
+  - MediaToolbar: Replace의 Embed 탭에서 블록의 현재 url과 같은 URL을 저장하면 name을 바꾸지 않는다. image·video·audio·file·iframe 모두 같다.
+  - FilePanel: Embed에서 같은 URL을 다시 저장해도 name이 유지되고 패널의 `Name:` 표시도 현재 name을 보인다.
+  - 문서와 revision은 바뀌지 않는다. 사용자가 비운 name(`""`)도 그대로 남는다.
+  - URL이 바뀔 때는 기존대로 새 URL 끝 segment가 name 초깃값이 된다.
+  - 비교는 정확 일치다. 정책이 막는 iframe URL은 같은 URL이어도 거절 문구를 띄운다.
+
+- da9d83b: 미디어 Replace와 File Panel의 Embed에서 지금과 같은 URL을 저장하면 "Unsupported media URL" 경고가 뜨던 결함을 고친다.
+
+  - MediaToolbar: Replace의 Embed 탭에서 블록과 url이 같은 저장은 경고 없이 view로 돌아간다. 문서와 revision은 바뀌지 않는다.
+  - FilePanel: Embed에서 같은 저장을 다시 해도 경고가 없다.
+  - iframe 블록도 같다.
+  - 지원하지 않는 URL, iframe 정책 위반, 호스트 `onBeforeChange`가 거절한 저장은 거절 문구를 그대로 띄운다.
+
+- 7a7fa9b: 미디어·iframe 블록의 URL 적용 한 번이 undo 두 번으로 되돌아가던 결함을 고친다.
+
+  - core: `setMediaBlockUrl`과 `setIframeSrc`가 선택 인자 `name?: string`을 받는다. 지정하면 url과 name을 같은 transaction, 같은 undo 단위로 적용한다.
+  - core: `name`을 생략하면 name을 바꾸지 않는다. 거절된 호출은 `name`을 지정해도 문서와 history를 바꾸지 않는다.
+  - react: MediaToolbar의 Replace Embed 탭과 File Panel의 URL 저장이 추출한 파일명을 URL 명령 인자로 넘긴다. `setMediaBlockName`을 따로 부르지 않는다.
+
+- 668d924: 표 그립 메뉴가 그립 버튼 바로 아래에 열리도록 앵커를 고쳤다.
+
+  - react: 이전에는 표 모서리 대각선 기준의 낡은 좌표라 메뉴가 버튼보다 위에 걸치고 Plus와 겹쳤다.
+  - react: 메뉴 앵커는 버튼 자리와 같은 공식을 쓴다. 버튼 아래쪽에서 4px 띄운다.
+
+- Updated dependencies [0ab355a]
+- Updated dependencies [988b9aa]
+- Updated dependencies [d7c5327]
+- Updated dependencies [f56222d]
+- Updated dependencies [63ccf4a]
+- Updated dependencies [f7cf0a0]
+- Updated dependencies [aa09ddf]
+- Updated dependencies [947e6e3]
+- Updated dependencies [79de709]
+- Updated dependencies [7a7fa9b]
+- Updated dependencies [0ceec29]
+- Updated dependencies [b571210]
+- Updated dependencies [1ec502a]
+- Updated dependencies [ba75052]
+- Updated dependencies [eb5d004]
+- Updated dependencies [db56017]
+  - @cp949/geul-core@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

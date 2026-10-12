@@ -1,5 +1,118 @@
 # @cp949/geul-core
 
+## 0.2.2
+
+### Patch Changes
+
+- 0ab355a: 순차 id 팩토리를 쓰는 편집기가 iframe으로 끝나는 문서에서 `Duplicate id`로 던지던 결함을 고친다.
+
+  - core: 점유 id 수집이 `file`·`image`·`video`·`audio`만 보고 `iframe`을 빠뜨렸다. 이제 `iframe`도 점유 id로 등록한다.
+  - model: 블록 종류 분류 표를 추가한다. 신규 export는 `MediaBlockType`, `LeafBlockType`, `isMediaBlockType`, `isLeafBlockType`, `isMediaBlock`, `isLeafBlock`이다.
+  - model: 알려진 블록 타입 집합이 이 표에서 파생된다. `isKnownBlockType`의 판정은 같다.
+  - core: `MediaBlockKind`는 `MediaBlockType`의 별칭으로 유지된다. 공개 타입 이름은 바뀌지 않는다.
+
+- 988b9aa: `getCaretBlockContext().text`가 hardBreak와 인라인 원소를 지우던 결함을 고친다. 슬래시·이모지·mention popup이 줄바꿈 뒤 글자나 인라인 원소 뒤 글자를 질의로 이어 붙였다.
+
+  - core: `text`는 hardBreak를 `\n`으로 읽는다. 문단 `/`, 줄바꿈, `a`는 `"/\na"`다. 이전에는 `"/a"`라 슬래시 메뉴가 `{ query: "a" }`로 열렸다.
+  - core: hardBreak 밖의 인라인 원소(custom 인라인 원소)는 U+FFFC로 읽는다. 이전에는 빈 문자열이었다. 원소만 든 문단의 `text`는 `""`가 아니라 U+FFFC 하나다.
+  - core: mention 뒤에 `@a`를 치면 `text`가 U+FFFC에 `@a`가 이어 붙은 값이라 `@` 트리거가 열리지 않는다. 이전에는 picker가 열리고 후보를 확정하면 기존 mention이 지워졌다.
+  - core: 일반 텍스트, 마크가 붙은 텍스트, codeBlock(리터럴 `\n`)의 `text`는 그대로다. 반환 타입은 바뀌지 않는다.
+  - 알려진 한계: `/`·`:`·`@` 바로 뒤에 인라인 원소가 오면 질의 U+FFFC로 열리고 후보가 0건이다. 데이터를 잃지 않는다.
+  - 줄 첫머리 판정은 문단 전체 매치 그대로다.
+
+- d7c5327: `getBlockTypeBlocker`·`getBlockTypesBlocker`가 `enabledBlockTypes`로 막은 타입 대상에 `NOT_APPLICABLE`을 답한다.
+
+  - 막은 타입 대상은 이전에 `null`이거나 다른 구조적 사유(`LIST_CODE_MISMATCH`·`HAS_CHILDREN`·`INVALID_TEXT`·`ALL_CODE_BLOCK`)였고 이제 `NOT_APPLICABLE`이다. `setBlockType`·`setBlockTypes`는 이전에도 `COMMAND_NOT_APPLICABLE`로 거절했다.
+  - 질의와 명령의 판정이 같아진다. 거절 코드와 메시지는 바뀌지 않는다.
+
+- f56222d: `duplicateBlock` 복제본이 원본의 로컬 프리뷰 blob URL을 공유하던 결함을 고친다.
+
+  - core: 복제본이 원본과 같은 URL을 가졌다.
+  - core: 한쪽이 정리되면 다른 쪽 프리뷰가 깨졌다.
+  - core: 이제 복제본(하위 블록 포함)이 같은 파일로 새 URL을 받는다.
+
+- 63ccf4a: 호스트의 `onBeforeChange` 거절 등으로 transaction이 문서에 못 들어갈 때, 발급한 로컬 프리뷰 blob URL이 해제 통지 없이 남던 결함을 고친다.
+
+  - core: `duplicateBlock`과 붙여넣기·드롭 삽입이 URL을 발급한 뒤 dispatch 거절·되돌림·중간 예외로 끝나면, 문서에 못 들어간 URL마다 `onLocalPreviewCleanup`으로 통지한다.
+  - core: 판정은 호스트 콜백이 돌기 전에 URL이 문서에 한 번이라도 들어갔는지다. 콜백이 블록을 동기로 지워도 undo 가능한 블록의 URL을 통지하지 않는다.
+  - core: 콜백이 `replaceDocument`를 불러도 같은 URL을 두 번 통지하지 않는다.
+  - core: 붙여넣기·드롭은 `createId()`가 던지면 URL을 발급하지 않는다.
+
+- f7cf0a0: 로컬 프리뷰가 있는 미디어 블록에서 거절 Result인데 PM 상태가 바뀌고, `updateBlock`이 프리뷰를 조용히 지우던 결함을 고친다.
+
+  - core: `setMediaBlockUrl`과 업로드 적용이 모델이 같고 로컬 프리뷰 attrs만 달라지는 경우 dispatch 전에 `COMMAND_NOT_APPLICABLE`로 거절한다. PM 상태와 change event가 바뀌지 않는다. `updateBlock`도 url과 프리뷰가 함께 심긴 노드를 같은 내용으로 호출하면 같은 방식으로 거절한다.
+  - core: `updateBlock`이 모델에서 노드를 다시 만들 때 로컬 프리뷰를 blockId로 이어받는다. 자식 미디어의 프리뷰도 유지한다. 캡션 같은 필드만 바꿔도 프리뷰가 사라지지 않는다.
+  - core: `updateBlock`으로 url이 생기면 프리뷰를 정리한다. `onLocalPreviewCleanup` 통지는 그 URL이 undo·redo로 못 돌아올 때 1회 낸다(Issue #382). `setMediaBlockUrl`과 같은 판정이다.
+
+- aa09ddf: 로컬 프리뷰 url 확정을 undo하면 이미 해제 통지한 blob URL이 문서에 돌아오던 결함과, 프리뷰 적용 직후 `undo()`가 거절 Result를 돌려주면서 PM 프리뷰를 지우던 결함을 고친다.
+
+  - core: `setMediaBlockUrl`, `updateBlock`, `replaceBlocks`, 업로드 완료로 url을 확정해도 `onLocalPreviewCleanup`을 즉시 부르지 않는다. 프리뷰 attrs는 그대로 정리한다.
+  - core: 통지는 그 URL이 undo·redo로 못 돌아올 때 1회 나간다. undo하면 프리뷰가 돌아온다. 키보드 undo도 같다.
+  - core: `undo()`·`redo()`는 PM이 바뀌었으면 모델 변경이 없어도 `ok`를 돌려준다. `onChange`와 revision은 그대로다. 빈 history는 `COMMAND_NOT_APPLICABLE`을 유지한다.
+  - core: 로컬 프리뷰 도달 판정은 pending URL이 새로 생겼거나 도달 가능성이 줄 수 있는 변경(eviction, redo 스택 소거, undo·redo)에서만 돈다. 이벤트를 쌓기만 하는 편집마다 history 시뮬레이션이 돌던 입력 지연을 없앤다.
+
+- 947e6e3: 블록이 문서에 남은 채 로컬 프리뷰 blob URL만 빠지는 경로에서 URL이 통지 없이 새던 결함을 고친다.
+
+  - core: 로컬 프리뷰 정리 통지의 추적 단위를 `blockId`에서 URL로 바꾼다. `replaceBlocks` 재삽입, 삭제 뒤 같은 id 재삽입, 프리뷰 재업로드, 프리뷰 적용 undo 뒤 redo 소거에서 문서와 history 어디에도 없는 URL을 `onLocalPreviewCleanup`으로 통지한다. 같은 id가 미디어가 아닌 타입으로 바뀐 경우도 포함한다.
+  - core: `replaceBlocks`가 같은 id로 다시 넣은 미디어의 로컬 프리뷰를 `updateBlock`과 같은 규칙으로 이어받는다. 교체 블록에 `url`이 있으면 프리뷰를 정리한다. 통지는 도달 불가 때 낸다(Issue #382).
+  - core: 통지는 URL당 한 번이다. 도달 판정, 거절 정리, `destroy()` 스윕의 통지가 한 URL에서 겹쳐도 같은 URL을 두 번 알리지 않는다.
+
+- 79de709: 미디어 블록 종류별 필드 소유 표를 추가하고, `getSelectionMediaBlock()`이 iframe의 `showPreview`를 `null`로 보고하게 한다.
+
+  - model: 신규 export는 `MEDIA_BLOCK_FIELDS`, `MediaOwnField`, `MediaBlockTypeWithField`, `mediaBlockTypeHasField`, `mediaBlockHasField`이다. `showPreview`·`previewWidth`·`textAlignment`·`aspectRatio`를 어느 종류가 갖는지 표 하나가 답한다.
+  - core: `getSelectionMediaBlock()`이 iframe에서 `showPreview: true`를 보고하던 것을 `null`로 바꾼다. iframe은 `showPreview` 필드가 없다. 같은 이유로 `file`은 원래 `null`이었다. react의 미리보기 토글은 iframe에서 이미 숨겨져 화면 변화는 없다.
+
+- 7a7fa9b: 미디어·iframe 블록의 URL 적용 한 번이 undo 두 번으로 되돌아가던 결함을 고친다.
+
+  - core: `setMediaBlockUrl`과 `setIframeSrc`가 선택 인자 `name?: string`을 받는다. 지정하면 url과 name을 같은 transaction, 같은 undo 단위로 적용한다.
+  - core: `name`을 생략하면 name을 바꾸지 않는다. 거절된 호출은 `name`을 지정해도 문서와 history를 바꾸지 않는다.
+  - react: MediaToolbar의 Replace Embed 탭과 File Panel의 URL 저장이 추출한 파일명을 URL 명령 인자로 넘긴다. `setMediaBlockName`을 따로 부르지 않는다.
+
+- 0ceec29: 복제·삽입한 로컬 프리뷰 미디어를 undo한 뒤 redo하면 이미 해제된 blob URL을 가진 블록이 되살아나던 결함을 고친다.
+
+  - core: undo만 보고 복구 불가로 판정해 정리를 바로 통지했다.
+  - core: redo로 되살아난 블록의 프리뷰가 깨졌다.
+  - core: 이제 undo로도 redo로도 되돌릴 수 없을 때만 정리를 통지한다.
+
+- b571210: `replaceBlocks`가 제거 대상과 같은 id의 블록으로 교체하지 못하던 결함을 고친다.
+
+  - core: 제거 대상과 같은 id의 블록을 삽입하면 `COMMAND_NOT_APPLICABLE`로 거절됐다.
+  - core: 삽입 블록의 자식이 제거 대상 id를 재사용하면 그 자식이 조용히 사라졌다.
+  - core: 이제 제거를 id가 아니라 원래 있던 노드 기준으로 해 같은 id 교체가 성공한다.
+
+- 1ec502a: 같은 값을 다시 적용한 속성 명령이 빈 undo 단위를 남겨 다음 undo를 삼키던 결함을 고친다.
+
+  - core: 현재와 같은 값을 받은 속성 명령이 dispatch 전에 `COMMAND_NOT_APPLICABLE`을 반환한다. 반환값은 이전과 같고 undo 한 번이 직전의 실제 변경을 되돌린다.
+  - core: 대상은 `setMediaBlockUrl`, `setMediaBlockName`, `setMediaBlockCaption`, `setMediaBlockBackgroundColor`, `setIframeSrc`, `setMediaPreviewWidth`, `setMediaShowPreview`, `setMediaTextAlignment`, `setBlockTextColor`, `setBlockBackgroundColor`, `setBlockTextAlignment`, `setCodeBlockWrap`, `setCodeBlockCaption`, `setCalloutIcon`이다.
+  - core: 값 검증이 no-op 판정보다 먼저다. 막힌 iframe URL을 같은 값으로 재적용하면 기존처럼 `IFRAME_URL_NOT_ALLOWED`가 나간다.
+  - core: 업로드 콜백이 현재와 같은 `url`(및 `name`)을 돌려주면 `uploadMediaFile`·`replaceMediaBlockFile`이 문서를 바꾸지 않는다. 결과는 이전과 같이 `ok`다.
+
+- ba75052: `setText`의 같은 값 판정이 hardBreak와 인라인 원소를 보지 못해 빈 undo 단위를 남기거나 실제 변경을 거절하던 결함을 고친다.
+
+  - core: 줄바꿈이 든 같은 텍스트를 다시 적용하면 dispatch 전에 `COMMAND_NOT_APPLICABLE`을 반환한다. history·문서·change event가 바뀌지 않고 undo 한 번이 직전의 실제 변경을 되돌린다.
+  - core: 줄바꿈만 지우거나 인라인 custom 원소만 지우는 `setText`는 이전에 거절됐고 이제 적용된다.
+  - core: 판정은 hardBreak를 `\n`으로 읽은 텍스트 비교다. 텍스트·hardBreak 밖의 인라인 원소가 있으면 항상 다름이다. 마크는 보지 않는다.
+  - 값 검증이 no-op 판정보다 먼저다. `BLOCK_NOT_FOUND` 등 기존 에러 우선순위는 그대로다.
+
+- eb5d004: 같은 내용을 다시 적용한 `updateBlock`이 빈 undo 단위를 남겨 다음 undo를 삼키던 결함을 고친다.
+
+  - core: 현재 블록과 내용이 완전히 같은 `updateBlock` 호출이 dispatch 전에 `COMMAND_NOT_APPLICABLE`을 반환한다. 반환값은 이전과 같고 undo 한 번이 직전의 실제 변경을 되돌린다.
+  - core: 비교는 attrs·marks·자식을 포함한 노드 전체다. `children: []`로 자식을 비우는 호출처럼 내용이 달라지면 이전처럼 적용된다.
+  - core: 값 검증이 no-op 판정보다 먼저다. `BLOCK_NOT_FOUND`·`DOCUMENT_INVALID` 등 기존 에러 우선순위는 그대로다.
+
+- db56017: 업로드 진행 중 같은 id의 다른 블록으로 교체돼도 옛 업로드 결과가 새 블록을 덮어쓰던 결함을 고친다.
+
+  - core: `uploadMediaFile`·`replaceMediaBlockFile`의 경합 가드가 블록 존재 여부만 확인해, `replaceBlocks`·`updateBlock`으로 교체한 블록의 url을 옛 결과가 덮어썼다.
+  - core: 이제 업로드 시작 시점의 블록 type·url과 다르면 교체된 것으로 보고 success·error·cancelled 결과를 모두 무시한다.
+  - core: caption·name 등 url 외 속성만 바뀐 경우는 같은 블록으로 보고 결과를 적용한다.
+
+- Updated dependencies [0ab355a]
+- Updated dependencies [b3481e8]
+- Updated dependencies [e6bb98d]
+- Updated dependencies [79de709]
+  - @cp949/geul-model@0.2.2
+  - @cp949/geul-io@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

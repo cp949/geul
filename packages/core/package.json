@@ -1,6 +1,6 @@
 {
   "name": "@cp949/geul-core",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Tiptap을 감싼 프레임워크 비의존 headless 블록 에디터 코어",
   "license": "MIT",
   "repository": {
