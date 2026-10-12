@@ -1,6 +1,6 @@
 import { isMediaBlockType } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
-import { undoDepth } from "@tiptap/pm/history";
+import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 
@@ -20,8 +20,9 @@ export type MediaLocalPreviewLifecycleOptions = {
   // URL이 더 이상 undo로도 redo로도 복구 불가라고 판정되면 호출한다.
   // production-editor-session.ts가 기존 `notifyLocalPreviewCleared`
   // (RD-002.md "결정" — 신호 채널 재사용)로 연결한다. url 확정 경로의
-  // 통지도 이 판정이 맡는다(Issue #382). 미지정이면 no-op(MediaDropPasteExtension의 기본값과 동일
-  // 근거 — production-editor-assembly.ts가 항상 실제 콜백을 넘긴다).
+  // 통지도 이 판정이 맡는다(Issue #382). 미지정이면 no-op
+  // (MediaDropPasteExtension의 기본값과 동일 근거 —
+  // production-editor-assembly.ts가 항상 실제 콜백을 넘긴다).
   notifyUnreachable: (blockId: string, cleared: LocalPreviewAttrs) => void;
   // Issue #168 roadmap RD-002 DELTA-03 — 빠졌지만 아직 복구 불가 판정을
   // 받지 못해 `pending`에만 남아 있는 로컬 프리뷰 목록이 바뀔 때마다(추가·
@@ -178,9 +179,11 @@ export const MediaLocalPreviewLifecycleExtension =
             let changed = false;
 
             // 새로 빠진 URL을 재판정 대기열에 추가한다.
+            const fresh = new Set<string>();
             for (const [url, entry] of oldPreviews) {
               if (newPreviews.has(url)) continue;
               pending.set(url, entry);
+              fresh.add(url);
               changed = true;
             }
 
@@ -204,13 +207,25 @@ export const MediaLocalPreviewLifecycleExtension =
             // 편집이라 `undoDepth`가 +1이다(`prosemirror-history`
             // `histTransaction`·`applyTransaction`) — 그래서 이 비교만으로
             // redo 도달 가능성 변화도 놓치지 않는다(Issue #380).
-            if (
-              pending.size > 0 &&
-              undoDepth(newState) !== undoDepth(oldState)
-            ) {
+            //
+            // 옛 대기 URL은 도달 가능성이 줄어들 수 있는 변경에서만 다시
+            // 판정한다(Issue #382). url 확정 뒤에는 모든 업로드 미디어가
+            // pending에 들어가, 이벤트를 하나씩 쌓는 편집마다 판정하면
+            // 편집 횟수 × 문서 크기만큼 시뮬레이션이 쌓인다. 이벤트를 쌓기만
+            // 하는 편집(undoDepth +1, redo 스택 그대로)은 옛 이벤트가 만드는
+            // 과거 문서를 바꾸지 않는다. 줄어드는 경우는 eviction
+            // (undoDepth 감소)과 redo 스택 소거(redoDepth 감소)다.
+            // undoDepth가 2 이상 늘거나 undo·redo가 끼면 보수적으로 다시 판정한다.
+            const depthBefore = undoDepth(oldState);
+            const depthAfter = undoDepth(newState);
+            const onlyAppended =
+              depthAfter === depthBefore + 1 &&
+              redoDepth(newState) === redoDepth(oldState);
+            if (pending.size > 0 && depthAfter !== depthBefore) {
               simulating = true;
               try {
                 for (const [url, entry] of pending) {
+                  if (onlyAppended && !fresh.has(url)) continue;
                   if (!isLocalPreviewReachableViaHistory(newState, url)) {
                     pending.delete(url);
                     notifyUnreachable(entry.blockId, entry.attrs);
