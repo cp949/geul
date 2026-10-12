@@ -12,7 +12,7 @@ import {
 // 여기 없음, 기존 model 계약 그대로). 파라미터를 DocumentBlock으로 넓혀도
 // isNestableBlockType이 CustomBlock의 임의 type 문자열에 항상 false를
 // 반환해 안전하다.
-const childrenOf = (block: DocumentBlock): Block[] | undefined => {
+export const childrenOf = (block: DocumentBlock): Block[] | undefined => {
   if (!isNestableBlockType(block.type)) return undefined;
   return (block as Extract<Block, { type: NestableBlockType }>).children;
 };

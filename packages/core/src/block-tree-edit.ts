@@ -1,21 +1,10 @@
 import {
   isKnownBlockType,
-  isNestableBlockType,
   type Block,
   type DocumentBlock,
-  type NestableBlockType,
 } from "@cp949/geul-model";
 
-// children은 7개 nestable 타입에만 있다 — block-tree.ts의 동일 좁히기
-// 재사용(export되지 않은 module-local 헬퍼라 그대로 복제, 두 파일이 각자
-// 다른 이유로 Block 유니온을 좁힌다: block-tree.ts는 읽기 순회, 이 파일은
-// 형제 배열 스플라이스). 파라미터를 DocumentBlock으로 넓혀도
-// isNestableBlockType이 CustomBlock(top-level 전용, RD-002-DELTA-01)의
-// 임의 type 문자열에 항상 false를 반환해 안전하다.
-const childrenOf = (block: DocumentBlock): Block[] | undefined => {
-  if (!isNestableBlockType(block.type)) return undefined;
-  return (block as Extract<Block, { type: NestableBlockType }>).children;
-};
+import { childrenOf } from "./block-tree.js";
 
 // blockId 노드의 `children` 필드만 교체한 새 블록을 반환한다(나머지 필드는
 // 그대로). nestable 타입 좁히기가 필요해 스프레드 결과를 그 타입으로

@@ -9,6 +9,8 @@ import {
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
+import { pmBlockTreeAdapter } from "./block-tree-adapters.js";
+import { resolveSiblingRange } from "./block-tree-query.js";
 import { deleteBlockRange } from "./delete-block-range.js";
 import { blockNotFound, commandNotApplicable } from "./command-results.js";
 import type { EditorError } from "./errors.js";
@@ -348,45 +350,27 @@ export const outdentBlockCommand = (
   return { ok: true, value: undefined };
 };
 
-// parent(blockGroup 또는 doc)의 직계 자식 중 blockId를 가진 것만 문서 순서
-// 그대로 모은다. divider·table처럼 blockContainer가 아닌 형제도 blockId를
-// 붙여 나란히 들어올 수 있어(D19) container 종류를 가리지 않는다.
-const collectSiblingIds = (parent: ProseMirrorNode): string[] => {
-  const ids: string[] = [];
-  parent.forEach((child) => {
-    const id = child.attrs.blockId;
-    if (typeof id === "string" && id.length > 0) ids.push(id);
-  });
-  return ids;
-};
-
 // fromBlockId·toBlockId가 같은 부모의 형제인지 doc에서 직접 확인하고, 그
 // 사이 범위(양끝 포함, 선택 방향과 무관하게 항상 문서 순서)의 blockId
-// 배열을 돌려준다. 부모가 다르면(다른 중첩 레벨 포함) null — model Block
-// 트리 기반인 resolveBlockSelectionRange(generic-block-tree-lookup.ts)의
-// PM doc 버전이다: Tab 라우팅은 session.document.blocks에 접근하지 않는
-// Editor 전용 경로라 그 함수를 재사용하지 않는다.
+// 배열을 돌려준다. 부모가 다르면(다른 중첩 레벨 포함) null이다. 규칙은 모델
+// 트리와 같은 resolveSiblingRange(block-tree-query.ts)다: Tab 라우팅은
+// session.document.blocks에 접근하지 않는 Editor 전용 경로라 PM doc 어댑터로
+// 돌린다. divider·table처럼 blockContainer가 아닌 형제도 blockId를 붙여 나란히
+// 들어올 수 있어(D19) container 종류를 가리지 않는다.
 export const resolveBlockRangeInDoc = (
   doc: ProseMirrorNode,
   fromBlockId: string,
   toBlockId: string,
 ): readonly string[] | null => {
-  const fromPosition = findBlockPosition(doc, fromBlockId);
-  const toPosition = findBlockPosition(doc, toBlockId);
-  if (fromPosition === null || toPosition === null) return null;
-
-  const fromParent = doc.resolve(fromPosition).parent;
-  const toParent = doc.resolve(toPosition).parent;
-  if (fromParent !== toParent) return null;
-
-  const siblingIds = collectSiblingIds(fromParent);
-  const startIndex = siblingIds.indexOf(fromBlockId);
-  const endIndex = siblingIds.indexOf(toBlockId);
-  if (startIndex === -1 || endIndex === -1) return null;
-
-  const [lo, hi] =
-    startIndex <= endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
-  return siblingIds.slice(lo, hi + 1);
+  const adapter = pmBlockTreeAdapter(doc);
+  const range = resolveSiblingRange(adapter, fromBlockId, toBlockId);
+  if (!range.ok) return null;
+  const ids: string[] = [];
+  for (const node of range.value.nodes) {
+    const id = adapter.idOf(node);
+    if (id !== undefined) ids.push(id);
+  }
+  return ids;
 };
 
 // getBlockNestingActionState의 범위 버전. indent는 범위 시작 블록의 판정과

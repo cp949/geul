@@ -1,6 +1,7 @@
-import { isKnownBlockType } from "@cp949/geul-model";
 import type { Block, DocumentBlock, Result } from "@cp949/geul-model";
 
+import { modelBlockTreeAdapter } from "./block-tree-adapters.js";
+import { locateBlock, resolveSiblingRange } from "./block-tree-query.js";
 import type { EditorError } from "./errors.js";
 import { commandNotApplicable } from "./production-editor-session.js";
 
@@ -13,24 +14,13 @@ export const findBlockEntryInTree = (
   blocks: readonly DocumentBlock[],
   blockId: string,
 ): { block: Block; siblings: readonly Block[]; index: number } | null => {
-  const index = blocks.findIndex((block) => block.id === blockId);
-  if (index !== -1) {
-    const block = blocks[index];
-    if (block === undefined || !isKnownBlockType(block.type)) return null;
-    return {
-      block: block as Block,
-      siblings: blocks as readonly Block[],
-      index,
-    };
-  }
-  for (const block of blocks) {
-    if (!("children" in block) || block.children === undefined) {
-      continue;
-    }
-    const found = findBlockEntryInTree(block.children, blockId);
-    if (found !== null) return found;
-  }
-  return null;
+  const location = locateBlock(modelBlockTreeAdapter(blocks), blockId);
+  if (location === null) return null;
+  return {
+    block: location.node as Block,
+    siblings: location.siblings as readonly Block[],
+    index: location.index,
+  };
 };
 
 // Issue #125 D2 — beforeBlockId가 ancestorBlock 자신의 하위 트리 안(자손)에
@@ -105,32 +95,27 @@ export const resolveBlockSelectionRange = (
   selection: { fromBlockId: string; toBlockId: string },
   command: string,
 ): Result<BlockSelectionRangeResolution, EditorError> => {
-  const from = findBlockEntryInTree(documentBlocks, selection.fromBlockId);
-  if (from === null) {
-    return {
-      ok: false,
-      error: { code: "BLOCK_NOT_FOUND", blockId: selection.fromBlockId },
-    };
+  const range = resolveSiblingRange(
+    modelBlockTreeAdapter(documentBlocks),
+    selection.fromBlockId,
+    selection.toBlockId,
+  );
+  if (!range.ok) {
+    return range.reason === "not-found"
+      ? {
+          ok: false,
+          error: { code: "BLOCK_NOT_FOUND", blockId: range.blockId },
+        }
+      : commandNotApplicable(command);
   }
-  const to = findBlockEntryInTree(documentBlocks, selection.toBlockId);
-  if (to === null) {
-    return {
-      ok: false,
-      error: { code: "BLOCK_NOT_FOUND", blockId: selection.toBlockId },
-    };
-  }
-  if (from.siblings !== to.siblings) {
-    return commandNotApplicable(command);
-  }
-  const startIndex = Math.min(from.index, to.index);
-  const endIndex = Math.max(from.index, to.index);
+  const { siblings, startIndex, endIndex, nodes } = range.value;
   return {
     ok: true,
     value: {
-      siblings: from.siblings,
+      siblings: siblings as readonly Block[],
       startIndex,
       endIndex,
-      rangeBlocks: from.siblings.slice(startIndex, endIndex + 1),
+      rangeBlocks: nodes as readonly Block[],
     },
   };
 };
