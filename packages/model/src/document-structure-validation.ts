@@ -1,6 +1,7 @@
 import {
   isMediaBlock,
   isNestableBlockType,
+  mediaBlockHasField,
   type NestableBlockType,
 } from "./block-kind.js";
 import { isKnownBlockType } from "./block-schema.js";
@@ -219,28 +220,24 @@ const validateBlocksAt = (
         );
       }
       if (
-        known.type === "image" ||
-        known.type === "video" ||
-        known.type === "iframe"
+        mediaBlockHasField(known, "previewWidth") &&
+        known.previewWidth !== undefined &&
+        !isValidMediaPreviewWidth(known.previewWidth)
       ) {
-        if (
-          known.previewWidth !== undefined &&
-          !isValidMediaPreviewWidth(known.previewWidth)
-        ) {
-          return invalid(
-            [...blockPath, "previewWidth"],
-            "previewWidth must be a positive finite number",
-          );
-        }
-        if (
-          known.textAlignment !== undefined &&
-          !isCanonicalCellAlign(known.textAlignment)
-        ) {
-          return invalid(
-            [...blockPath, "textAlignment"],
-            "textAlignment must be one of left, center, right",
-          );
-        }
+        return invalid(
+          [...blockPath, "previewWidth"],
+          "previewWidth must be a positive finite number",
+        );
+      }
+      if (
+        mediaBlockHasField(known, "textAlignment") &&
+        known.textAlignment !== undefined &&
+        !isCanonicalCellAlign(known.textAlignment)
+      ) {
+        return invalid(
+          [...blockPath, "textAlignment"],
+          "textAlignment must be one of left, center, right",
+        );
       }
       continue;
     }
