@@ -7,6 +7,8 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { createEditor, type CustomBlockDefinition } from "../src/index.js";
+
 import {
   calloutBlock,
   documentOf,
@@ -116,6 +118,34 @@ describe("setCalloutIcon", () => {
         tail,
       ),
       revision: 1,
+    });
+  });
+});
+
+describe("setCalloutIcon 모델 트리에 없는 최상위 블록", () => {
+  it("등록된 customBlock의 id는 BLOCK_NOT_FOUND다(알려진 14종 전용 계약)", () => {
+    const widget: CustomBlockDefinition = {
+      render: ({ block }) => {
+        const element = document.createElement("div");
+        element.textContent = `widget:${block.id}`;
+        return { element };
+      },
+    };
+    const editor = createEditor({
+      initialDocument: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [
+          paragraphBlock("p-1", "본문"),
+          { id: "widget-1", type: "myWidget", content: "none" },
+        ],
+      },
+      customBlocks: { myWidget: widget },
+    });
+
+    expect(editor.commands.setCalloutIcon("widget-1", "💡")).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "widget-1" },
     });
   });
 });

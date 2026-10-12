@@ -33,16 +33,18 @@ const setup = (options: { isDestroyed?: boolean } = {}) => {
     type: "doc",
     content: [paragraph("p-1", "one"), codeBlock("c-1")],
   });
+  const runDocumentCommand = vi.fn<BlockAttrCommandDeps["runDocumentCommand"]>(
+    (command, _reason, body) =>
+      body()
+        ? { ok: true, value: undefined }
+        : { ok: false, error: { code: "COMMAND_NOT_APPLICABLE", command } },
+  );
   const deps: BlockAttrCommandDeps = {
     isDestroyed: options.isDestroyed ?? false,
     editor,
-    runDocumentCommand: (command, _reason, body) => {
-      return body()
-        ? { ok: true, value: undefined }
-        : { ok: false, error: { code: "COMMAND_NOT_APPLICABLE", command } };
-    },
+    runDocumentCommand,
   };
-  return { editor, deps };
+  return { editor, deps, runDocumentCommand };
 };
 
 const textColorSpec = (
@@ -194,5 +196,33 @@ describe("runBlockAttrCommand", () => {
     });
     expect(nextAttrs).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("거절 경로에서는 runDocumentCommand를 부르지 않는다", () => {
+    const destroyed = setup({ isDestroyed: true });
+    runBlockAttrCommand(destroyed.deps, textColorSpec());
+    const missing = setup();
+    runBlockAttrCommand(missing.deps, textColorSpec({ blockId: "없음" }));
+    const guarded = setup();
+    runBlockAttrCommand(
+      guarded.deps,
+      textColorSpec({ appliesTo: () => false }),
+    );
+    const invalid = setup();
+    runBlockAttrCommand(
+      invalid.deps,
+      textColorSpec({
+        validate: () => ({ code: "INVALID_COLOR", color: "nope" }),
+      }),
+    );
+    const same = setup();
+    runBlockAttrCommand(
+      same.deps,
+      textColorSpec({ nextAttrs: (attrs) => ({ ...attrs }) }),
+    );
+
+    for (const fixture of [destroyed, missing, guarded, invalid, same]) {
+      expect(fixture.runDocumentCommand).not.toHaveBeenCalled();
+    }
   });
 });

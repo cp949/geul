@@ -78,12 +78,18 @@ export const createGenericBlockNestingCommands = (
   // "content"다. 빈 문자열·제어문자를 포함한 icon은 신규 EditorError 코드를
   // 만들지 않고 COMMAND_NOT_APPLICABLE로 수렴한다(block-type-commands.ts D2와
   // 동일 원칙). isValidInlineText는 model(string-invariants.ts)을 재사용한다
-  // (G-CNV-001).
+  // (G-CNV-001). 모델 트리 조회를 먼저 해서 top-level CustomBlock id를
+  // BLOCK_NOT_FOUND로 거절한다 — runBlockAttrCommand의 PM 조회는 CustomBlock
+  // atom을 찾아 COMMAND_NOT_APPLICABLE이 된다(indentBlock 등과 같은 이유).
   const setCalloutIcon = (
     blockId: string,
     icon: string,
-  ): Result<void, EditorError> =>
-    runBlockAttrCommand(session, {
+  ): Result<void, EditorError> => {
+    if (session.isDestroyed) return commandNotApplicable("setCalloutIcon");
+    if (findBlockEntryInTree(session.document.blocks, blockId) === null) {
+      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
+    }
+    return runBlockAttrCommand(session, {
       command: "setCalloutIcon",
       blockId,
       target: "content",
@@ -94,6 +100,7 @@ export const createGenericBlockNestingCommands = (
           : null,
       nextAttrs: (attrs) => ({ ...attrs, icon }),
     });
+  };
 
   return {
     indentBlock,
