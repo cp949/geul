@@ -242,6 +242,12 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
     const fragment = Fragment.fromJSON(session.editor.schema, [
       blockToTiptapJson(updatedBlock),
     ]);
+    // 같은 내용 재적용은 dispatch 전에 거절한다(Issue #377). 그대로 보내면
+    // 빈 history 단위가 남아 다음 undo를 삼킨다. node.hasMarkup은 자식을
+    // 비교하지 않아 쓰지 않는다 — 노드 전체(attrs·marks·자식)를 비교한다.
+    if (fragment.eq(Fragment.from(node))) {
+      return commandNotApplicable("updateBlock");
+    }
 
     const result = session.runDocumentCommand("updateBlock", "local", () => {
       const transaction = session.editor.state.tr.replaceWith(

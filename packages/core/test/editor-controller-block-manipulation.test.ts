@@ -1,9 +1,20 @@
+import type { Result } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
-import { createEditor, type Block, type PartialBlock } from "../src/index.js";
 import {
+  createEditor,
+  type Block,
+  type EditorError,
+  type PartialBlock,
+} from "../src/index.js";
+import {
+  calloutBlock,
   documentOf,
+  editorState,
   headingBlock,
+  mounted,
+  notApplicable,
   paragraphBlock,
+  restored,
   sequentialIds,
 } from "./editor-controller-support.js";
 
@@ -12,6 +23,41 @@ const twoParagraphDocument = () =>
     paragraphBlock("block-1", "one"),
     paragraphBlock("block-2", "two"),
   );
+
+/** helper가 받는 명령 결과 — setter(void)·updateBlock(Block)·replaceBlocks. */
+type CrudResult =
+  | Result<void, EditorError>
+  | Result<Block, EditorError>
+  | Result<{ insertedBlocks: Block[]; removedBlocks: Block[] }, EditorError>;
+
+/**
+ * 재적용이 빈 history 단위를 남기지 않는지 단언한다(Issue #377, G-EDT-001).
+ * 순서는 apply ok → reapply notApplicable(command) → 재적용 전후
+ * editorState·changes 동일 → undo 1회가 apply 이전으로 복원이다.
+ * 빈 단위가 남았다면 마지막 undo가 그 단위를 소비해 복원되지 않는다.
+ * expectSameValueReapplyIsNoop(editor-controller-support.ts)은 Result<void>를
+ * 가정해 Result<Block>인 updateBlock에 쓰지 못한다.
+ */
+const expectReapplyIsNoop = (
+  fixture: ReturnType<typeof mounted>,
+  apply: () => CrudResult,
+  reapply: () => CrudResult,
+  command: string,
+): void => {
+  const { editor, tiptap, changes } = fixture;
+  const before = editorState(editor, tiptap);
+
+  expect(apply().ok).toBe(true);
+  const applied = editorState(editor, tiptap);
+  const appliedChanges = [...changes];
+
+  expect(reapply()).toEqual(notApplicable(command));
+  expect(editorState(editor, tiptap)).toEqual(applied);
+  expect(changes).toEqual(appliedChanges);
+
+  expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+  expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+};
 
 describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — insertBlocks", () => {
   it("기본 placement(before)는 대상 블록 앞에 삽입한다", () => {
@@ -303,6 +349,81 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — updateBlo
   });
 });
 
+describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — updateBlock 같은 내용 재적용(Issue #377, G-EDT-001)", () => {
+  it("callout에 같은 icon·배경색을 다시 적용하면 COMMAND_NOT_APPLICABLE이고 undo 1회가 직전 변경을 되돌린다", () => {
+    const fixture = mounted(
+      documentOf(calloutBlock("c-1", "안내"), paragraphBlock("tail", "tail")),
+    );
+    const applyPreset = () =>
+      fixture.editor.updateBlock("c-1", {
+        type: "callout",
+        icon: "💡",
+        backgroundColor: "#AABBCC",
+      });
+
+    expectReapplyIsNoop(fixture, applyPreset, applyPreset, "updateBlock");
+  });
+
+  it("다른 명령이 만든 속성과 같은 내용의 updateBlock은 거절되고 undo가 그 명령을 되돌린다", () => {
+    const fixture = mounted(
+      documentOf(paragraphBlock("p-1", "one"), paragraphBlock("tail", "tail")),
+    );
+
+    expectReapplyIsNoop(
+      fixture,
+      () => fixture.editor.commands.setBlockTextColor("p-1", "#AABBCC"),
+      () => fixture.editor.updateBlock("p-1", { type: "paragraph" }),
+      "updateBlock",
+    );
+    expect(fixture.editor.getDocument().blocks[0]).not.toHaveProperty(
+      "textColor",
+    );
+  });
+
+  it("자식 딸린 블록도 같은 내용이면 거절되고 undo가 직전 변경을 되돌린다", () => {
+    const fixture = mounted(
+      documentOf(
+        paragraphBlock("p-1", "one", [paragraphBlock("c-1", "child")]),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+
+    expectReapplyIsNoop(
+      fixture,
+      () => fixture.editor.commands.setBlockTextColor("p-1", "#AABBCC"),
+      () =>
+        fixture.editor.updateBlock("p-1", {
+          type: "paragraph",
+          textColor: "#AABBCC",
+        }),
+      "updateBlock",
+    );
+  });
+
+  it("children를 빈 배열로 비우는 호출은 같은 내용이 아니므로 적용되고 undo 1회로 복원된다", () => {
+    const fixture = mounted(
+      documentOf(
+        paragraphBlock("p-1", "one", [paragraphBlock("c-1", "child")]),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    const { editor, tiptap } = fixture;
+    const before = editorState(editor, tiptap);
+
+    const result = editor.updateBlock("p-1", {
+      type: "paragraph",
+      children: [],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(editor.getDocument().blocks[0]).toEqual(
+      paragraphBlock("p-1", "one"),
+    );
+    expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+});
+
 describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — replaceBlocks", () => {
   const threeParagraphDocument = () =>
     documentOf(
@@ -424,6 +545,28 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — replaceBl
     if (result.ok) throw new Error("unreachable");
     expect(result.error.code).toBe("DOCUMENT_INVALID");
     expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("자기 자신과 같은 id·내용으로 교체하면 COMMAND_NOT_APPLICABLE이고 undo 1회가 직전 변경을 되돌린다(Issue #377)", () => {
+    const fixture = mounted(threeParagraphDocument());
+
+    expectReapplyIsNoop(
+      fixture,
+      () => fixture.editor.commands.setBlockTextColor("block-2", "#AABBCC"),
+      () =>
+        fixture.editor.replaceBlocks(
+          ["block-2"],
+          [
+            {
+              id: "block-2",
+              type: "paragraph",
+              content: [{ text: "two" }],
+              textColor: "#AABBCC",
+            },
+          ],
+        ),
+      "replaceBlocks",
+    );
   });
 
   it("단일 undo step이다(완료 조건 10)", () => {
