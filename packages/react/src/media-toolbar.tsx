@@ -17,11 +17,14 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { extractNameFromUrl } from "./extract-name-from-url.js";
 import { useFixedPlacement } from "./fixed-placement.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
-import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
+import {
+  applyMediaUrl,
+  canReplaceMedia,
+  canUploadMedia,
+} from "./media-source-apply.js";
 import { MenuItemButton } from "./menu-item-button.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
@@ -139,15 +142,17 @@ type MediaInfo = {
   textAlignment: "left" | "center" | "right" | null;
 };
 
-// Upload 탭(file-panel.tsx, RD-003 DELTA-02)과 같은 모양이지만 코드는
-// 공유하지 않는다 — RD-003-DELTA-03.md "결정"(사용처 2곳뿐이라 훅 추출
-// 이득이 적다, 이 저장소의 두 파일이 이미 selection 상태 기계·kindLabel을
-// 각자 복제하는 관례와 일치). Replace에 Embed 탭을 더한 지금(2026-09-12,
-// 사용자 지시 — "다시 업로드 및 Embed 탭이 있는 팝업")도 이 결정을
-// 유지한다 — 두 컴포넌트의 selection 상태 기계 자체가 이미 다르게 갈라져
-// 있어(이 컴포넌트는 url 있는 블록만, file-panel.tsx는 없는 블록만 연다)
-// 상태 기계를 공유 추출할 실이익은 여전히 적다. 대신 시각 요소만
-// 재사용한다 — 카드 CSS는 file-panel.tsx의 치수를 그대로 복제하고(아래
+// Upload 탭(file-panel.tsx, RD-003 DELTA-02)과 같은 모양이지만 selection
+// 상태 기계는 공유하지 않는다 — RD-003-DELTA-03.md "결정"(사용처 2곳뿐이라
+// 훅 추출 이득이 적다, 이 저장소의 두 파일이 이미 selection 상태 기계·
+// kindLabel을 각자 복제하는 관례와 일치). Replace에 Embed 탭을 더한
+// 지금(2026-09-12, 사용자 지시 — "다시 업로드 및 Embed 탭이 있는 팝업")도
+// 이 결정을 유지한다 — 두 컴포넌트의 selection 상태 기계 자체가 이미
+// 다르게 갈라져 있어(이 컴포넌트는 url 있는 블록만, file-panel.tsx는 없는
+// 블록만 연다) 상태 기계를 공유 추출할 실이익은 여전히 적다. 상태와 무관한
+// 규칙(업로드 게이트, URL 적용)은 media-source-apply.ts가 소유하고 두
+// 컴포넌트가 함께 쓴다. 시각 요소도 재사용한다 — 카드 CSS는
+// file-panel.tsx의 치수를 그대로 복제하고(아래
 // `.geul-media-toolbar--replacing`), 탭·입력·버튼은 `.geul-file-panel__*`
 // 클래스와 `dictionary.toolbar.filePanel.*` 문자열을 그대로 가져다 쓴다
 // (이름이 그 컴포넌트에 묶이지 않은 범용 selector/문자열이라 그대로 쓸 수
@@ -487,17 +492,16 @@ export const MediaToolbar = ({
     else if (replaceActiveTab === "embed") replaceUrlInputRef.current?.focus();
   }, [replaceActiveTab]);
 
-  // Replace 팝업의 Upload 탭 노출 여부(Issue #213) — file-panel.tsx의
-  // `uploadEnabled = editor.isUploadEnabled() && kind !== "iframe"`와 같은
-  // 게이트(spec §5 "iframe은 업로드 탭 개념이 없어 URL 입력 단일 흐름").
-  // more-menu의 "Replace" 항목은 isUploadEnabled() 또는 iframe일 때
-  // 노출한다(아래 moreMenu, Issue #373) — 업로드가 켜진 iframe은 팝업이
-  // 열린 뒤 탭 렌더링에서 kind를 한 번 더 걸러야 한다. Embed 탭은 이 값과
-  // 무관하게 항상 보인다(iframe 필수 흐름) — 게이트 대상은 Upload
-  // 탭/콘텐츠뿐이다.
+  // Replace 팝업의 Upload 탭 노출 여부(Issue #213) — file-panel.tsx와 같은
+  // media-source-apply.ts의 canUploadMedia 게이트(spec §5 "iframe은 업로드
+  // 탭 개념이 없어 URL 입력 단일 흐름"). more-menu의 "Replace" 항목은
+  // canReplaceMedia(업로드 가능 또는 iframe)로 노출한다(아래 moreMenu,
+  // Issue #373) — 업로드가 켜진 iframe은 팝업이 열린 뒤 탭 렌더링에서 kind를
+  // 한 번 더 걸러야 한다. Embed 탭은 이 값과 무관하게 항상 보인다(iframe 필수
+  // 흐름) — 게이트 대상은 Upload 탭/콘텐츠뿐이다.
   const replaceUploadEnabled =
     toolbarState.mode === "replacing"
-      ? editor.isUploadEnabled() && toolbarState.kind !== "iframe"
+      ? canUploadMedia(editor, toolbarState.kind)
       : false;
 
   // Upload 성공(pending null)·Embed URL 적용 성공 공용 — url/name이 실제로
@@ -596,8 +600,7 @@ export const MediaToolbar = ({
     // 게이트) — 기본 활성 탭을 upload로 열면 사라진 탭 콘텐츠 대신 빈
     // 화면이 뜬다(file-panel.tsx updateFromSelection의 activeTab 시딩과
     // 같은 처리).
-    const uploadEnabled =
-      editor.isUploadEnabled() && toolbarState.kind !== "iframe";
+    const uploadEnabled = canUploadMedia(editor, toolbarState.kind);
     setToolbarState({
       mode: "replacing",
       ...carryMediaInfo(toolbarState),
@@ -632,29 +635,15 @@ export const MediaToolbar = ({
     );
   };
 
-  // file-panel.tsx applyUrl과 같은 관례 — 마지막 path segment로 이름을
-  // 추출해 URL 명령 인자로 함께 넘긴다(추출 실패는 name을 넘기지 않는다).
-  // url과 name이 한 transaction·한 undo 단위가 되도록 setMediaBlockName을
-  // 따로 부르지 않는다(Issue #374).
-  // 성공하면 startReplaceUpload 성공 분기와 같은 finishReplacing으로
-  // view에 돌아간다. iframe은 setMediaBlockUrl이 아니라 setIframeSrc로
-  // 라우팅한다(CUS-001~004, RD-004 DELTA-02) — setMediaBlockUrl은
-  // resolveIframeEmbedDecision(화이트리스트·private network 정책)을 몰라
-  // iframe을 애초에 거절한다(core 보안 경계, block-attribute-commands.ts).
+  // URL 적용 규칙(이름 추출·iframe 라우팅·거절 문구)은 file-panel.tsx와 같은
+  // media-source-apply.ts의 applyMediaUrl이 소유한다. 성공하면
+  // startReplaceUpload 성공 분기와 같은 finishReplacing으로 view에 돌아간다.
   const applyReplaceUrl = () => {
     if (toolbarState.mode !== "replacing") return;
     const { blockId, draft, kind } = toolbarState;
-    const extractedName = extractNameFromUrl(draft) ?? undefined;
-    const result =
-      kind === "iframe"
-        ? editor.commands.setIframeSrc(blockId, draft, extractedName)
-        : editor.commands.setMediaBlockUrl(blockId, draft, extractedName);
+    const result = applyMediaUrl(editor, { blockId, kind, draft }, dictionary);
     if (!result.ok) {
-      const rejectedMessage = iframeUrlRejectionMessage(
-        kind,
-        result.error,
-        dictionary,
-      );
+      const { rejectedMessage } = result;
       setToolbarState((prev) =>
         prev.mode === "replacing" ? { ...prev, rejectedMessage } : prev,
       );
@@ -1262,7 +1251,7 @@ export const MediaToolbar = ({
     >
       {/* iframe은 업로드 없이도 URL 변경(Embed 탭)이 가능해 항상 노출한다
           (Issue #373). 다른 kind는 업로드가 켜져 있을 때만 노출한다. */}
-      {(editor.isUploadEnabled() || toolbarState.kind === "iframe") && (
+      {canReplaceMedia(editor, toolbarState.kind) && (
         <MenuItemButton
           className={mediaToolbarMoreMenuItemClassName}
           onClick={startReplacing}

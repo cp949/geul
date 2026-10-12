@@ -3,12 +3,11 @@ import { X } from "lucide-react";
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { extractNameFromUrl } from "./extract-name-from-url.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
 import { handleMenuKeyDown } from "./menu-keyboard.js";
+import { canUploadMedia, applyMediaUrl } from "./media-source-apply.js";
 import { handlePopupButtonKeyDown } from "./popup-button-keydown.js";
-import { iframeUrlRejectionMessage } from "./iframe-url-rejection-message.js";
 import { useFixedPlacement } from "./fixed-placement.js";
 import {
   FALLBACK_BLOCK_POSITION,
@@ -194,7 +193,7 @@ export const FilePanel = ({
     // uploadMediaFile 성공 경로가 resolveIframeEmbedDecision을 거치지 않고
     // url을 직접 세팅해, UI로 노출하면 보안 경계를 우회하는 두 번째 경로가
     // 된다) — kind로 추가 게이트한다.
-    const uploadEnabled = editor.isUploadEnabled() && media.kind !== "iframe";
+    const uploadEnabled = canUploadMedia(editor, media.kind);
     const pending = uploadEnabled
       ? editor.getMediaUploadState(media.blockId)
       : null;
@@ -427,50 +426,31 @@ export const FilePanel = ({
   // 않는다(RD-003-DELTA-02.md "결정" 1) — 기존 13개 단일 모드 테스트가
   // 그대로 통과해야 한다. iframe은 kind로 추가 게이트한다(위
   // updateFromSelection과 같은 이유, RD-004 DELTA-04).
-  const uploadEnabled =
-    editor.isUploadEnabled() && panelState.kind !== "iframe";
+  const uploadEnabled = canUploadMedia(editor, panelState.kind);
   const showEmbedTab = !uploadEnabled || panelState.activeTab === "embed";
   const showUploadTab = uploadEnabled && panelState.activeTab === "upload";
 
-  // iframe은 setMediaBlockUrl이 아니라 setIframeSrc로 라우팅한다
-  // (CUS-001~004, RD-004 DELTA-04) — setMediaBlockUrl은
-  // resolveIframeEmbedDecision(화이트리스트·private network 정책)을 몰라
-  // iframe을 애초에 거절한다(core 보안 경계, block-attribute-commands.ts).
-  // media-toolbar.tsx applyReplaceUrl과 같은 분기.
+  // URL 적용 규칙(이름 추출·iframe 라우팅·거절 문구)은 media-source-apply.ts가
+  // 소유한다. 여기서는 결과를 패널 상태에 반영한다.
   const applyUrl = () => {
     if (panelState.mode !== "open") return;
-    // name 초깃값은 마지막 path segment에서 추출한다(spec §6.1). URL 명령
-    // 인자로 함께 넘겨 url과 name을 한 transaction·한 undo 단위로 적용한다
-    // (Issue #374) — setMediaBlockName을 따로 부르면 undo가 두 번 필요하다.
-    // 추출 실패는 name을 넘기지 않는다(undefined) — media-block-extension.ts
-    // renderHTML(RD-002)이 이미 name 없으면 url로 폴백해 렌더하므로, 여기서
-    // "실패 시 URL 자체를 표시"를 다시 구현할 필요가 없다.
-    const extractedName = extractNameFromUrl(panelState.draft) ?? undefined;
-    const result =
-      panelState.kind === "iframe"
-        ? editor.commands.setIframeSrc(
-            panelState.blockId,
-            panelState.draft,
-            extractedName,
-          )
-        : editor.commands.setMediaBlockUrl(
-            panelState.blockId,
-            panelState.draft,
-            extractedName,
-          );
+    const result = applyMediaUrl(
+      editor,
+      {
+        blockId: panelState.blockId,
+        kind: panelState.kind,
+        draft: panelState.draft,
+      },
+      dictionary,
+    );
     if (!result.ok) {
-      const rejectedMessage = iframeUrlRejectionMessage(
-        panelState.kind,
-        result.error,
-        dictionary,
-      );
-      setPanelState({ ...panelState, rejectedMessage });
+      setPanelState({ ...panelState, rejectedMessage: result.rejectedMessage });
       return;
     }
     setPanelState({
       ...panelState,
       rejectedMessage: null,
-      appliedName: extractedName ?? panelState.draft,
+      appliedName: result.name ?? panelState.draft,
     });
   };
 
