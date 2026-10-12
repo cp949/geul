@@ -571,7 +571,9 @@ export const expectSameValueReapplyIsNoop = (
  */
 export const mountedWithLocalPreviewCleanup = (
   initialDocument: Document,
-  overrides: Partial<CreateEditorOptions> = {},
+  overrides: Partial<
+    Pick<CreateEditorOptions, "onBeforeChange" | "createId" | "onChange">
+  > = {},
 ) => {
   const { onChange: hostOnChange, ...restOverrides } = overrides;
   const changes: {

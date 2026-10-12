@@ -1,6 +1,6 @@
 // 로컬 프리뷰(ADR-0015) blob URL 발급과 "문서에 못 들어간 URL" 해제 통지
-// (Issue #379). Tiptap은 타입 import만 쓴다(media-local-preview.ts와 같은
-// 자리).
+// (Issue #379). Tiptap은 이 파일에서 타입 import만 쓴다. 값 import인
+// collectLocalPreviewBlocks를 가진 lifecycle 확장 모듈이 Tiptap 값을 부른다.
 //
 // URL은 transaction을 만들기 전에 발급한다. transaction이 거절·되돌림·예외로
 // 문서에 들어가지 못하면 MediaLocalPreviewLifecycleExtension도 세션 종료
