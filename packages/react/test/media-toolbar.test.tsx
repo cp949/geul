@@ -34,8 +34,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditorContent, MediaToolbar } from "../src/index.js";
 import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
 import { withProvider } from "./fake-editor-provider.js";
-import { stubRect } from "./mount-editor.js";
+import { mountBlockEditor, stubRect } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
+import { fireSelectionChange } from "./selection-events.js";
+import {
+  createSelectionOverride,
+  type SelectionBox,
+} from "./selection-media-override.js";
 
 // link-toolbar.test.tsx/file-panel.test.tsx와 같은 이유(@testing-library/react가
 // 전역 afterEach/teardown이 함수일 때만 자동 cleanup을 등록하는데, 저장소
@@ -1528,6 +1533,147 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
     expect(download.getAttribute("href")).toBe(
       "https://example.com/dir/photo.png",
     );
+  });
+});
+
+describe("MediaToolbar Replace Embed 같은 URL 재저장(Issue #384, 실제 편집기)", () => {
+  const IMAGE_URL = "https://e.com/a.png";
+  const IFRAME_URL = "https://www.youtube.com/embed/x";
+  const BLOCKED_IFRAME_URL = "https://vimeo.com/embed/x";
+
+  // jsdom은 NodeSelection을 만들지 못해 선택만 덮고, 문서와 명령은 실제
+  // 컨트롤러를 쓴다(selection-media-override.tsx).
+  const mountReplaceToolbar = (
+    block: {
+      kind: "image" | "iframe";
+      url: string;
+      name: string;
+    },
+    onBeforeChange?: () => boolean,
+  ) => {
+    const selection: SelectionBox = { current: null };
+    const WithSelectionOverride = createSelectionOverride(selection);
+    const { name } = block;
+    const mounted = mountBlockEditor({
+      initialBlocks: [
+        block.kind === "image"
+          ? { id: "m1", type: "image" as const, url: block.url, name }
+          : { id: "m1", type: "iframe" as const, url: block.url, name },
+        { id: "t1", type: "paragraph" as const, content: [] },
+      ],
+      uploadFile: async () => ({
+        status: "success" as const,
+        url: "https://e.com/u.png",
+      }),
+      iframeEmbed: {
+        providers: [
+          {
+            name: "YouTube",
+            match: { type: "wildcard", pattern: "*.youtube.com" },
+          },
+        ],
+      },
+      ...(onBeforeChange === undefined ? {} : { onBeforeChange }),
+      children: (
+        <WithSelectionOverride>
+          <MediaToolbar />
+        </WithSelectionOverride>
+      ),
+    });
+    selection.current = {
+      blockId: "m1",
+      kind: block.kind,
+      url: block.url,
+      name,
+      caption: null,
+      showPreview: true,
+      textAlignment: null,
+    };
+    fireSelectionChange();
+    return mounted;
+  };
+
+  /** Replace 팝업의 Embed 입력에 `value`를 적고 Save URL을 누른다. */
+  const saveEmbedUrl = (inputName: string, value: string) => {
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+    const embedTab = screen.queryByRole("tab", { name: "Embed" });
+    if (embedTab !== null) fireEvent.click(embedTab);
+    fireEvent.change(screen.getByRole("textbox", { name: inputName }), {
+      target: { value },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+  };
+
+  it("image 블록에 같은 URL을 저장하면 경고 없이 view로 돌아가고 revision이 그대로다", () => {
+    const { editor } = mountReplaceToolbar({
+      kind: "image",
+      url: IMAGE_URL,
+      name: "a.png",
+    });
+    const before = editor.getDocument();
+
+    saveEmbedUrl("Image URL", IMAGE_URL);
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "More media options" }),
+    ).not.toBeNull();
+    expect(editor.getDocument().revision).toBe(before.revision);
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("iframe 블록에 정책이 허용한 같은 URL을 저장하면 경고 없이 view로 돌아가고 revision이 그대로다", () => {
+    const { editor } = mountReplaceToolbar({
+      kind: "iframe",
+      url: IFRAME_URL,
+      name: "x",
+    });
+    const before = editor.getDocument();
+
+    saveEmbedUrl("Iframe URL", IFRAME_URL);
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "More media options" }),
+    ).not.toBeNull();
+    expect(editor.getDocument().revision).toBe(before.revision);
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("정책이 막는 iframe URL은 현재 값과 같아도 거절 문구를 띄우고 replacing에 머문다", () => {
+    const { editor } = mountReplaceToolbar({
+      kind: "iframe",
+      url: BLOCKED_IFRAME_URL,
+      name: "x",
+    });
+    const before = editor.getDocument();
+
+    saveEmbedUrl("Iframe URL", BLOCKED_IFRAME_URL);
+
+    expect(screen.getByRole("alert").textContent).toBe(
+      "This URL isn't on the allowed list",
+    );
+    expect(
+      screen.queryByRole("button", { name: "More media options" }),
+    ).toBeNull();
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("onBeforeChange가 거절한 다른 URL 저장은 경고를 띄우고 replacing에 머문다(F1)", () => {
+    const { editor } = mountReplaceToolbar(
+      { kind: "image", url: IMAGE_URL, name: "a.png" },
+      () => false,
+    );
+    const before = editor.getDocument();
+
+    saveEmbedUrl("Image URL", "https://e.com/b.png");
+
+    expect(screen.getByRole("alert")).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "More media options" }),
+    ).toBeNull();
+    expect(editor.getDocument()).toEqual(before);
   });
 });
 

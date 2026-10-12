@@ -27,8 +27,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditorContent, FilePanel } from "../src/index.js";
 import { COMMAND_MODIFIERS } from "./command-modifiers-test-support.js";
 import { withProvider } from "./fake-editor-provider.js";
-import { stubRect } from "./mount-editor.js";
+import { mountBlockEditor, stubRect } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
+import { fireSelectionChange } from "./selection-events.js";
+import {
+  createSelectionOverride,
+  type SelectionBox,
+} from "./selection-media-override.js";
 
 // link-toolbar.test.tsx와 같은 이유(@testing-library/react가 전역
 // afterEach/teardown이 함수일 때만 자동 cleanup을 등록하는데, 저장소
@@ -580,6 +585,72 @@ describe("FilePanel 파일 패널", () => {
     fireEvent.keyUp(document, { key: "ArrowRight" });
 
     expect(screen.getByRole("toolbar", { name: "File panel" })).not.toBeNull();
+  });
+});
+
+describe("FilePanel Embed 같은 URL 재저장(Issue #384, 실제 편집기)", () => {
+  const URL_TO_SAVE = "https://e.com/a.png";
+
+  // jsdom은 NodeSelection을 만들지 못해 선택만 덮고, 문서와 명령은 실제
+  // 컨트롤러를 쓴다(selection-media-override.tsx). 선택은 계속 빈 블록이라
+  // 첫 저장 뒤에도 패널이 열린 채 남는다.
+  const mountEmptyImagePanel = (onBeforeChange?: () => boolean) => {
+    const selection: SelectionBox = { current: null };
+    const WithSelectionOverride = createSelectionOverride(selection);
+    const mounted = mountBlockEditor({
+      initialBlocks: [
+        { id: "m1", type: "image" as const },
+        { id: "t1", type: "paragraph" as const, content: [] },
+      ],
+      ...(onBeforeChange === undefined ? {} : { onBeforeChange }),
+      children: (
+        <WithSelectionOverride>
+          <FilePanel />
+        </WithSelectionOverride>
+      ),
+    });
+    selection.current = {
+      blockId: "m1",
+      kind: "image",
+      url: null,
+      name: null,
+      caption: null,
+      showPreview: true,
+      textAlignment: null,
+    };
+    fireSelectionChange();
+    return mounted;
+  };
+
+  it("URL을 한 번 적용한 뒤 같은 URL을 다시 저장하면 경고가 없고 revision이 그대로다", () => {
+    const { editor } = mountEmptyImagePanel();
+    fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
+      target: { value: URL_TO_SAVE },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    const applied = editor.getDocument();
+    expect(applied.blocks[0]).toMatchObject({ url: URL_TO_SAVE });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Name: a.png")).not.toBeNull();
+    expect(editor.getDocument().revision).toBe(applied.revision);
+    expect(editor.getDocument()).toEqual(applied);
+  });
+
+  it("onBeforeChange가 거절한 URL 저장은 경고를 띄우고 이름을 표시하지 않는다(F1)", () => {
+    const { editor } = mountEmptyImagePanel(() => false);
+    const before = editor.getDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
+      target: { value: URL_TO_SAVE },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(screen.getByRole("alert")).not.toBeNull();
+    expect(screen.queryByText("Name: a.png")).toBeNull();
+    expect(editor.getDocument()).toEqual(before);
   });
 });
 

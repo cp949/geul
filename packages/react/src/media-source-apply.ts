@@ -24,6 +24,18 @@ export const canReplaceMedia = (
   kind: MediaBlockKind,
 ): boolean => editor.isUploadEnabled() || kind === "iframe";
 
+/** 현재 블록이 요청한 url과 같고, name을 넘겼다면 name도 같은지 본다. */
+const isAlreadyApplied = (
+  block: ReturnType<EditorController["getBlock"]>,
+  url: string,
+  name: string | undefined,
+): boolean => {
+  if (block === undefined || !("url" in block) || block.url !== url) {
+    return false;
+  }
+  return name === undefined || ("name" in block && block.name === name);
+};
+
 export type ApplyMediaUrlResult =
   | { ok: true; name: string | undefined }
   | { ok: false; rejectedMessage: string };
@@ -34,9 +46,16 @@ export type ApplyMediaUrlResult =
  * 추출 실패는 name을 넘기지 않는다(undefined). iframe은 setMediaBlockUrl이
  * 아니라 setIframeSrc로 보낸다. setMediaBlockUrl은 iframe 화이트리스트·
  * private network 정책을 몰라 iframe을 거절한다(core 보안 경계).
+ *
+ * core는 현재 값과 같은 적용을 COMMAND_NOT_APPLICABLE로 거절한다(#375·#376).
+ * 이 표면에서 그 거절은 "변경 없음"이라 ok로 돌려주고 거절 문구를 띄우지
+ * 않는다(Issue #384). URL 검증과 iframe 정책은 같은 값 판정보다 먼저라
+ * 여기까지 온 COMMAND_NOT_APPLICABLE은 URL이 적법하다는 뜻이다. 다만 이
+ * 코드는 같은 값 외에 onBeforeChange 거절·세션 파괴·블록 종류 불일치에도
+ * 나온다. 그래서 현재 블록을 읽어 요청과 같을 때만 변경 없음으로 본다.
  */
 export const applyMediaUrl = (
-  editor: Pick<EditorController, "commands">,
+  editor: Pick<EditorController, "commands" | "getBlock">,
   target: { blockId: string; kind: MediaBlockKind; draft: string },
   dictionary: Dictionary,
 ): ApplyMediaUrlResult => {
@@ -47,6 +66,12 @@ export const applyMediaUrl = (
       ? editor.commands.setIframeSrc(blockId, draft, name)
       : editor.commands.setMediaBlockUrl(blockId, draft, name);
   if (!result.ok) {
+    if (
+      result.error.code === "COMMAND_NOT_APPLICABLE" &&
+      isAlreadyApplied(editor.getBlock(blockId), draft, name)
+    ) {
+      return { ok: true, name };
+    }
     return {
       ok: false,
       rejectedMessage: iframeUrlRejectionMessage(

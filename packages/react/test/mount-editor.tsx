@@ -317,6 +317,12 @@ export type MountBlockEditorOptions = {
   // Issue #189, RD-002-DELTA-01 — SlashMenu의 enabledBlockTypes 필터링
   // 테스트가 공용으로 쓴다(dictionary와 동일 threading 패턴).
   enabledBlockTypes?: CreateEditorOptions["enabledBlockTypes"];
+  // 미디어 Replace·iframe URL 테스트가 쓴다(Issue #384). uploadFile이 있어야
+  // Replace 메뉴가 열리고, iframeEmbed가 iframe URL 정책을 정한다.
+  uploadFile?: CreateEditorOptions["uploadFile"];
+  iframeEmbed?: CreateEditorOptions["iframeEmbed"];
+  // 호스트가 저장을 거절하는 경로를 실제 core로 재현한다(Issue #384 F1).
+  onBeforeChange?: CreateEditorOptions["onBeforeChange"];
   /** 렌더 container. iframe 문서에 그릴 때 준다(Issue #271). */
   container?: HTMLElement;
 };
@@ -368,6 +374,9 @@ export const mountBlockEditor = ({
   dictionary,
   codeBlockLanguages,
   enabledBlockTypes,
+  uploadFile,
+  iframeEmbed,
+  onBeforeChange,
   container,
 }: MountBlockEditorOptions = {}): MountedBlockEditor => {
   const resolvedBlocks =
@@ -390,6 +399,9 @@ export const mountBlockEditor = ({
     ...(onChange === undefined ? {} : { onChange }),
     ...(dictionary === undefined ? {} : { dictionary }),
     ...(enabledBlockTypes === undefined ? {} : { enabledBlockTypes }),
+    ...(uploadFile === undefined ? {} : { uploadFile }),
+    ...(iframeEmbed === undefined ? {} : { iframeEmbed }),
+    ...(onBeforeChange === undefined ? {} : { onBeforeChange }),
   });
   mountedEditors.add(editor);
 
