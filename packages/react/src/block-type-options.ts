@@ -151,24 +151,21 @@ export const getBlockTypeChoices = (
   editor: BlockTypeChoiceEditor,
   target: BlockTypeTarget | null,
   options?: { clearContent?: boolean },
-): readonly BlockTypeChoice[] =>
-  BLOCK_TYPE_OPTIONS.filter((option) =>
+): readonly BlockTypeChoice[] => {
+  const queryBlocker = (option: BlockTypeOption): BlockTypeBlocker | null => {
+    if (target === null) return "NOT_FOUND";
+    if ("blockIds" in target) {
+      return editor.getBlockTypesBlocker(target.blockIds, option.blockType);
+    }
+    // 인자 수가 달라지면 호출 계약 테스트가 깨져 options가 없으면 넘기지 않는다.
+    return options === undefined
+      ? editor.getBlockTypeBlocker(target.blockId, option.blockType)
+      : editor.getBlockTypeBlocker(target.blockId, option.blockType, options);
+  };
+  return BLOCK_TYPE_OPTIONS.filter((option) =>
     editor.isBlockTypeEnabled(option.blockType.type),
-  ).map((option) => ({
-    option,
-    blocker:
-      target === null
-        ? "NOT_FOUND"
-        : "blockId" in target
-          ? options === undefined
-            ? editor.getBlockTypeBlocker(target.blockId, option.blockType)
-            : editor.getBlockTypeBlocker(
-                target.blockId,
-                option.blockType,
-                options,
-              )
-          : editor.getBlockTypesBlocker(target.blockIds, option.blockType),
-  }));
+  ).map((option) => ({ option, blocker: queryBlocker(option) }));
+};
 
 // 비활성 변환 버튼의 사유 title. 원인이 눈에 보이지 않는 두 사유만 전용
 // 문구를 쓰고 나머지는 일반 문구 하나를 공유한다(Issue #245, G-UI-004).

@@ -184,7 +184,8 @@ const isSlashMenuItemEnabled = (
 ): boolean => {
   switch (item.kind) {
     case "blockType":
-      return editor.isBlockTypeEnabled(item.blockType.type);
+      // getBlockTypeChoices가 끈 타입을 이미 뺐다.
+      return true;
     case "insertTable":
       return editor.isBlockTypeEnabled("table");
     case "insertDivider":

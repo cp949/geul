@@ -32,7 +32,7 @@ export const isSameStaticToolbarState = (
   left.blockTypeChoices.length === right.blockTypeChoices.length &&
   left.blockTypeChoices.every(
     (choice, index) =>
-      choice.option === right.blockTypeChoices[index]?.option &&
+      choice.option.id === right.blockTypeChoices[index]?.option.id &&
       choice.blocker === right.blockTypeChoices[index]?.blocker,
   ) &&
   left.activeMarks.length === right.activeMarks.length &&

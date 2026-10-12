@@ -94,8 +94,9 @@ export const BlockSideMenuMenu = ({
     readAnchor,
   });
 
-  // Turn into 옵션과 색상·정렬 섹션 게이트(RD-003 DELTA-02)가 같은 source
-  // descriptor를 쓴다 — 여기서 한 번만 구한다.
+  // 현재 타입 표시와 색상·정렬 섹션 게이트(RD-003 DELTA-02)가 같은 source
+  // descriptor를 쓴다 — 여기서 한 번만 구한다. Turn into 옵션은 core 질의가
+  // 정한다.
   const blockMenuSource = findBlockTypeDescriptor(
     editor.getDocument().blocks,
     blockId,
