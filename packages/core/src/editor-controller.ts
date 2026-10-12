@@ -1,4 +1,5 @@
 import { isMediaBlockType, type Result } from "@cp949/geul-model";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 
@@ -48,6 +49,14 @@ import { createTableCommands } from "./table-command-glue.js";
 // 내보내므로(RD-002-DELTA-12), index.ts가 같은 파일에서 함께 재수출할 수
 // 있도록 여기서도 내보낸다.
 export type { EnabledBlockTypes };
+
+// getCaretBlockContext().text가 인라인 leaf를 읽는 규칙이다(Issue #385).
+// - hardBreak는 줄바꿈이다. 트리거 질의가 줄바꿈 너머로 이어 붙지 않게 한다.
+// - 그 밖의 leaf(인라인 custom 원소)는 U+FFFC다. 텍스트 표현이 없어도
+//   자리가 드러난다.
+// codeSourceLeafText는 atom을 빈 문자열로 읽어 쓰지 않는다.
+const caretTextLeafText = (leaf: ProseMirrorNode): string =>
+  leaf.type.name === "hardBreak" ? "\n" : "\uFFFC";
 
 // CellSelection이 덮는 서로 다른 기준 셀들을 primitive 값(cellId)만으로
 // 나열한다. 병합 가능 여부는 cellIds.length > 1로 호출부가 직접 파생한다.
@@ -199,7 +208,11 @@ export const createEditor = (
       const blockId = nearestBlockContainerId(selection.$from);
       if (blockId === null) return null;
 
-      return { blockId, blockType, text: node.textContent };
+      return {
+        blockId,
+        blockType,
+        text: node.textBetween(0, node.content.size, "", caretTextLeafText),
+      };
     },
     getSelectionBlockType() {
       if (session.isDestroyed) return null;

@@ -111,6 +111,10 @@ export interface DocumentQuery {
 export interface SelectionQuery {
   getSelectionMarks(): TextMark["type"][];
   getSelectionLink(): { href: string } | null;
+  // text는 캐럿 블록의 인라인 내용을 읽은 문자열이다. hardBreak는 줄바꿈
+  // (`\n`), 그 밖의 인라인 원소는 U+FFFC다(Issue #385). 트리거 질의가
+  // 줄바꿈이나 원소 너머로 이어 붙지 않게 한다. codeBlock은 `\n`이 리터럴
+  // 텍스트라 값이 그대로다.
   getCaretBlockContext(): {
     blockId: string;
     blockType: BlockTypeDescriptor;
