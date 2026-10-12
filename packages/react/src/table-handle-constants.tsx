@@ -80,8 +80,9 @@ const BLOCK_GUTTER_VISUAL_OFFSET_PX = 56;
 // 표 코너 클러스터(Plus·표 그립, table-handle-overlays.tsx)의 버튼 크기·
 // 간격 — _table-handles.scss의 .geul-table-nesting-button(1.5rem) 크기,
 // .geul-block-gutter의 gap(0.125rem)과 같은 값이다. SCSS 쪽을 바꾸면
-// 이 두 상수도 같은 px로 맞춰야 한다.
-const CORNER_BUTTON_WIDTH_PX = 24;
+// 이 두 상수도 같은 px로 맞춰야 한다. 버튼은 정사각이라 폭과 높이가
+// 같다 — CORNER_BUTTON_SIZE_PX 하나를 가로·세로 양쪽에 쓴다.
+export const CORNER_BUTTON_SIZE_PX = 24;
 const CORNER_BUTTON_GAP_PX = 2;
 
 // 코너 클러스터를 일반 블록 gutter와 같은 절대좌표에 정렬하는 오프셋 —
@@ -96,7 +97,7 @@ export const tableCornerGripOffsetPx = -(
   BLOCK_GUTTER_VISUAL_OFFSET_PX + TABLE_INDENT_PX
 );
 export const tableCornerPlusOffsetPx =
-  tableCornerGripOffsetPx + CORNER_BUTTON_WIDTH_PX + CORNER_BUTTON_GAP_PX;
+  tableCornerGripOffsetPx + CORNER_BUTTON_SIZE_PX + CORNER_BUTTON_GAP_PX;
 
 // 코너 클러스터(표 그립 버튼)로 포인터가 이동하는 동안 표 hover를 유지하는
 // 여백(왼쪽 전용, table-handles.tsx가 쓴다) — 사용자 보고: "표 그립
@@ -104,7 +105,7 @@ export const tableCornerPlusOffsetPx =
 // 사라져버려서 클릭할 수가 없다". table-handle-constants.tsx의
 // HANDLE_HOVER_MARGIN(28)은 행/열 그립·add row/column rail(표 바깥
 // 4~24px)용으로 맞춘 값이라 표 그립 버튼의 가까운 가장자리(왼쪽
-// -tableCornerGripOffsetPx - CORNER_BUTTON_WIDTH_PX, 즉 46px 바깥)보다도
+// -tableCornerGripOffsetPx - CORNER_BUTTON_SIZE_PX, 즉 46px 바깥)보다도
 // 좁다 — 그립 버튼까지 이동하는 도중 그 여백을 벗어나며 hover가 먼저
 // 풀려 버튼이 사라진다. tableCornerGripOffsetPx(버튼의 먼 가장자리)까지
 // 정확히 닿도록 그 값의 절댓값을 그대로 쓴다 — 따로 숫자를 하드코딩하면

@@ -17,7 +17,10 @@ import {
   tableCornerPlusOffsetPx,
   tableGripIcon,
 } from "./table-handle-constants.js";
-import type { ReorderGuideRect } from "./table-handle-helpers.js";
+import {
+  computeCornerClusterTop,
+  type ReorderGuideRect,
+} from "./table-handle-helpers.js";
 import type { ReorderKind } from "./table-handle-types.js";
 import { useDictionary } from "./use-editor.js";
 
@@ -276,20 +279,9 @@ export const TableHandleOverlays = ({
   showCornerCluster,
 }: TableHandleOverlaysProps) => {
   const dictionary = useDictionary();
-  // 코너 클러스터(Plus·표 그립)의 세로 자리 — 표 상단이 아니라 첫 행의
-  // 세로 중앙에 맞춘다(사용자 스크린샷 지적: "세로 위치가 테이블
-  // 첫번째 행과 안 맞아" — 표 위 대각선 자리(top - 28)는 Notion과
-  // 달랐다). 행 그립 hit box의 세로 계산(아래 첫 주석, row.top +
-  // row.height/2 - 10)과 같은 공식이고 버튼 높이만 다르다(24px, 그
-  // hit box는 20px 버튼 기준). 표는 항상 행을 최소 1개 갖는 모델
-  // 불변식이라(model 계약) firstRow는 undefined가 아니지만, geometry
-  // 판독이 레이아웃 과도기에 빈 배열을 줄 가능성까지 방어적으로 표
-  // 상단(geometry.top) 기준으로 대체한다.
-  const firstRow = geometry.rows[0];
-  const cornerClusterTop =
-    firstRow !== undefined
-      ? firstRow.top + firstRow.height / 2 - 12
-      : geometry.top - 12;
+  // 코너 클러스터(Plus·표 그립)의 세로 자리. 공식은 computeCornerClusterTop이
+  // 소유한다.
+  const cornerClusterTop = computeCornerClusterTop(geometry);
   return (
     <>
       {/* 행 그립은 3단계다(Notion 참고, 사용자 요청): ① 평소 완전히 숨김,

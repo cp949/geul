@@ -1,5 +1,6 @@
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@cp949/geul-core";
 
+import { CORNER_BUTTON_SIZE_PX } from "./table-handle-constants.js";
 import {
   readGeometryFor,
   type TableGeometry,
@@ -139,6 +140,17 @@ export const computeExpandButtonVisibility = (
     showAddColumn:
       lastColumn !== undefined && hoverColumnId === lastColumn.columnId,
   };
+};
+
+// 코너 클러스터(Plus·표 그립)의 세로 자리(page 좌표)다. 버튼을 첫 행의
+// 세로 중앙에 맞춘다. 표는 항상 행을 1개 이상 갖지만, geometry 판독이
+// 레이아웃 과도기에 빈 배열을 줄 수 있다. 그때는 표 상단 기준으로 대체한다.
+// 오버레이의 버튼 배치와 그립 메뉴 앵커가 이 공식을 함께 쓴다.
+export const computeCornerClusterTop = (geometry: TableGeometry): number => {
+  const firstRow = geometry.rows[0];
+  return firstRow !== undefined
+    ? firstRow.top + firstRow.height / 2 - CORNER_BUTTON_SIZE_PX / 2
+    : geometry.top - CORNER_BUTTON_SIZE_PX / 2;
 };
 
 export type MenuPosition = {

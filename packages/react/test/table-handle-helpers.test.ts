@@ -5,11 +5,18 @@
  * (Issue #279). 오버레이 층의 최상위 노드 목록과 열린 메뉴 상태만 받는 순수 함수라
  * 편집기 마운트 없이 DOM 노드로 직접 검증한다. 렌더 배선은 table-handles.test.tsx가
  * 맡는다.
+ *
+ * computeCornerClusterTop: 코너 클러스터(표 그립·Plus)의 세로 자리 공식이다
+ * (Issue #396). geometry 값만 받는 순수 함수라 같은 파일에서 검증한다.
  */
 
 import { describe, expect, it } from "vitest";
 
-import { pickMenuOpenHandleNodes } from "../src/table-handle-helpers.js";
+import type { TableGeometry } from "../src/table-handle-geometry.js";
+import {
+  computeCornerClusterTop,
+  pickMenuOpenHandleNodes,
+} from "../src/table-handle-helpers.js";
 
 /** 속성 하나만 가진 오버레이 최상위 노드를 만든다. */
 const makeNode = (attribute: string): HTMLElement => {
@@ -121,5 +128,44 @@ describe("pickMenuOpenHandleNodes", () => {
     });
 
     expect(new Set(picked)).toEqual(new Set([rows[0], grip]));
+  });
+});
+
+/** 필요한 필드만 채운 TableGeometry. rows만 바꿔 끼운다. */
+const makeGeometry = (rows: TableGeometry["rows"]): TableGeometry => ({
+  tableBlockId: "table-1",
+  headerRows: 0,
+  headerColumns: 0,
+  left: 100,
+  top: 200,
+  right: 400,
+  bottom: 300,
+  rows,
+  columns: [],
+});
+
+describe("computeCornerClusterTop", () => {
+  it("첫 행이 있으면 첫 행 세로 중앙에서 버튼 높이의 절반을 뺀다", () => {
+    const geometry = makeGeometry([
+      { rowId: "r1", index: 0, top: 200, height: 40 },
+      { rowId: "r2", index: 1, top: 240, height: 40 },
+    ]);
+
+    expect(computeCornerClusterTop(geometry)).toBe(200 + 40 / 2 - 12);
+  });
+
+  it("첫 행 높이가 달라도 그 행의 세로 중앙을 기준으로 한다", () => {
+    const geometry = makeGeometry([
+      { rowId: "r1", index: 0, top: 210, height: 60 },
+      { rowId: "r2", index: 1, top: 270, height: 30 },
+    ]);
+
+    expect(computeCornerClusterTop(geometry)).toBe(210 + 60 / 2 - 12);
+  });
+
+  it("rows가 빈 배열이면 표 상단에서 버튼 높이의 절반을 뺀다", () => {
+    const geometry = makeGeometry([]);
+
+    expect(computeCornerClusterTop(geometry)).toBe(geometry.top - 12);
   });
 });
