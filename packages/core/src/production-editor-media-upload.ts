@@ -9,9 +9,10 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { findBlockPosition, hasSameModelMarkup } from "./block-position.js";
 import type { EditorError } from "./errors.js";
+import { createLocalPreviewIssuer } from "./media-local-preview-discard.js";
 import {
-  createLocalPreviewAttrs,
   hasLocalPreview,
+  type LocalPreviewAttrs,
 } from "./media-local-preview.js";
 import type {
   MediaUploadState,
@@ -61,6 +62,9 @@ export interface MediaUploadHost {
     blockId: string,
     state: MediaUploadState | null,
   ): void;
+  // 발급한 로컬 프리뷰 URL이 문서에 못 들어갔을 때 정리 신호를 낸다
+  // (Issue #390). 세션의 notifyLocalPreviewCleared와 같다.
+  notifyLocalPreviewCleared(blockId: string, cleared: LocalPreviewAttrs): void;
 }
 
 // spec §4.2 — blockSelection과 같은 세션 전용 상태(모델 스키마 밖,
@@ -175,18 +179,32 @@ export class MediaUploadTracker {
   // 원칙(getBlockSelection 등, revision·onChange를 건드리지 않는 상태)과
   // 같은 근거로 view에 직접 dispatch한다. PM 히스토리(undo)는
   // applyUploadedMediaAttrs와 동일하게 closeHistory로 독립 스텝을 만든다.
+  //
+  // URL은 issuer로 발급한다(Issue #390). 직접 dispatch라 revision 상한 같은
+  // 거절(RevisionGuardExtension)이 transaction을 막을 수 있다. 그러면 URL이
+  // 문서에 못 들어가므로 settle이 정리 신호를 낸다.
   private applyLocalPreviewFallback(
+    blockId: string,
     position: number,
     node: ProseMirrorNode,
     file: File,
   ): void {
-    const nextAttrs = { ...node.attrs, ...createLocalPreviewAttrs(file) };
-    const transaction = this.host.editor.state.tr.setNodeMarkup(
-      position,
-      undefined,
-      nextAttrs,
+    const issuer = createLocalPreviewIssuer(
+      this.host.editor,
+      (discardedBlockId, cleared) =>
+        this.host.notifyLocalPreviewCleared(discardedBlockId, cleared),
     );
-    this.host.editor.view.dispatch(closeHistory(transaction));
+    try {
+      const nextAttrs = { ...node.attrs, ...issuer.issue(file, blockId) };
+      const transaction = this.host.editor.state.tr.setNodeMarkup(
+        position,
+        undefined,
+        nextAttrs,
+      );
+      this.host.editor.view.dispatch(closeHistory(transaction));
+    } finally {
+      issuer.settle();
+    }
   }
 
   // spec §4 — uploadMediaFile/replaceMediaBlockFile(editor-controller.ts)와
@@ -242,7 +260,7 @@ export class MediaUploadTracker {
       if (hasStoredUrl(node.attrs)) {
         return commandNotApplicable(command);
       }
-      this.applyLocalPreviewFallback(position, node, file);
+      this.applyLocalPreviewFallback(blockId, position, node, file);
       return { ok: true, value: undefined };
     }
     if (this.getMediaUploadController(blockId) !== null) {

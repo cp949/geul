@@ -26,6 +26,7 @@ import {
   documentOf,
   editorState,
   growUndoHistory,
+  localPreviewUrlOf,
   mediaBlock,
   mountTiptapEditor,
   notApplicable,
@@ -628,6 +629,39 @@ describe("uploadMediaFile — 로컬 프리뷰 폴백(콜백 미등록, RD-001 D
     // model이 바뀌지 않으므로 revision도 onChange도 건드리지 않는다(조건 F).
     expect(changes).toEqual([]);
     expect(editor.getMediaUploadState("m-1")).toBeNull();
+  });
+
+  // Issue #390 — 발급 경로가 transaction 거절에 닿으면 발급한 URL이 문서에
+  // 못 들어간다. 이때도 onLocalPreviewCleanup으로 한 번 알려야 한다.
+  it("revision이 상한이라 transaction이 거절되면 발급한 로컬 프리뷰 URL을 정리 신호로 한 번 알린다", async () => {
+    const { editor, tiptap, localPreviewCleared } = mountedWithUpload({
+      ...documentOf(mediaBlock("file", "m-1"), tailParagraphBlock),
+      revision: Number.MAX_SAFE_INTEGER,
+    });
+    const file = testFile();
+
+    await editor.commands.uploadMediaFile("m-1", file);
+
+    expect(localPreviewUrlOf(tiptap, "m-1")).toBeNull();
+    expect(localPreviewCleared).toHaveLength(1);
+    expect(localPreviewCleared[0]?.blockId).toBe("m-1");
+    expect(localPreviewCleared[0]?.localPreviewUrl.startsWith("blob:")).toBe(
+      true,
+    );
+    expect(localPreviewCleared[0]?.localPreviewFile).toBe(file);
+  });
+
+  // Issue #390 — 위 거절 테스트의 짝이다. 수락된 transaction의 URL은 문서에
+  // 들어가므로 정리 신호를 내지 않는다.
+  it("transaction이 수락되면 발급한 로컬 프리뷰 URL을 정리 신호로 알리지 않는다", async () => {
+    const { editor, tiptap, localPreviewCleared } = mountedWithUpload(
+      documentOf(mediaBlock("file", "m-1"), tailParagraphBlock),
+    );
+
+    await editor.commands.uploadMediaFile("m-1", testFile());
+
+    expect(localPreviewUrlOf(tiptap, "m-1")?.startsWith("blob:")).toBe(true);
+    expect(localPreviewCleared).toEqual([]);
   });
 
   it("대상 블록에 이미 url이 있으면(교체 대상) 로컬 프리뷰를 적용하지 않고 COMMAND_NOT_APPLICABLE을 반환한다", async () => {
