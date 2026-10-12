@@ -9,7 +9,10 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { findBlockPosition, hasSameModelMarkup } from "./block-position.js";
 import type { EditorError } from "./errors.js";
-import { createLocalPreviewAttrs } from "./media-local-preview.js";
+import {
+  createLocalPreviewAttrs,
+  hasLocalPreview,
+} from "./media-local-preview.js";
 import type {
   MediaUploadState,
   UploadFile,
@@ -136,12 +139,11 @@ export class MediaUploadTracker {
     ) {
       return false;
     }
-    const hasLocalPreview = typeof node.attrs.localPreviewUrl === "string";
     const nextAttrs = {
       ...node.attrs,
       url,
       ...(name === undefined ? {} : { name }),
-      ...(hasLocalPreview
+      ...(hasLocalPreview(node)
         ? { localPreviewUrl: null, localPreviewFile: null }
         : {}),
     };

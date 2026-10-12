@@ -216,7 +216,7 @@ describe("로컬 프리뷰 세션 종료 시 잔여 정리(Issue #168 roadmap RD
     expect(localPreviewCleared).toEqual([]);
   });
 
-  // 구현 중 발견 — doc 순회(collectLocalPreviewBlocks)만으로는 이 경우를
+  // 구현 중 발견 — doc 순회(listLocalPreviews)만으로는 이 경우를
   // 놓친다: 삭제된 로컬 프리뷰는 doc에서 이미 사라져 있고, 복구 불가
   // 판정은 아직 나지 않아 MediaLocalPreviewLifecycleExtension의 pending
   // Map에만 남아 있다. destroy()가 그 pending도 함께 훑어야 한다.
@@ -270,7 +270,7 @@ describe("로컬 프리뷰 replaceDocument() 교체 시 정리(Issue #169 roadma
     expect(localPreviewCleared).toEqual([{ blockId: "m-1", ...seededAttrs }]);
   });
 
-  // doc 순회(collectLocalPreviewBlocks)만으로는 삭제된 뒤 복구 불가 판정
+  // doc 순회(listLocalPreviews)만으로는 삭제된 뒤 복구 불가 판정
   // 전이라 pending에만 남은 블록을 못 본다(DELTA-03과 동일 실측 근거) —
   // replaceDocument()도 destroy()와 같은 두 번째 순회(pendingUnreachable
   // LocalPreviews)가 필요하다는 것을 고정한다.

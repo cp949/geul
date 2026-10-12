@@ -1,6 +1,7 @@
-import { isMediaBlockType, type TableColumn } from "@cp949/geul-model";
+import type { TableColumn } from "@cp949/geul-model";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { IssueLocalPreview } from "./media-local-preview-discard.js";
+import { hasLocalPreview } from "./media-local-preview.js";
 
 // 프리뷰를 가진 미디어 노드면 attrs의 프리뷰 2종을 새 blob URL로 바꾼다.
 const renewLocalPreview = (
@@ -8,8 +9,7 @@ const renewLocalPreview = (
   blockId: string,
   issue: IssueLocalPreview,
 ): Record<string, unknown> =>
-  isMediaBlockType(node.type.name) &&
-  typeof node.attrs.localPreviewUrl === "string"
+  hasLocalPreview(node)
     ? {
         ...node.attrs,
         ...issue(node.attrs.localPreviewFile as File, blockId),

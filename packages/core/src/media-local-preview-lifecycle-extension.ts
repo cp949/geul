@@ -1,19 +1,20 @@
-import { isMediaBlockType } from "@cp949/geul-model";
 import { Extension } from "@tiptap/core";
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 
 import { isLocalPreviewReachableViaHistory } from "./media-local-preview-reachability.js";
-import type { LocalPreviewAttrs } from "./media-local-preview.js";
+import {
+  indexLocalPreviewsByUrl,
+  listLocalPreviews,
+  type LocalPreviewAttrs,
+  type LocalPreviewEntry,
+} from "./media-local-preview.js";
 
 // 문서에서 빠졌지만 아직 복구 불가 판정을 받지 못한 로컬 프리뷰. 키(URL)는
 // pending Map이 쥐고, blockId는 통지 인자 모양 `(blockId, attrs)`를 유지하려고
 // 빠지기 직전 노드의 값을 보관한다.
-export type PendingLocalPreview = {
-  blockId: string;
-  attrs: LocalPreviewAttrs;
-};
+export type PendingLocalPreview = LocalPreviewEntry;
 
 export type MediaLocalPreviewLifecycleOptions = {
   // Issue #168 roadmap RD-002 DELTA-02 — 문서에서 빠진 로컬 프리뷰(ADR 0015)
@@ -30,77 +31,13 @@ export type MediaLocalPreviewLifecycleOptions = {
   // 키는 URL이다(Issue #383).
   // `production-editor-session.ts::destroy()`가 세션 종료 시 이 스냅샷을
   // 함께 훑어야 한다 — `pending`은 doc에 URL이 없는 항목만 담으므로
-  // `collectLocalPreviewBlocks(doc)`(현재 doc 순회)만으로는 이 항목들을
+  // `listLocalPreviews(doc)`(현재 doc 순회)만으로는 이 항목들을
   // 볼 수 없다(구현 중 실측 — "삭제 직후·복구 불가 판정 전 destroy()"
   // 시나리오에서 정리 신호가 전혀 나가지 않는 회귀를 이 옵션으로 막는다).
   // 미지정이면 no-op.
   notifyPendingChange?: (
     pending: ReadonlyMap<string, PendingLocalPreview>,
   ) => void;
-};
-
-// doc에서 로컬 프리뷰(ADR 0015) attrs가 남은 미디어 블록을 blockId 키로
-// 전부 찾는다.
-// editor-controller.ts::getPendingLocalPreviews()와 같은 판정 기준이다
-// (4종 media kind + blockId + localPreviewUrl 문자열).
-// 호출부가 url까지 든 attrs 전체를 쓰므로 그 공개 API의 반환 shape
-// ({blockId, file})과 독립적으로 둔다.
-// appendTransaction은 Issue #383부터 URL 키인 아래 collectLocalPreviewsByUrl을
-// 쓴다.
-// 이 함수의 호출부는 둘이다.
-// - production-editor-session.ts: destroy()·replaceDocument 스윕이 남은
-//   프리뷰를 같은 기준으로 훑어 잔여 정리 신호를 낸다
-//   (Issue #168 roadmap RD-002 DELTA-03).
-// - media-local-preview-discard.ts: beforeTransaction마다 다음 문서에 든
-//   URL을 모아 문서에 들어간 적 있는 URL을 판정한다(Issue #379).
-export const collectLocalPreviewBlocks = (
-  doc: ProseMirrorNode,
-): Map<string, LocalPreviewAttrs> => {
-  const found = new Map<string, LocalPreviewAttrs>();
-  doc.descendants((node) => {
-    if (
-      isMediaBlockType(node.type.name) &&
-      typeof node.attrs.blockId === "string" &&
-      node.attrs.blockId.length > 0 &&
-      typeof node.attrs.localPreviewUrl === "string"
-    ) {
-      found.set(node.attrs.blockId, {
-        localPreviewUrl: node.attrs.localPreviewUrl,
-        localPreviewFile: node.attrs.localPreviewFile as File,
-      });
-    }
-    return true;
-  });
-  return found;
-};
-
-// doc의 로컬 프리뷰를 URL 키로 모은다(Issue #383). 추적 단위가 blockId가
-// 아니라 URL이라 블록이 남은 채 URL만 빠지는 경로도 잡는다. 같은 URL을 가진
-// 노드가 여럿이면 먼저 만난 노드의 blockId를 쓴다. destroy()·replaceDocument
-// 스윕은 blockId 키인 collectLocalPreviewBlocks를 그대로 쓴다.
-export const collectLocalPreviewsByUrl = (
-  doc: ProseMirrorNode,
-): Map<string, PendingLocalPreview> => {
-  const found = new Map<string, PendingLocalPreview>();
-  doc.descendants((node) => {
-    if (
-      isMediaBlockType(node.type.name) &&
-      typeof node.attrs.blockId === "string" &&
-      node.attrs.blockId.length > 0 &&
-      typeof node.attrs.localPreviewUrl === "string" &&
-      !found.has(node.attrs.localPreviewUrl)
-    ) {
-      found.set(node.attrs.localPreviewUrl, {
-        blockId: node.attrs.blockId,
-        attrs: {
-          localPreviewUrl: node.attrs.localPreviewUrl,
-          localPreviewFile: node.attrs.localPreviewFile as File,
-        },
-      });
-    }
-    return true;
-  });
-  return found;
 };
 
 // Issue #168 roadmap RD-002 DELTA-02 — 로컬 프리뷰 URL이 문서에서 빠진 뒤
@@ -137,7 +74,7 @@ export const MediaLocalPreviewLifecycleExtension =
       let lastPreviews = new Map<string, PendingLocalPreview>();
       const previewsOf = (doc: ProseMirrorNode) => {
         if (doc !== lastDoc) {
-          lastPreviews = collectLocalPreviewsByUrl(doc);
+          lastPreviews = indexLocalPreviewsByUrl(listLocalPreviews(doc));
           lastDoc = doc;
         }
         return lastPreviews;

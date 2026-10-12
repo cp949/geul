@@ -427,7 +427,7 @@ export const createProductionEditor = (options: {
   // 빠졌지만 아직 복구 불가 판정 전이라 그 확장의 `pending`(키 = URL, Issue
   // #383)에만 남아 있는 로컬 프리뷰 스냅샷이 바뀔 때마다 호출한다. `production-editor-session.ts::
   // destroy()`가 이 스냅샷을 세션 필드로 미러링해 뒀다가, doc 순회
-  // (`collectLocalPreviewBlocks`)로는 보이지 않는 이 항목들도 세션 종료
+  // (`listLocalPreviews`)로는 보이지 않는 이 항목들도 세션 종료
   // 시 함께 정리 신호를 낸다. 미지정이면 그 확장 자신의 기본값(no-op)을
   // 쓴다.
   notifyLocalPreviewPendingChange?: (

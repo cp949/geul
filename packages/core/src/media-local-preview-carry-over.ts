@@ -1,36 +1,21 @@
 import { isMediaBlockType } from "@cp949/geul-model";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
-import type { LocalPreviewAttrs } from "./media-local-preview.js";
+import {
+  listLocalPreviews,
+  type LocalPreviewAttrs,
+} from "./media-local-preview.js";
 import type { TiptapJsonNode } from "./model-to-tiptap.js";
 
-// oldNode 자신과 모든 후손에서 로컬 프리뷰가 남은 미디어를 blockId로 모은다.
-// Node.descendants는 자신을 방문하지 않아 oldNode를 따로 확인한다.
-// collectLocalPreviewBlocks(media-local-preview-lifecycle-extension.ts)는
-// doc 전체 전용이라 쓰지 않는다.
-const collectSubtreePreviews = (
+// oldNode 서브트리(자신 포함)의 로컬 프리뷰를 blockId 키 맵으로 만든다.
+// 스캔 규칙은 listLocalPreviews(media-local-preview.ts)가 소유한다.
+const collectPreviewsByBlockId = (
   oldNode: ProseMirrorNode,
 ): Map<string, LocalPreviewAttrs> => {
   const found = new Map<string, LocalPreviewAttrs>();
-  const collect = (node: ProseMirrorNode): void => {
-    const blockId: unknown = node.attrs.blockId;
-    if (
-      isMediaBlockType(node.type.name) &&
-      typeof blockId === "string" &&
-      blockId.length > 0 &&
-      typeof node.attrs.localPreviewUrl === "string"
-    ) {
-      found.set(blockId, {
-        localPreviewUrl: node.attrs.localPreviewUrl,
-        localPreviewFile: node.attrs.localPreviewFile as File,
-      });
-    }
-  };
-  collect(oldNode);
-  oldNode.descendants((node) => {
-    collect(node);
-    return true;
-  });
+  for (const { blockId, attrs } of listLocalPreviews(oldNode)) {
+    found.set(blockId, attrs);
+  }
   return found;
 };
 
@@ -87,7 +72,7 @@ export const carryOverLocalPreviews = (
   json: TiptapJsonNode,
   clearWhenUrl: boolean,
 ): TiptapJsonNode => {
-  const previews = collectSubtreePreviews(oldNode);
+  const previews = collectPreviewsByBlockId(oldNode);
   if (previews.size === 0) return json;
   return applyPreviews(previews, json, clearWhenUrl);
 };
@@ -102,7 +87,7 @@ export const carryOverLocalPreviewsFromNodes = (
 ): TiptapJsonNode[] => {
   const previews = new Map<string, LocalPreviewAttrs>();
   for (const node of oldNodes) {
-    for (const [blockId, attrs] of collectSubtreePreviews(node)) {
+    for (const [blockId, attrs] of collectPreviewsByBlockId(node)) {
       previews.set(blockId, attrs);
     }
   }

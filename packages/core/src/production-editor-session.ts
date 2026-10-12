@@ -26,11 +26,11 @@ import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
 import { historyReasonOf } from "./history-change-reason.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
+import type { PendingLocalPreview } from "./media-local-preview-lifecycle-extension.js";
 import {
-  collectLocalPreviewBlocks,
-  type PendingLocalPreview,
-} from "./media-local-preview-lifecycle-extension.js";
-import type { LocalPreviewAttrs } from "./media-local-preview.js";
+  listLocalPreviews,
+  type LocalPreviewAttrs,
+} from "./media-local-preview.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import {
   type EnabledBlockTypes,
@@ -150,9 +150,8 @@ export class ProductionEditorSession {
   private mountedElement: HTMLElement | null = null;
   // Issue #168 roadmap RD-002 DELTA-03 — MediaLocalPreviewLifecycleExtension의
   // `pending`(문서에서 빠졌지만 복구 불가 판정 전, 키 = URL) 최신 스냅샷
-  // 미러. destroy()가 doc 순회(collectLocalPreviewBlocks)만으로는 보지 못하는
-  // 이 항목들도
-  // 함께 정리 신호를 내기 위해 읽는다 — 그 외 용도로 쓰지 않는다.
+  // 미러. destroy()가 doc 순회(listLocalPreviews)만으로는 보지 못하는
+  // 이 항목들도 함께 정리 신호를 내기 위해 읽는다 — 그 외 용도로 쓰지 않는다.
   private pendingUnreachableLocalPreviews: ReadonlyMap<
     string,
     PendingLocalPreview
@@ -394,7 +393,7 @@ export class ProductionEditorSession {
     // 시 이미 revoke된 Blob URL을 다시 그리려 해 이미지가 깨진다. doc은
     // tiptapEditor.destroy() 이전 상태를 읽어야 하므로 반드시 그 호출보다
     // 앞에 둔다.
-    for (const [blockId, attrs] of collectLocalPreviewBlocks(
+    for (const { blockId, attrs } of listLocalPreviews(
       this.tiptapEditor.state.doc,
     )) {
       this.notifyLocalPreviewCleared(blockId, attrs);
@@ -551,7 +550,7 @@ export class ProductionEditorSession {
     // notifyLocalPreviewPendingChange가 생성 시점에 호출되지 않으므로,
     // createTiptapEditor() 호출 뒤에도 this.pendingUnreachableLocalPreviews는
     // 구 Editor 값 그대로다.
-    for (const [blockId, attrs] of collectLocalPreviewBlocks(
+    for (const { blockId, attrs } of listLocalPreviews(
       this.tiptapEditor.state.doc,
     )) {
       this.notifyLocalPreviewCleared(blockId, attrs);

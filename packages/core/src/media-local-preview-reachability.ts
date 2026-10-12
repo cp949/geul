@@ -1,7 +1,8 @@
-import { isMediaBlockType } from "@cp949/geul-model";
 import { redo, redoDepth, undo, undoDepth } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
+
+import { hasLocalPreview } from "./media-local-preview.js";
 
 // Issue #168 roadmap RD-002 DELTA-02 — "문서에서 빠진 로컬 프리뷰(ADR 0015)
 // URL이 아직 undo·redo로 복구 가능한가"를 판정한다.
@@ -53,14 +54,12 @@ export function isLocalPreviewReachableViaHistory(
 }
 
 // doc에 localPreviewUrl이 url인 미디어 노드가 있는지 본다. 찾으면 즉시 멈춘다.
-function hasLocalPreviewUrl(doc: ProseMirrorNode, url: string): boolean {
+// 판정은 leaf의 hasLocalPreview가 소유한다.
+function docHasPreviewUrl(doc: ProseMirrorNode, url: string): boolean {
   let found = false;
   doc.descendants((node) => {
     if (found) return false;
-    if (
-      isMediaBlockType(node.type.name) &&
-      node.attrs.localPreviewUrl === url
-    ) {
+    if (hasLocalPreview(node) && node.attrs.localPreviewUrl === url) {
       found = true;
       return false;
     }
@@ -89,7 +88,7 @@ function reappearsWhileStepping(
     });
     if (!applied || next === null) break;
     current = next;
-    if (hasLocalPreviewUrl(current.doc, url)) return true;
+    if (docHasPreviewUrl(current.doc, url)) return true;
   }
   return false;
 }
