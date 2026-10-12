@@ -35,6 +35,11 @@ const commandNotApplicable = (command: string): Result<never, EditorError> => ({
 const hasStoredUrl = (attrs: Record<string, unknown>): boolean =>
   typeof attrs.url === "string" && attrs.url.length > 0;
 
+// hasStoredUrl과 같은 판정으로 url을 정규화한다. 빈 문자열과 비문자열은
+// 모두 null이라 "url 없음"끼리 같은 값으로 비교된다(Issue #387).
+const normalizedUrl = (attrs: Record<string, unknown>): string | null =>
+  hasStoredUrl(attrs) ? (attrs.url as string) : null;
+
 // ProductionEditorSession이 구현해야 할 최소 표면 — MediaUploadTracker가
 // 세션 내부 상태(currentDocument 등)에 직접 접근하지 않고 이 구조적
 // 인터페이스로만 세션과 통신한다. reason 파라미터는 이 모듈에서 항상
@@ -258,6 +263,10 @@ export class MediaUploadTracker {
       return commandNotApplicable(command);
     }
 
+    // Issue #387 — 업로드가 시작한 블록의 정체성. 완료 시점에 type이나
+    // 정규화한 url이 다르면 같은 id의 다른 블록으로 교체된 것으로 본다.
+    const startedType = node.type.name;
+    const startedUrl = normalizedUrl(node.attrs);
     const controller = this.beginMediaUpload(blockId);
     let result: UploadResult;
     try {
@@ -271,13 +280,21 @@ export class MediaUploadTracker {
     }
 
     if (this.host.isDestroyed) return { ok: true, value: undefined };
-    // 경합 가드(spec §4.2) — 완료 시점에 대상 블록이 여전히 존재하는지
-    // 재확인한다. undo로 사라지거나 다른 파일로 교체된 뒤 이전 결과가
-    // 늦게 도착하는 경우를 막는다. 존재하지 않으면 결과 종류와 무관하게
-    // 완료 결과를 무시하고 pending 상태만 지운다.
-    const stillExists =
-      findBlockPosition(this.host.editor.state.doc, blockId) !== null;
-    if (!stillExists) {
+    // 경합 가드(spec §4.2) — 완료 시점에 대상이 업로드를 시작한 때의
+    // 블록인지 재확인한다. undo로 사라지거나 다른 파일로 교체된 뒤 이전
+    // 결과가 늦게 도착하는 경우를 막는다. 블록이 없거나 type 또는 정규화한
+    // url이 시작 시점과 다르면(같은 id의 다른 블록으로 교체, Issue #387)
+    // 결과 종류와 무관하게 완료 결과를 무시하고 pending 상태만 지운다.
+    // caption·name 등 url 외 속성만 바뀐 경우는 같은 블록으로 보고 적용한다.
+    const currentDoc = this.host.editor.state.doc;
+    const currentPosition = findBlockPosition(currentDoc, blockId);
+    const currentNode =
+      currentPosition === null ? null : currentDoc.nodeAt(currentPosition);
+    const sameTarget =
+      currentNode !== null &&
+      currentNode.type.name === startedType &&
+      normalizedUrl(currentNode.attrs) === startedUrl;
+    if (!sameTarget) {
       this.endMediaUpload(blockId, null);
       return { ok: true, value: undefined };
     }
@@ -308,7 +325,7 @@ export class MediaUploadTracker {
       });
       return { ok: true, value: undefined };
     }
-    // 반환값(boolean)을 무시한다 — stillExists 재확인과 이 호출 사이에
+    // 반환값(boolean)을 무시한다 — sameTarget 재확인과 이 호출 사이에
     // await이 없어(동기 연속) 대상이 사라지거나 media가 아니게 될 수
     // 없다. false는 두 경우뿐이다. 결과가 현재 attrs와 같은 no-op(Issue
     // #375)은 정상이고, revision overflow는 이론상만 가능하다. 기존

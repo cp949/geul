@@ -112,7 +112,7 @@ export type UploadFile = (
 
 업로드 중 상태는 `blockId -> "uploading" | { status: "error"; code; message }` session 전용 맵으로 관리한다(모델 스키마 밖) — Issue #38 슬라이스7 `blockSelection`, 슬라이스9 RD-004 `session.getBlockSelection()`과 같은 "PM Selection·문서와 독립된 session 상태" 패턴 재사용. 블록 자체는 삽입 즉시 `url` 없이 문서에 존재한다(빈 미디어 블록은 이미 유효한 상태). 업로드 성공 시 `url`(및 반환된 `name`, 미지정 시 유지) prop을 일반 트랜잭션으로 세팅한다(undo 대상, 단일 트랜잭션). 실패는 문서에 흔적을 남기지 않는다 — 에러는 session 상태로만 노출되고 model round-trip 대상이 아니다.
 
-경합 가드: 비동기 결과 적용 전 대상 블록이 여전히 존재하는지 재확인한다(존재하지 않으면 no-op) — 업로드 중 undo로 블록이 사라지거나 다른 파일로 교체된 뒤 이전 결과가 늦게 도착하는 경우를 막는다.
+경합 가드: 비동기 결과 적용 전 대상 블록이 여전히 존재하는지 재확인한다(존재하지 않으면 no-op) — 업로드 중 undo로 블록이 사라지거나 다른 파일로 교체된 뒤 이전 결과가 늦게 도착하는 경우를 막는다. 업로드 시작 시점의 블록 type·url과 다르면 같은 id의 다른 블록으로 교체된 것으로 보고 결과 종류와 무관하게 무시한다. caption·name 등 url 외 속성만 바뀐 경우는 적용한다.
 
 교체(`replaceMediaBlockFile`)는 새 업로드가 `status: "success"`가 될 때까지 기존 `url`/`name`/`caption`/`backgroundColor`를 그대로 유지한다 — 실패 시 원상 유지, 별도 롤백 로직 없이 애초에 아무것도 바꾸지 않는다.
 
