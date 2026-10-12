@@ -407,12 +407,14 @@ export const createProductionEditor = (options: {
   // 같은 모양의 클로저다. drop/paste가 media 블록을 삽입한 직후 그 실제
   // 업로드를 트리거한다. 미지정이면 그 확장 자신의 기본값(no-op)을 쓴다.
   triggerMediaUpload?: (blockId: string, file: File) => void;
-  // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-02) —
-  // triggerMediaUpload와 같은 모양의 클로저다. 로컬 프리뷰(ADR 0015)가
-  // 남은 미디어 블록이 사라진 뒤 undo로도 redo로도 복구 불가라고 판정되면
-  // 호출한다(`RD-002.md` "결정" — url 확정 정리와 같은
-  // `onLocalPreviewCleanup` 채널을 재사용, 신규 공개 옵션 아님). 미지정이면
-  // 그 확장 자신의 기본값(no-op)을 쓴다.
+  // MediaLocalPreviewLifecycleExtension과 MediaDropPasteExtension 전용
+  // (RD-002 DELTA-02, Issue #379) — triggerMediaUpload와 같은 모양의
+  // 클로저다. Lifecycle 확장은 로컬 프리뷰(ADR 0015)가 남은 미디어 블록이
+  // 사라진 뒤 undo로도 redo로도 복구 불가라고 판정되면 호출한다(`RD-002.md`
+  // "결정" — url 확정 정리와 같은 `onLocalPreviewCleanup` 채널을 재사용,
+  // 신규 공개 옵션 아님). MediaDropPasteExtension은 발급한 URL이 거절·되돌림·
+  // 예외로 문서에 못 들어갔을 때 호출한다. 미지정이면 각 확장 자신의
+  // 기본값(no-op)을 쓴다.
   notifyLocalPreviewUnreachable?: (
     blockId: string,
     cleared: LocalPreviewAttrs,
@@ -769,6 +771,12 @@ export const createProductionEditor = (options: {
         ...(options.triggerMediaUpload === undefined
           ? {}
           : { triggerMediaUpload: options.triggerMediaUpload }),
+        ...(options.notifyLocalPreviewUnreachable === undefined
+          ? {}
+          : {
+              notifyLocalPreviewUnreachable:
+                options.notifyLocalPreviewUnreachable,
+            }),
       }),
       // 그릴링 2026-09-17 — posAtCoords가 실패하는 클릭(빈 에디터 min-height
       // 여백, 마지막 블록 아래 등)을 가장 가까운 블록으로 스냅한다. 옵션이

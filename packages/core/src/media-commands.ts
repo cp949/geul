@@ -5,7 +5,10 @@ import { NodeSelection } from "@tiptap/pm/state";
 import { findBlockPosition } from "./block-position.js";
 import { finalizeAndDispatch } from "./dispatch.js";
 import type { MediaBlockKind } from "./media-block-kind.js";
-import type { LocalPreviewAttrs } from "./media-local-preview.js";
+import {
+  createLocalPreviewIssuer,
+  type DiscardLocalPreview,
+} from "./media-local-preview-discard.js";
 import { planTriggerBlockInsert } from "./trigger-block-insert.js";
 
 // 4종 미디어 블록(file/image/video/audio) 삽입 명령(삽입 전용 — setBlockType
@@ -65,10 +68,11 @@ export const insertMediaBlock = (
   // types.ts:337)은 `clearAfterBlockText`만 노출하고 이 필드를 절대
   // 전달하지 않는다(insert-block-commands.ts) — MediaDropPasteExtension의
   // chainRemainingFiles(paste/drop 다중 파일)만 콜백 미등록일 때 이
-  // 필드로 로컬 프리뷰 attrs를 함께 싣는다.
+  // 필드로 File을 싣는다. 이 함수가 createId() 뒤에 blob URL을 발급하고,
+  // 문서에 못 들어가면(거절·되돌림·예외) discard로 해제 통지한다(Issue #379).
   options?: {
     clearAfterBlockText?: boolean;
-    localPreview?: LocalPreviewAttrs | null;
+    localPreview?: { file: File; discard: DiscardLocalPreview } | null;
   },
 ): Result<{ blockId: string }, InsertMediaBlockError> => {
   const mediaType = editor.schema.nodes[kind];
@@ -92,24 +96,35 @@ export const insertMediaBlock = (
   if (afterNode === null) return blockNotFound(afterBlockId);
 
   const blockId = createId();
-  const mediaNode = mediaType.create({
-    blockId,
-    ...(options?.localPreview ?? {}),
-  });
-
-  const plan = planTriggerBlockInsert(
-    editor.state.tr,
-    afterNode,
-    afterPosition,
-    mediaNode,
-    options?.clearAfterBlockText,
+  // 발급이 없으면(localPreview 없음) settle은 아무것도 하지 않는다.
+  const issuer = createLocalPreviewIssuer(
+    editor,
+    options?.localPreview?.discard ?? (() => {}),
   );
-  const transaction = plan.transaction;
-  transaction.setSelection(
-    NodeSelection.create(transaction.doc, plan.insertPosition),
-  );
+  try {
+    const mediaNode = mediaType.create({
+      blockId,
+      ...(options?.localPreview == null
+        ? {}
+        : issuer.issue(options.localPreview.file, blockId)),
+    });
 
-  const dispatched = finalizeAndDispatch(editor, transaction);
-  if (!dispatched.ok) return dispatched;
-  return { ok: true, value: { blockId } };
+    const plan = planTriggerBlockInsert(
+      editor.state.tr,
+      afterNode,
+      afterPosition,
+      mediaNode,
+      options?.clearAfterBlockText,
+    );
+    const transaction = plan.transaction;
+    transaction.setSelection(
+      NodeSelection.create(transaction.doc, plan.insertPosition),
+    );
+
+    const dispatched = finalizeAndDispatch(editor, transaction);
+    if (!dispatched.ok) return dispatched;
+    return { ok: true, value: { blockId } };
+  } finally {
+    issuer.settle();
+  }
 };

@@ -32,6 +32,7 @@ import { expect } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
 import {
   createEditor,
+  type CreateEditorOptions,
   type EditorController,
   type EditorError,
   type MediaBlockKind,
@@ -565,8 +566,14 @@ export const expectSameValueReapplyIsNoop = (
  * (editor-controller-media-upload.test.ts::mountedWithUpload과 동일
  * "로컬 override" 전례) — 로컬 프리뷰 정리 신호(setMediaBlockUrl·updateBlock)를
  * 검증할 때만 쓴다(Issue #168 roadmap RD-001 DELTA-05, Issue #376).
+ * overrides.onChange는 changes에 쌓은 뒤 호출한다 — 호스트 콜백이 편집기에
+ * 다시 들어가는 경로를 만들 때 쓴다(Issue #379).
  */
-export const mountedWithLocalPreviewCleanup = (initialDocument: Document) => {
+export const mountedWithLocalPreviewCleanup = (
+  initialDocument: Document,
+  overrides: Partial<CreateEditorOptions> = {},
+) => {
+  const { onChange: hostOnChange, ...restOverrides } = overrides;
   const changes: {
     revision: number;
     changedBlockIds: readonly string[];
@@ -580,7 +587,11 @@ export const mountedWithLocalPreviewCleanup = (initialDocument: Document) => {
   const editor = createEditor({
     initialDocument,
     createId: sequentialIds("id"),
-    onChange: (event) => changes.push(event),
+    ...restOverrides,
+    onChange: (event) => {
+      changes.push(event);
+      hostOnChange?.(event);
+    },
     onLocalPreviewCleanup: (blockId, cleared) =>
       localPreviewCleared.push({ blockId, ...cleared }),
   });

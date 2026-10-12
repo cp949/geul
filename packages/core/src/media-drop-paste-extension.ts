@@ -13,9 +13,9 @@ import {
 } from "./media-drop-paste-detection.js";
 import type { MediaBlockKind } from "./media-block-kind.js";
 import {
-  createLocalPreviewAttrs,
-  type LocalPreviewAttrs,
-} from "./media-local-preview.js";
+  createLocalPreviewIssuer,
+  type DiscardLocalPreview,
+} from "./media-local-preview-discard.js";
 
 // spec §5.2 — File drop/paste가 media 블록을 만드는 확장(Issue #152).
 // ClipboardPasteExtension·TablePasteExtension과 나란히 배선하되
@@ -42,6 +42,11 @@ export type MediaDropPasteOptions = {
   // 옵션이 호출되는 코드 경로 자체에 도달하지 않는다(두 핸들러 모두
   // 파일 존재 확인 전에 게이트에서 이미 return false).
   triggerMediaUpload: (blockId: string, file: File) => void;
+  // 발급한 로컬 프리뷰(ADR 0015) blob URL이 거절·되돌림·예외로 문서에 못
+  // 들어가면 호출한다(Issue #379). production-editor-assembly.ts가 세션의
+  // notifyLocalPreviewCleared로 연결한다(MediaLocalPreviewLifecycleExtension의
+  // notifyUnreachable과 같은 채널). 미지정이면 no-op.
+  notifyLocalPreviewUnreachable: DiscardLocalPreview;
 };
 
 type InsertOutcome = { blockId: string } | null;
@@ -97,17 +102,20 @@ const isMediaKindAvailable = (editor: Editor, file: File): boolean =>
 // 동일해 병합했다. 거절되면(TRANSACTION_REJECTED, 희귀) null을 반환해
 // 체이닝을 멈추게 한다.
 //
-// localPreview(Issue #168) — null이면(콜백 있음) 기존과 동일하게 blockId만
-// 세팅한다. 값이 있으면(콜백 없음) 노드 생성과 같은 트랜잭션에
-// localPreviewUrl·localPreviewFile도 함께 세팅한다 — 별도 후속 트랜잭션으로
-// 나누면 삽입 직후 한 틱 동안 attrs 없는 빈 미디어 블록이 화면에 보이는
-// 깜빡임이 생긴다.
+// localPreviewFile(Issue #168) — null이면(콜백 있음) 기존과 동일하게
+// blockId만 세팅한다. 값이 있으면(콜백 없음) createId() 뒤에 blob URL을
+// 발급해 노드 생성과 같은 트랜잭션에 localPreviewUrl·localPreviewFile도
+// 함께 세팅한다 — 별도 후속 트랜잭션으로 나누면 삽입 직후 한 틱 동안
+// attrs 없는 빈 미디어 블록이 화면에 보이는 깜빡임이 생긴다. 발급을
+// createId() 뒤에 두어 createId 예외 때 URL이 새지 않게 하고, 거절·되돌림·
+// 예외로 문서에 못 들어간 URL은 discard로 해제 통지한다(Issue #379).
 const insertMediaAtTarget = (
   editor: Editor,
   target: MediaInsertTarget,
   kind: MediaBlockKind,
   createId: IdFactory,
-  localPreview: LocalPreviewAttrs | null,
+  localPreviewFile: File | null,
+  discard: DiscardLocalPreview,
 ): InsertOutcome => {
   const mediaType = editor.schema.nodes[kind];
   if (mediaType === undefined) {
@@ -120,23 +128,30 @@ const insertMediaAtTarget = (
     );
   }
   const blockId = createId();
-  const mediaNode = mediaType.create({
-    blockId,
-    ...(localPreview ?? {}),
-  });
-  const transaction =
-    target.mode === "replace"
-      ? editor.state.tr.replaceWith(
-          target.position,
-          target.position + target.nodeSize,
-          mediaNode,
-        )
-      : editor.state.tr.insert(target.position, mediaNode);
-  transaction.setSelection(
-    NodeSelection.create(transaction.doc, target.position),
-  );
-  const dispatched = finalizeAndDispatch(editor, transaction);
-  return dispatched.ok ? { blockId } : null;
+  const issuer = createLocalPreviewIssuer(editor, discard);
+  try {
+    const mediaNode = mediaType.create({
+      blockId,
+      ...(localPreviewFile === null
+        ? {}
+        : issuer.issue(localPreviewFile, blockId)),
+    });
+    const transaction =
+      target.mode === "replace"
+        ? editor.state.tr.replaceWith(
+            target.position,
+            target.position + target.nodeSize,
+            mediaNode,
+          )
+        : editor.state.tr.insert(target.position, mediaNode);
+    transaction.setSelection(
+      NodeSelection.create(transaction.doc, target.position),
+    );
+    const dispatched = finalizeAndDispatch(editor, transaction);
+    return dispatched.ok ? { blockId } : null;
+  } finally {
+    issuer.settle();
+  }
 };
 
 // D2 다중 파일 체이닝 — 첫 파일 이후는 항상 "직전 반환 blockId 뒤에 삽입"만
@@ -155,6 +170,7 @@ const chainRemainingFiles = (
   first: InsertOutcome,
   triggerUpload: (blockId: string, file: File) => void,
   isUploadEnabled: boolean,
+  discard: DiscardLocalPreview,
 ): void => {
   let previous = first;
   for (let index = 1; index < files.length; index += 1) {
@@ -166,9 +182,7 @@ const chainRemainingFiles = (
       previous.blockId,
       detectMediaBlockKind(file),
       createId,
-      isUploadEnabled
-        ? undefined
-        : { localPreview: createLocalPreviewAttrs(file) },
+      isUploadEnabled ? undefined : { localPreview: { file, discard } },
     );
     previous = result.ok ? result.value : null;
     if (result.ok && isUploadEnabled) triggerUpload(result.value.blockId, file);
@@ -292,6 +306,9 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
         // isUploadEnabled===false 경로에서만 도달 가능한 기본값이라(위
         // MediaDropPasteOptions 주석) 실제로 호출되지 않는다 — no-op.
       },
+      notifyLocalPreviewUnreachable: () => {
+        // production-editor-assembly.ts가 항상 실제 콜백을 넘긴다 — no-op.
+      },
     };
   },
 
@@ -300,6 +317,7 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
     const createId = this.options.createId;
     const isUploadEnabled = this.options.isUploadEnabled;
     const triggerUpload = this.options.triggerMediaUpload;
+    const discard = this.options.notifyLocalPreviewUnreachable;
 
     return [
       new Plugin({
@@ -331,7 +349,8 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
               target,
               firstKind,
               createId,
-              isUploadEnabled ? null : createLocalPreviewAttrs(firstFile),
+              isUploadEnabled ? null : firstFile,
+              discard,
             );
             if (first !== null && isUploadEnabled) {
               triggerUpload(first.blockId, firstFile);
@@ -343,6 +362,7 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
               first,
               triggerUpload,
               isUploadEnabled,
+              discard,
             );
             return true;
           },
@@ -389,7 +409,8 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
               { mode: "insert", position: target.position },
               detectMediaBlockKind(firstFile),
               createId,
-              isUploadEnabled ? null : createLocalPreviewAttrs(firstFile),
+              isUploadEnabled ? null : firstFile,
+              discard,
             );
             if (first !== null && isUploadEnabled) {
               triggerUpload(first.blockId, firstFile);
@@ -401,6 +422,7 @@ export const MediaDropPasteExtension = Extension.create<MediaDropPasteOptions>({
               first,
               triggerUpload,
               isUploadEnabled,
+              discard,
             );
             event.preventDefault();
             return true;

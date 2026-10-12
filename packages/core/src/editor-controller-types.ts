@@ -151,9 +151,9 @@ export type CreateEditorOptions = {
     state: MediaUploadState | null,
   ) => void;
   // Issue #168 roadmap RD-001 DELTA-05, RD-002 DELTA-02·03 — 로컬 프리뷰
-  // (ADR 0015)가 정리돼도 안전하다고 core가 판단하는 세 시점 모두 이
+  // (ADR 0015)가 정리돼도 안전하다고 core가 판단하는 다음 시점 모두 이
   // 채널 하나로 알린다(RD-002.md "결정" — 신호 채널 재사용, react 쪽 조치가
-  // 세 시점 전부 동일해 나눌 이유가 없다).
+  // 시점마다 동일해 나눌 이유가 없다).
   //   1. 실제 url이 확정되는 두 지점(uploadMediaFile/replaceMediaBlockFile
   //      성공, setMediaBlockUrl) — core가 attrs를 null로 정리한 뒤 알린다.
   //   2. 로컬 프리뷰가 있던 블록이 사라진 뒤 undo로도 redo로도 복구
@@ -170,6 +170,8 @@ export type CreateEditorOptions = {
   //      프리뷰 전부(Issue #169 roadmap RD-001 DELTA-01) — 로컬 프리뷰는
   //      model에 왕복하지 않아(ADR 0015) 새 문서가 같은 blockId를 쓰더라도
   //      이어받지 않는다.
+  //   5. 명령이 URL을 발급했으나 dispatch 거절·되돌림·예외로 문서에 들어가지
+  //      못한 시점(Issue #379) — 문서에 한 번도 없었던 블록 id로 알린다.
   // 실제 URL.revokeObjectURL DOM 호출은 이 옵션의 소비자(RD-002, react)
   // 몫이다 — core는 "언제 정리해도 안전한지"만 판단해 신호로 넘긴다.
   // onUploadStateChange와 동일하게 문서 변경이 아니라 push 알림이다(로컬

@@ -199,7 +199,7 @@ export const EditorProvider = (props: EditorProviderProps) => {
         latestOnUploadStateChange.current?.(blockId, state),
       // Issue #168 roadmap RD-002 DELTA-03 — core가 정리해도 안전하다고
       // 판단한 로컬 프리뷰(ADR 0015)를 실제로 revoke한다. url 확정·복구
-      // 불가·세션 destroy() 시 잔여 정리 세 트리거 모두 이 채널 하나로
+      // 불가·세션 destroy() 시 잔여 정리 트리거 모두 이 채널 하나로
       // 온다(editor-controller-types.ts의 onLocalPreviewCleanup 주석 참고)
       // — react는 트리거 종류를 구분할 필요 없이 항상 같은 조치만 한다.
       // host에 노출하는 EditorProviderProps 옵션이 아니다 — onChange 등과

@@ -15,7 +15,7 @@
  */
 import type { InlineContentItem, ParagraphBlock } from "@cp949/geul-model";
 import { NodeSelection } from "@tiptap/pm/state";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { findBlockPosition } from "../src/block-position.js";
 import {
@@ -702,6 +702,227 @@ describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-
     expect(editor.commands.redo().ok).toBe(true);
     expect(localPreviewUrlOf(tiptap, "id-1")).toBe(pastedUrl);
     expect(localPreviewCleared).toEqual([]);
+  });
+
+  describe("발급 후 문서에 못 들어간 프리뷰(Issue #379)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    type Cleared = { blockId: string; localPreviewUrl: string; file: File };
+
+    /**
+     * 콜백 미등록 에디터를 마운트한다. rejectAtCall이 n이면 문서를 바꾸는
+     * n번째 onBeforeChange 호출부터 거절한다(1 기반). createId는 옵션으로
+     * 바꿔 끼운다.
+     */
+    const mountedRejecting = (
+      rejectAtCall: number | null,
+      createId = sequentialIds("id"),
+    ) => {
+      let beforeChangeCalls = 0;
+      const cleared: Cleared[] = [];
+      const editor = createEditor({
+        initialDocument: documentOf(
+          paragraphBlock("p-1", "hello"),
+          tailParagraphBlock,
+        ),
+        createId,
+        onBeforeChange: () => {
+          beforeChangeCalls += 1;
+          return rejectAtCall !== null && beforeChangeCalls >= rejectAtCall
+            ? false
+            : undefined;
+        },
+        onLocalPreviewCleanup: (blockId, attrs) =>
+          cleared.push({
+            blockId,
+            localPreviewUrl: attrs.localPreviewUrl,
+            file: attrs.localPreviewFile,
+          }),
+      });
+      return { editor, cleared, ...mountTiptapEditor(editor) };
+    };
+
+    it("paste 첫 파일이 거절되면 발급한 URL 1건을 삽입하려던 id로 통지하고 문서는 그대로다", () => {
+      const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+      const { editor, tiptap, editable, cleared } = mountedRejecting(1);
+      editable.focus();
+      placeCaretInBlock(tiptap, "p-1");
+      const documentBefore = editor.getDocument();
+      const file = fileOf("photo.png", "image/png");
+
+      withUnhandledErrorTracking((errors) => {
+        pasteFiles(editable, [file]);
+        expect(errors).toEqual([]);
+      });
+
+      expect(createObjectUrl).toHaveBeenCalledTimes(1);
+      expect(cleared).toEqual([
+        {
+          blockId: "id-1",
+          localPreviewUrl: createObjectUrl.mock.results[0]?.value as string,
+          file,
+        },
+      ]);
+      expect(cleared[0]?.file).toBe(file);
+      expect(editor.getDocument()).toEqual(documentBefore);
+    });
+
+    it("파일 2개 paste에서 둘째 삽입만 거절되면 첫 블록 프리뷰는 유지하고 둘째 URL만 통지한다", () => {
+      const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+      const { editor, tiptap, editable, cleared } = mountedRejecting(2);
+      editable.focus();
+      placeCaretInBlock(tiptap, "p-1");
+      const first = fileOf("a.png", "image/png");
+      const second = fileOf("b.png", "image/png");
+
+      withUnhandledErrorTracking((errors) => {
+        pasteFiles(editable, [first, second]);
+        expect(errors).toEqual([]);
+      });
+
+      expect(createObjectUrl).toHaveBeenCalledTimes(2);
+      const [firstUrl, secondUrl] = createObjectUrl.mock.results.map(
+        (result) => result.value as string,
+      );
+      expect(editor.getDocument().blocks).toEqual([
+        paragraphBlock("p-1", "hello"),
+        mediaBlock("image", "id-1"),
+        tailParagraphBlock,
+      ]);
+      expect(localPreviewUrlOf(tiptap, "id-1")).toBe(firstUrl);
+      expect(cleared).toEqual([
+        { blockId: "id-2", localPreviewUrl: secondUrl, file: second },
+      ]);
+    });
+
+    it("drop 첫 파일이 거절되면 발급한 URL 1건을 통지하고 문서는 그대로다", () => {
+      const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+      const { editor, tiptap, editable, cleared } = mountedRejecting(1);
+      editable.focus();
+      stubDropGeometry(tiptap, "p-1", { top: 100, height: 40 });
+      const documentBefore = editor.getDocument();
+      const file = fileOf("photo.png", "image/png");
+
+      withUnhandledErrorTracking((errors) => {
+        dropFiles(editable, [file], { clientX: 0, clientY: 130 });
+        expect(errors).toEqual([]);
+      });
+
+      expect(createObjectUrl).toHaveBeenCalledTimes(1);
+      expect(cleared).toEqual([
+        {
+          blockId: "id-1",
+          localPreviewUrl: createObjectUrl.mock.results[0]?.value as string,
+          file,
+        },
+      ]);
+      expect(editor.getDocument()).toEqual(documentBefore);
+    });
+
+    /** onChange 콜백을 건 콜백 미등록 에디터. 호스트 콜백이 편집기에 다시 들어간다. */
+    const mountedWithHostOnChange = (
+      onChange: (editor: ReturnType<typeof createEditor>) => void,
+    ) => {
+      const cleared: Cleared[] = [];
+      const editor: ReturnType<typeof createEditor> = createEditor({
+        initialDocument: documentOf(
+          paragraphBlock("p-1", "hello"),
+          tailParagraphBlock,
+        ),
+        createId: sequentialIds("id"),
+        onChange: () => onChange(editor),
+        onLocalPreviewCleanup: (blockId, attrs) =>
+          cleared.push({
+            blockId,
+            localPreviewUrl: attrs.localPreviewUrl,
+            file: attrs.localPreviewFile,
+          }),
+      });
+      return { editor, cleared, ...mountTiptapEditor(editor) };
+    };
+
+    it("paste 직후 호스트 onChange가 삽입 블록을 동기로 지워도 undo 가능한 블록이라 통지하지 않는다", () => {
+      let deleted = false;
+      const mounted = mountedWithHostOnChange((editor) => {
+        if (deleted) return;
+        deleted = true;
+        editor.commands.deleteBlock("id-1");
+      });
+      mounted.editable.focus();
+      placeCaretInBlock(mounted.tiptap, "p-1");
+
+      withUnhandledErrorTracking((errors) => {
+        pasteFiles(mounted.editable, [fileOf("photo.png", "image/png")]);
+        expect(errors).toEqual([]);
+      });
+
+      expect(deleted).toBe(true);
+      expect(findBlockPosition(mounted.tiptap.state.doc, "id-1")).toBeNull();
+      expect(mounted.cleared).toEqual([]);
+    });
+
+    it("paste 직후 호스트 onChange가 replaceDocument를 부르면 삽입 블록 URL은 1회만 통지한다", () => {
+      let replaced = false;
+      const mounted = mountedWithHostOnChange((editor) => {
+        if (replaced) return;
+        replaced = true;
+        editor.replaceDocument(documentOf(tailParagraphBlock));
+      });
+      mounted.editable.focus();
+      placeCaretInBlock(mounted.tiptap, "p-1");
+
+      withUnhandledErrorTracking((errors) => {
+        pasteFiles(mounted.editable, [fileOf("photo.png", "image/png")]);
+        expect(errors).toEqual([]);
+      });
+
+      expect(replaced).toBe(true);
+      expect(mounted.cleared.map((entry) => entry.blockId)).toEqual(["id-1"]);
+    });
+
+    it("거절이 없는 paste·drop은 통지하지 않는다", () => {
+      const { tiptap, editable, cleared } = mountedRejecting(null);
+      editable.focus();
+      placeCaretInBlock(tiptap, "p-1");
+
+      withUnhandledErrorTracking((errors) => {
+        pasteFiles(editable, [
+          fileOf("a.png", "image/png"),
+          fileOf("b.png", "image/png"),
+        ]);
+        stubDropGeometry(tiptap, "p-1", { top: 100, height: 40 });
+        dropFiles(editable, [fileOf("c.png", "image/png")], {
+          clientX: 0,
+          clientY: 130,
+        });
+        expect(errors).toEqual([]);
+      });
+
+      expect(cleared).toEqual([]);
+    });
+
+    it("createId가 던지면 blob URL을 발급하지 않는다", () => {
+      const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+      let broken = false;
+      const ids = sequentialIds("id");
+      const { tiptap, editable, cleared } = mountedRejecting(null, () => {
+        if (broken) throw new Error("createId 실패");
+        return ids();
+      });
+      editable.focus();
+      placeCaretInBlock(tiptap, "p-1");
+      broken = true;
+
+      withUnhandledErrorTracking((errors) => {
+        pasteFiles(editable, [fileOf("photo.png", "image/png")]);
+        expect(errors).toHaveLength(1);
+      });
+
+      expect(createObjectUrl).not.toHaveBeenCalled();
+      expect(cleared).toEqual([]);
+    });
   });
 });
 

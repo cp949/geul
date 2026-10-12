@@ -14,6 +14,7 @@ import {
 } from "./production-editor-session.js";
 import { findBlockEntryInTree } from "./generic-block-tree-lookup.js";
 import { cloneBlockSubtreeWithFreshIds } from "./generic-block-clone.js";
+import { createLocalPreviewIssuer } from "./media-local-preview-discard.js";
 
 export const createGenericBlockDuplicateCommands = (
   session: ProductionEditorSession,
@@ -46,45 +47,60 @@ export const createGenericBlockDuplicateCommands = (
       collectDocumentIdentityIds(session.document),
     );
     const duplicateId = takeId();
-    const result = session.runDocumentCommand("duplicateBlock", "local", () => {
-      const sourcePosition = findBlockPosition(
-        session.editor.state.doc,
-        blockId,
-      );
-      if (sourcePosition === null) return false;
-      const sourceNode = session.editor.state.doc.nodeAt(sourcePosition);
-      if (sourceNode === null) return false;
-      const insertPosition = sourcePosition + sourceNode.nodeSize;
-      const duplicateNode = cloneBlockSubtreeWithFreshIds(
-        sourceNode,
-        duplicateId,
-        takeId,
-      );
-      const transaction = session.editor.state.tr.insert(
-        insertPosition,
-        duplicateNode,
-      );
-      if (duplicateNode.type.name === "blockContainer") {
-        // 캐럿은 항상 복제된 "루트" 블록 자신의 콘텐츠 끝에 놓인다 —
-        // 자식까지 포함한 duplicateNode.nodeSize를 쓰면 하위 트리가 있을 때
-        // blockGroup 안쪽으로 어긋난다(트랙-6류 회귀). child(0)(루트 자신의
-        // 콘텐츠 노드) 크기만으로 위치를 구해 leaf/subtree 모두 같은 공식이
-        // 되게 한다.
-        const contentNode = duplicateNode.child(0);
-        transaction.setSelection(
-          TextSelection.create(
-            transaction.doc,
-            insertPosition + contentNode.nodeSize,
-          ),
+    // 발급한 로컬 프리뷰 URL이 거절·되돌림·예외로 문서에 못 들어가면 finally의
+    // settle이 해제 통지한다(Issue #379). 판정은 호스트 콜백 전에 문서에 한 번이라도
+    // 들어갔는지다. runDocumentCommand가 activeReason을 비운 뒤라 통지 콜백이
+    // 편집기에 다시 들어와도 안전하다. replaceDocument가 editor를 바꿔도 settle이
+    // 리스너를 해제하도록 지금의 editor 객체를 잡아 둔다.
+    const issuer = createLocalPreviewIssuer(
+      session.editor,
+      session.notifyLocalPreviewCleared.bind(session),
+    );
+    let result: Result<void, EditorError>;
+    try {
+      result = session.runDocumentCommand("duplicateBlock", "local", () => {
+        const sourcePosition = findBlockPosition(
+          session.editor.state.doc,
+          blockId,
         );
-      } else {
-        transaction.setSelection(
-          NodeSelection.create(transaction.doc, insertPosition),
+        if (sourcePosition === null) return false;
+        const sourceNode = session.editor.state.doc.nodeAt(sourcePosition);
+        if (sourceNode === null) return false;
+        const insertPosition = sourcePosition + sourceNode.nodeSize;
+        const duplicateNode = cloneBlockSubtreeWithFreshIds(
+          sourceNode,
+          duplicateId,
+          takeId,
+          issuer.issue,
         );
-      }
-      session.editor.view.dispatch(closeHistory(transaction));
-      return true;
-    });
+        const transaction = session.editor.state.tr.insert(
+          insertPosition,
+          duplicateNode,
+        );
+        if (duplicateNode.type.name === "blockContainer") {
+          // 캐럿은 항상 복제된 "루트" 블록 자신의 콘텐츠 끝에 놓인다 —
+          // 자식까지 포함한 duplicateNode.nodeSize를 쓰면 하위 트리가 있을 때
+          // blockGroup 안쪽으로 어긋난다(트랙-6류 회귀). child(0)(루트 자신의
+          // 콘텐츠 노드) 크기만으로 위치를 구해 leaf/subtree 모두 같은 공식이
+          // 되게 한다.
+          const contentNode = duplicateNode.child(0);
+          transaction.setSelection(
+            TextSelection.create(
+              transaction.doc,
+              insertPosition + contentNode.nodeSize,
+            ),
+          );
+        } else {
+          transaction.setSelection(
+            NodeSelection.create(transaction.doc, insertPosition),
+          );
+        }
+        session.editor.view.dispatch(closeHistory(transaction));
+        return true;
+      });
+    } finally {
+      issuer.settle();
+    }
     if (!result.ok) return result;
     const after = findBlockEntryInTree(session.document.blocks, blockId);
     const createdBlock =

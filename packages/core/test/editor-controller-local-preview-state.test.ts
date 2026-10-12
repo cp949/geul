@@ -18,7 +18,8 @@ import {
   type Block,
   type ParagraphBlock,
 } from "@cp949/geul-model";
-import { describe, expect, it } from "vitest";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
 import { contentTextStart } from "./block-test-support.js";
 import {
@@ -394,5 +395,220 @@ describe("duplicateBlock — 로컬 프리뷰", () => {
       return copied.localPreviewUrl;
     });
     expect(new Set([...originalUrls, ...copiedUrls]).size).toBe(4);
+  });
+});
+
+describe("duplicateBlock — 발급 후 문서에 못 들어간 프리뷰(Issue #379)", () => {
+  const revertKey = new PluginKey("test-revert-batch");
+  let unregisterRevertPlugin: (() => void) | null = null;
+
+  afterEach(() => {
+    unregisterRevertPlugin?.();
+    unregisterRevertPlugin = null;
+    vi.restoreAllMocks();
+  });
+
+  /** 기본 문서(프리뷰 image m-1)를 마운트하고 이후 거절 스위치를 돌려준다. */
+  const mountedRejecting = (blocks: readonly Block[], seedIds: string[]) => {
+    const gate = { reject: false };
+    const mountedEditor = mountedWithLocalPreviewCleanup(
+      documentOf(...blocks, tailParagraphBlock),
+      { onBeforeChange: () => (gate.reject ? false : undefined) },
+    );
+    const file = testFile();
+    for (const id of seedIds) seedLocalPreview(mountedEditor.tiptap, id, file);
+    return { ...mountedEditor, gate, file };
+  };
+
+  it("onBeforeChange가 거절하면 발급한 URL을 복제본 id로 정확히 1건 통지하고 원본 m-1은 통지하지 않는다", () => {
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+    const { editor, tiptap, gate, file, localPreviewCleared } =
+      mountedRejecting([mediaBlock("image", "m-1")], ["m-1"]);
+    const originalBefore = previewAttrsOf(tiptap, "m-1");
+    const documentBefore = editor.getDocument();
+    createObjectUrl.mockClear();
+    gate.reject = true;
+
+    expect(editor.commands.duplicateBlock("m-1")).toEqual(
+      notApplicable("duplicateBlock"),
+    );
+
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    const issuedUrl = createObjectUrl.mock.results[0]?.value as string;
+    expect(localPreviewCleared).toEqual([
+      { blockId: "id-1", localPreviewUrl: issuedUrl, localPreviewFile: file },
+    ]);
+    expect(localPreviewCleared[0]?.localPreviewFile).toBe(file);
+    expect(editor.getDocument()).toEqual(documentBefore);
+    expect(previewAttrsOf(tiptap, "m-1")).toEqual(originalBefore);
+    expect(localPreviewCleared.map((c) => c.localPreviewUrl)).not.toContain(
+      originalBefore.localPreviewUrl,
+    );
+  });
+
+  it("하위 트리의 프리뷰 미디어 2개를 거절시키면 복제본 자신의 id·URL로 2건 통지한다", () => {
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+    const { editor, gate, file, localPreviewCleared } = mountedRejecting(
+      [
+        paragraphBlock("p-1", "부모", [
+          mediaBlock("image", "m-1"),
+          paragraphBlock("p-2", "중간", [mediaBlock("video", "m-2")]),
+        ]),
+      ],
+      ["m-1", "m-2"],
+    );
+    createObjectUrl.mockClear();
+    gate.reject = true;
+
+    expect(editor.commands.duplicateBlock("p-1")).toEqual(
+      notApplicable("duplicateBlock"),
+    );
+
+    expect(createObjectUrl).toHaveBeenCalledTimes(2);
+    const issuedUrls = createObjectUrl.mock.results.map(
+      (result) => result.value as string,
+    );
+    expect(localPreviewCleared).toHaveLength(2);
+    expect(
+      localPreviewCleared.map((cleared) => cleared.localPreviewUrl).sort(),
+    ).toEqual([...issuedUrls].sort());
+    for (const cleared of localPreviewCleared) {
+      expect(["m-1", "m-2", "p-1", "p-2"]).not.toContain(cleared.blockId);
+      expect(cleared.localPreviewFile).toBe(file);
+    }
+    expect(new Set(localPreviewCleared.map((c) => c.blockId)).size).toBe(2);
+  });
+
+  it("clone 도중 RangeError가 나면 던지기 전에 발급한 URL 1건을 통지한다", () => {
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+    // 처음 두 호출(루트 복제본 id, m-1 복제 id)만 유효하고 이후는 이미
+    // 점유된 "id-1"만 반환해 c-2 복제 id 재발급에서 RangeError가 난다.
+    let calls = 0;
+    const { editor, tiptap, localPreviewCleared } =
+      mountedWithLocalPreviewCleanup(
+        documentOf(
+          paragraphBlock("p-1", "부모", [
+            mediaBlock("image", "m-1"),
+            paragraphBlock("c-2", "자식"),
+          ]),
+          tailParagraphBlock,
+        ),
+        {
+          createId: () => {
+            calls += 1;
+            return calls <= 2 ? `id-${calls}` : "id-1";
+          },
+        },
+      );
+    const file = testFile();
+    seedLocalPreview(tiptap, "m-1", file);
+    createObjectUrl.mockClear();
+    const documentBefore = editor.getDocument();
+
+    expect(() => editor.commands.duplicateBlock("p-1")).toThrow(
+      new RangeError(
+        "createId failed to return a valid unique document id after 100 attempts",
+      ),
+    );
+
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    const issuedUrl = createObjectUrl.mock.results[0]?.value as string;
+    expect(localPreviewCleared).toEqual([
+      { blockId: "id-2", localPreviewUrl: issuedUrl, localPreviewFile: file },
+    ]);
+    expect(editor.getDocument()).toEqual(documentBefore);
+  });
+
+  it("appendTransaction이 batch를 되돌려 복제본이 문서에 못 들어가면 발급한 URL 1건을 통지한다", () => {
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+    const { editor, tiptap, file, localPreviewCleared } = mountedRejecting(
+      [mediaBlock("image", "m-1")],
+      ["m-1"],
+    );
+    // root transaction이 적용된 뒤 문서를 oldState로 되돌리는 임시 플러그인.
+    // RevisionGuardExtension이 최종 문서 무효로 batch를 되돌리는 경로와 같은
+    // 모양이다(도달 가능한 입력으로는 최종 문서를 무효로 만들 수 없다).
+    tiptap.registerPlugin(
+      new Plugin({
+        key: revertKey,
+        appendTransaction: (_transactions, oldState, newState) =>
+          newState.doc.eq(oldState.doc)
+            ? null
+            : newState.tr.replaceWith(
+                0,
+                newState.doc.content.size,
+                oldState.doc.content,
+              ),
+      }),
+    );
+    unregisterRevertPlugin = () => tiptap.unregisterPlugin(revertKey);
+    const documentBefore = editor.getDocument();
+    createObjectUrl.mockClear();
+
+    expect(editor.commands.duplicateBlock("m-1")).toEqual(
+      notApplicable("duplicateBlock"),
+    );
+
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    const issuedUrl = createObjectUrl.mock.results[0]?.value as string;
+    expect(localPreviewCleared).toEqual([
+      { blockId: "id-1", localPreviewUrl: issuedUrl, localPreviewFile: file },
+    ]);
+    expect(editor.getDocument()).toEqual(documentBefore);
+  });
+
+  it("호스트 onChange가 복제본을 동기로 지워도 undo 가능한 블록이라 그 시점에는 통지하지 않는다", () => {
+    let deleted = false;
+    const mounted = mountedWithLocalPreviewCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      {
+        onChange: () => {
+          if (deleted) return;
+          deleted = true;
+          mounted.editor.commands.deleteBlock("id-1");
+        },
+      },
+    );
+    seedLocalPreview(mounted.tiptap, "m-1", testFile());
+
+    mounted.editor.commands.duplicateBlock("m-1");
+
+    expect(deleted).toBe(true);
+    expect(findBlockPosition(mounted.tiptap.state.doc, "id-1")).toBeNull();
+    expect(findBlockPosition(mounted.tiptap.state.doc, "m-1")).not.toBeNull();
+    expect(mounted.localPreviewCleared).toEqual([]);
+  });
+
+  it("호스트 onChange가 replaceDocument를 부르면 복제본 URL은 replaceDocument의 통지 1회뿐이다", () => {
+    let replaced = false;
+    const mounted = mountedWithLocalPreviewCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      {
+        onChange: () => {
+          if (replaced) return;
+          replaced = true;
+          mounted.editor.replaceDocument(documentOf(tailParagraphBlock));
+        },
+      },
+    );
+    seedLocalPreview(mounted.tiptap, "m-1", testFile());
+
+    mounted.editor.commands.duplicateBlock("m-1");
+
+    expect(replaced).toBe(true);
+    expect(
+      mounted.localPreviewCleared.map((cleared) => cleared.blockId).sort(),
+    ).toEqual(["id-1", "m-1"]);
+  });
+
+  it("거절되지 않는 복제는 통지하지 않는다", () => {
+    const { editor, localPreviewCleared } = mountedRejecting(
+      [mediaBlock("image", "m-1")],
+      ["m-1"],
+    );
+
+    expect(editor.commands.duplicateBlock("m-1").ok).toBe(true);
+
+    expect(localPreviewCleared).toEqual([]);
   });
 });

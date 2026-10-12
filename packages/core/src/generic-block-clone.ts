@@ -1,14 +1,18 @@
 import { isMediaBlockType, type TableColumn } from "@cp949/geul-model";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { createLocalPreviewAttrs } from "./media-local-preview.js";
+import type { IssueLocalPreview } from "./media-local-preview-discard.js";
 
 // 프리뷰를 가진 미디어 노드면 attrs의 프리뷰 2종을 새 blob URL로 바꾼다.
-const renewLocalPreview = (node: ProseMirrorNode): Record<string, unknown> =>
+const renewLocalPreview = (
+  node: ProseMirrorNode,
+  blockId: string,
+  issue: IssueLocalPreview,
+): Record<string, unknown> =>
   isMediaBlockType(node.type.name) &&
   typeof node.attrs.localPreviewUrl === "string"
     ? {
         ...node.attrs,
-        ...createLocalPreviewAttrs(node.attrs.localPreviewFile as File),
+        ...issue(node.attrs.localPreviewFile as File, blockId),
       }
     : node.attrs;
 
@@ -33,10 +37,13 @@ const renewLocalPreview = (node: ProseMirrorNode): Record<string, unknown> =>
 //
 // 미디어 노드의 로컬 프리뷰(ADR-0015)는 복제하지 않고 같은 File로 새 blob
 // URL을 발급한다 — 블록마다 독립된 revoke 생애주기를 가진다(Issue #378).
+// 발급은 호출자가 준 issue로 한다 — 발급자가 URL을 쌓아 두었다가 호출자가
+// 문서에 못 넣고 끝나면 해제 통지한다(Issue #379).
 export const cloneBlockSubtreeWithFreshIds = (
   node: ProseMirrorNode,
   blockId: string,
   takeId: () => string,
+  issue: IssueLocalPreview,
 ): ProseMirrorNode => {
   if (node.type.name === "table") {
     const oldColumns = (node.attrs.columns ?? []) as TableColumn[];
@@ -81,7 +88,7 @@ export const cloneBlockSubtreeWithFreshIds = (
 
   if (node.type.name !== "blockContainer" || node.childCount < 2) {
     return node.type.create(
-      { ...renewLocalPreview(node), blockId },
+      { ...renewLocalPreview(node, blockId, issue), blockId },
       node.content,
       node.marks,
     );
@@ -92,7 +99,7 @@ export const cloneBlockSubtreeWithFreshIds = (
   const newGroupChildren: ProseMirrorNode[] = [];
   groupNode.forEach((child) => {
     newGroupChildren.push(
-      cloneBlockSubtreeWithFreshIds(child, takeId(), takeId),
+      cloneBlockSubtreeWithFreshIds(child, takeId(), takeId, issue),
     );
   });
   const newGroup = groupNode.type.create(
