@@ -439,12 +439,24 @@ export const FilePanel = ({
   // media-toolbar.tsx applyReplaceUrl과 같은 분기.
   const applyUrl = () => {
     if (panelState.mode !== "open") return;
+    // name 초깃값은 마지막 path segment에서 추출한다(spec §6.1). URL 명령
+    // 인자로 함께 넘겨 url과 name을 한 transaction·한 undo 단위로 적용한다
+    // (Issue #374) — setMediaBlockName을 따로 부르면 undo가 두 번 필요하다.
+    // 추출 실패는 name을 넘기지 않는다(undefined) — media-block-extension.ts
+    // renderHTML(RD-002)이 이미 name 없으면 url로 폴백해 렌더하므로, 여기서
+    // "실패 시 URL 자체를 표시"를 다시 구현할 필요가 없다.
+    const extractedName = extractNameFromUrl(panelState.draft) ?? undefined;
     const result =
       panelState.kind === "iframe"
-        ? editor.commands.setIframeSrc(panelState.blockId, panelState.draft)
+        ? editor.commands.setIframeSrc(
+            panelState.blockId,
+            panelState.draft,
+            extractedName,
+          )
         : editor.commands.setMediaBlockUrl(
             panelState.blockId,
             panelState.draft,
+            extractedName,
           );
     if (!result.ok) {
       const rejectedMessage = iframeUrlRejectionMessage(
@@ -454,14 +466,6 @@ export const FilePanel = ({
       );
       setPanelState({ ...panelState, rejectedMessage });
       return;
-    }
-    // name 초깃값은 마지막 path segment에서 추출한다(spec §6.1). 추출
-    // 실패는 setMediaBlockName을 호출하지 않는다 — media-block-extension.ts
-    // renderHTML(RD-002)이 이미 name 없으면 url로 폴백해 렌더하므로, 여기서
-    // "실패 시 URL 자체를 표시"를 다시 구현할 필요가 없다.
-    const extractedName = extractNameFromUrl(panelState.draft);
-    if (extractedName !== null) {
-      editor.commands.setMediaBlockName(panelState.blockId, extractedName);
     }
     setPanelState({
       ...panelState,

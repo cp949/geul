@@ -398,7 +398,15 @@ export interface MediaCommands {
   // 적용할 수 없으므로 false를 반환한다(다른 isDestroyed 가드와 동일 원칙).
   isUploadEnabled(): boolean;
   readonly commands: {
-    setMediaBlockUrl(blockId: string, url: string): Result<void, EditorError>;
+    // name을 지정하면 url과 같은 트랜잭션·같은 undo 단위로 name도 세팅한다
+    // (Issue #374) — 호출부가 URL 적용과 이름 갱신을 setMediaBlockName
+    // 별도 호출로 나누면 undo가 두 번 필요하다. 생략하면 name은 그대로다.
+    // 거절(LINK_HREF_REJECTED 등)은 name을 지정해도 문서를 바꾸지 않는다.
+    setMediaBlockUrl(
+      blockId: string,
+      url: string,
+      name?: string,
+    ): Result<void, EditorError>;
     setMediaBlockName(blockId: string, name: string): Result<void, EditorError>;
     setMediaBlockCaption(
       blockId: string,
@@ -439,8 +447,15 @@ export interface MediaCommands {
     // runSetCodeBlockWrapCommand와 같은 근거로 commandNotApplicable을
     // 쓴다). URL 검증은 model resolveIframeEmbedDecision(host가 주입한
     // CreateEditorOptions.iframeEmbed)이 전담하고, 거절 시
-    // IFRAME_URL_NOT_ALLOWED(reason 포함)를 반환한다.
-    setIframeSrc(blockId: string, url: string): Result<void, EditorError>;
+    // IFRAME_URL_NOT_ALLOWED(reason 포함)를 반환한다. name을 지정하면 url과
+    // 같은 트랜잭션·같은 undo 단위로 name도 세팅한다(Issue #374, 접근성
+    // title 갱신). 생략하면 name은 그대로고, 거절 시 name을 지정해도
+    // 문서를 바꾸지 않는다.
+    setIframeSrc(
+      blockId: string,
+      url: string,
+      name?: string,
+    ): Result<void, EditorError>;
     // spec §4 — 콜백 호출·pending 상태 관리·성공 시 url(+name) 세팅을 한
     // 명령으로 묶는다(소비자에게 2단계로 노출하지 않음). 반환 Promise는
     // 사전 조건 실패(BLOCK_NOT_FOUND·미등록·이미 진행 중 등)만 ok:false로

@@ -633,7 +633,9 @@ export const MediaToolbar = ({
   };
 
   // file-panel.tsx applyUrl과 같은 관례 — 마지막 path segment로 이름을
-  // 추출해 저장한다(추출 실패는 setMediaBlockName을 호출하지 않는다).
+  // 추출해 URL 명령 인자로 함께 넘긴다(추출 실패는 name을 넘기지 않는다).
+  // url과 name이 한 transaction·한 undo 단위가 되도록 setMediaBlockName을
+  // 따로 부르지 않는다(Issue #374).
   // 성공하면 startReplaceUpload 성공 분기와 같은 finishReplacing으로
   // view에 돌아간다. iframe은 setMediaBlockUrl이 아니라 setIframeSrc로
   // 라우팅한다(CUS-001~004, RD-004 DELTA-02) — setMediaBlockUrl은
@@ -642,10 +644,11 @@ export const MediaToolbar = ({
   const applyReplaceUrl = () => {
     if (toolbarState.mode !== "replacing") return;
     const { blockId, draft, kind } = toolbarState;
+    const extractedName = extractNameFromUrl(draft) ?? undefined;
     const result =
       kind === "iframe"
-        ? editor.commands.setIframeSrc(blockId, draft)
-        : editor.commands.setMediaBlockUrl(blockId, draft);
+        ? editor.commands.setIframeSrc(blockId, draft, extractedName)
+        : editor.commands.setMediaBlockUrl(blockId, draft, extractedName);
     if (!result.ok) {
       const rejectedMessage = iframeUrlRejectionMessage(
         kind,
@@ -656,10 +659,6 @@ export const MediaToolbar = ({
         prev.mode === "replacing" ? { ...prev, rejectedMessage } : prev,
       );
       return;
-    }
-    const extractedName = extractNameFromUrl(draft);
-    if (extractedName !== null) {
-      editor.commands.setMediaBlockName(blockId, extractedName);
     }
     finishReplacing(blockId);
   };

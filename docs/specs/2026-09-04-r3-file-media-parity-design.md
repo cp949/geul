@@ -123,7 +123,7 @@ export type UploadFile = (
 ### 5.1 명령(신규)
 
 - `insertMediaBlock(afterBlockId, kind: "file" | "image" | "video" | "audio")`
-- `setMediaBlockUrl(blockId, url)` — URL 삽입(`MED-001`)과 업로드 성공 후 내부 세팅 공용
+- `setMediaBlockUrl(blockId, url, name?)` — URL 삽입(`MED-001`)과 업로드 성공 후 내부 세팅 공용. `name`을 지정하면 url과 같은 transaction·같은 undo 단위로 적용한다(Issue #374). 생략하면 name은 그대로다
 - `uploadMediaFile(blockId, file)` — 콜백 호출 + pending 상태 관리 + 성공 시 `setMediaBlockUrl` 내부 호출(소비자에게 2단계로 노출하지 않음)
 - `cancelMediaUpload(blockId)` — 등록된 `AbortSignal`을 abort
 - `replaceMediaBlockFile(blockId, file)` — §4.2 유지 정책을 따르는 교체(`MED-005`)

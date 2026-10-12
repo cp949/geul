@@ -1395,11 +1395,14 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
     });
     fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
 
+    // Issue #374 — 추출한 이름을 URL 명령 인자로 함께 넘겨 한 undo 단위로
+    // 적용한다(별도 setMediaBlockName 호출 없음).
     expect(setMediaBlockUrl).toHaveBeenCalledWith(
       "media-1",
       "https://example.com/dir/new-name.png",
+      "new-name.png",
     );
-    expect(setMediaBlockName).toHaveBeenCalledWith("media-1", "new-name.png");
+    expect(setMediaBlockName).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(
         screen.getByRole("button", { name: "More media options" }),
@@ -1410,6 +1413,29 @@ describe("MediaToolbar Replace Embed 탭(2026-09-12, 사용자 지시 — 다시
     expect(download.getAttribute("href")).toBe(
       "https://example.com/dir/new-name.png",
     );
+  });
+
+  it("Embed 탭에서 이름 추출에 실패하는 URL을 저장하면 URL 명령의 name 인자는 undefined이고 setMediaBlockName을 호출하지 않는다(Issue #374)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledImageBlock,
+      isUploadEnabled: () => true,
+    });
+    renderToolbar(controller);
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
+      target: { value: "https://example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(controller.commands.setMediaBlockUrl).toHaveBeenCalledWith(
+      "media-1",
+      "https://example.com",
+      undefined,
+    );
+    expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
   });
 
   it("Embed 탭의 URL 입력에서 IME 조합 중 Enter는 URL을 저장하지 않고 preventDefault하지 않는다(Issue #230)", () => {
@@ -1598,8 +1624,10 @@ describe("MediaToolbar iframe 전용 액션(CUS-001~004, roadmap Issue #212 RD-0
     expect(setIframeSrc).toHaveBeenCalledWith(
       "media-1",
       "https://www.youtube.com/embed/y",
+      "y",
     );
     expect(setMediaBlockUrl).not.toHaveBeenCalled();
+    expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(
         screen.getByRole("button", { name: "More media options" }),
@@ -1656,8 +1684,10 @@ describe("MediaToolbar iframe 전용 액션(CUS-001~004, roadmap Issue #212 RD-0
     expect(setIframeSrc).toHaveBeenCalledWith(
       "media-1",
       "https://www.youtube.com/embed/y",
+      "y",
     );
     expect(setMediaBlockUrl).not.toHaveBeenCalled();
+    expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
   });
 
   it.each([

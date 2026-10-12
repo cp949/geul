@@ -395,6 +395,113 @@ describe("setMediaBlockUrl", () => {
   });
 });
 
+describe("setMediaBlockUrl의 name 인자(url+name 원자 적용, Issue #374, G-EDT-001)", () => {
+  const oldUrl = "https://example.com/old.bin";
+  const newUrl = "https://example.com/new.bin";
+  const oldName = "old.bin";
+  const newName = "new.bin";
+  const mediaDocument = (kind: (typeof mediaKinds)[number]) =>
+    documentOf(
+      mediaBlock(kind, "m-1", { url: oldUrl, name: oldName }),
+      tailParagraphBlock,
+    );
+
+  it.each(mediaKinds)(
+    "%s 블록에 name을 지정하면 url과 name을 한 트랜잭션으로 세팅하고 undo 1회·redo 1회가 둘을 함께 되돌린다",
+    (kind) => {
+      const { editor, tiptap, changes } = mounted(mediaDocument(kind));
+      const before = editorState(editor, tiptap);
+      expect(editor.commands.setMediaBlockUrl("m-1", newUrl, newName)).toEqual(
+        okResult,
+      );
+      const after = editorState(editor, tiptap);
+      expect(editor.getDocument().blocks).toEqual([
+        mediaBlock(kind, "m-1", { url: newUrl, name: newName }),
+        tailParagraphBlock,
+      ]);
+      expect(changes).toEqual([
+        { revision: 1, changedBlockIds: ["m-1"], reason: "local" },
+      ]);
+
+      expect(editor.commands.undo()).toEqual(okResult);
+      expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+
+      expect(editor.commands.redo()).toEqual(okResult);
+      expect(editorState(editor, tiptap)).toEqual(restored(after, 3));
+    },
+  );
+
+  it("name을 생략하면 name을 바꾸지 않는다", () => {
+    const { editor } = mounted(mediaDocument("file"));
+    expect(editor.commands.setMediaBlockUrl("m-1", newUrl)).toEqual(okResult);
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("file", "m-1", { url: newUrl, name: oldName }),
+      tailParagraphBlock,
+    ]);
+  });
+
+  it("URL이 거절되면 name을 지정해도 문서와 history를 바꾸지 않는다", () => {
+    const { editor, tiptap, changes } = mounted(mediaDocument("image"));
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setMediaBlockUrl("m-1", "javascript:alert(1)", newName),
+    ).toEqual({
+      ok: false,
+      error: { code: "LINK_HREF_REJECTED", href: "javascript:alert(1)" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+  });
+
+  it("알 수 없는 blockId와 media가 아닌 블록은 name을 지정해도 문서와 history를 바꾸지 않는다", () => {
+    const { editor, tiptap, changes } = mounted(
+      documentOf(firstParagraphBlock, mediaBlock("iframe", "m-1")),
+    );
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setMediaBlockUrl("missing", newUrl, newName),
+    ).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+    expect(
+      editor.commands.setMediaBlockUrl("block-1", newUrl, newName),
+    ).toEqual(notApplicable("setMediaBlockUrl"));
+    // iframe은 setIframeSrc만 url을 세팅한다(보안 경계) — name을 줘도 같다.
+    expect(editor.commands.setMediaBlockUrl("m-1", newUrl, newName)).toEqual(
+      notApplicable("setMediaBlockUrl"),
+    );
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+    expect(editor.commands.undo().ok).toBe(false);
+  });
+
+  it("로컬 프리뷰가 있던 블록에 name을 지정해도 정리 신호를 기존과 같게 1회 낸다", () => {
+    const { editor, tiptap, localPreviewCleared } =
+      mountedWithLocalPreviewCleanup(mediaDocument("image"));
+    const staleFile = testFile();
+    seedLocalPreview(tiptap, "m-1", staleFile);
+
+    expect(editor.commands.setMediaBlockUrl("m-1", newUrl, newName)).toEqual(
+      okResult,
+    );
+
+    const position = findBlockPosition(tiptap.state.doc, "m-1");
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    expect(node?.attrs.url).toBe(newUrl);
+    expect(node?.attrs.name).toBe(newName);
+    expect(node?.attrs.localPreviewUrl).toBeNull();
+    expect(node?.attrs.localPreviewFile).toBeNull();
+    expect(localPreviewCleared).toEqual([
+      {
+        blockId: "m-1",
+        localPreviewUrl: expect.stringContaining("blob:"),
+        localPreviewFile: staleFile,
+      },
+    ]);
+  });
+});
+
 describe("setMediaBlockName / setMediaBlockCaption", () => {
   it("plain string을 세팅하고 각각 undo 1회로 복원한다", () => {
     const { editor, tiptap, changes } = mounted(
@@ -822,6 +929,90 @@ describe("setIframeSrc(CUS-001~004, RD-002 DELTA-02)", () => {
       editor.commands.setIframeSrc("block-1", "https://example.com"),
     ).toEqual(notApplicable("setIframeSrc"));
     expect(editorState(editor, tiptap)).toEqual(before);
+  });
+});
+
+describe("setIframeSrc의 name 인자(url+name 원자 적용, Issue #374, G-EDT-001)", () => {
+  const oldUrl = "https://www.youtube.com/embed/old";
+  const newUrl = "https://www.youtube.com/embed/new";
+  const iframeDocument = () =>
+    documentOf(
+      mediaBlock("iframe", "m-1", { url: oldUrl, name: "old-title" }),
+      tailParagraphBlock,
+    );
+
+  it("name을 지정하면 url과 name을 한 트랜잭션으로 세팅하고 undo 1회·redo 1회가 둘을 함께 되돌린다", () => {
+    const { editor, tiptap, changes } = mountedWithIframeEmbed(
+      iframeDocument(),
+      { providers: YOUTUBE_WHITELIST },
+    );
+    const before = editorState(editor, tiptap);
+    expect(editor.commands.setIframeSrc("m-1", newUrl, "new-title")).toEqual(
+      okResult,
+    );
+    const after = editorState(editor, tiptap);
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("iframe", "m-1", { url: newUrl, name: "new-title" }),
+      tailParagraphBlock,
+    ]);
+    expect(changes).toEqual([
+      { revision: 1, changedBlockIds: ["m-1"], reason: "local" },
+    ]);
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+
+    expect(editor.commands.redo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(after, 3));
+  });
+
+  it("name을 생략하면 name을 바꾸지 않는다", () => {
+    const { editor } = mountedWithIframeEmbed(iframeDocument(), {
+      providers: YOUTUBE_WHITELIST,
+    });
+    expect(editor.commands.setIframeSrc("m-1", newUrl)).toEqual(okResult);
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("iframe", "m-1", { url: newUrl, name: "old-title" }),
+      tailParagraphBlock,
+    ]);
+  });
+
+  it("URL이 거절되면 name을 지정해도 문서와 history를 바꾸지 않는다", () => {
+    const { editor, tiptap, changes } = mountedWithIframeEmbed(
+      iframeDocument(),
+      { providers: YOUTUBE_WHITELIST },
+    );
+    const before = editorState(editor, tiptap);
+    expect(
+      editor.commands.setIframeSrc("m-1", "https://vimeo.com/embed/x", "x"),
+    ).toEqual({
+      ok: false,
+      error: {
+        code: "IFRAME_URL_NOT_ALLOWED",
+        reason: "NOT_WHITELISTED_AND_CUSTOM_DISABLED",
+      },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+  });
+
+  it("알 수 없는 blockId와 iframe이 아닌 블록은 name을 지정해도 문서와 history를 바꾸지 않는다", () => {
+    const { editor, tiptap, changes } = mountedWithIframeEmbed(
+      documentOf(firstParagraphBlock, mediaBlock("iframe", "m-1")),
+      { providers: YOUTUBE_WHITELIST },
+    );
+    const before = editorState(editor, tiptap);
+    expect(editor.commands.setIframeSrc("missing", newUrl, "x")).toEqual({
+      ok: false,
+      error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+    });
+    expect(editor.commands.setIframeSrc("block-1", newUrl, "x")).toEqual(
+      notApplicable("setIframeSrc"),
+    );
+    expect(editorState(editor, tiptap)).toEqual(before);
+    expect(changes).toEqual([]);
+    // 거절된 호출이 undo 단위를 만들지 않았으므로 undo 대상이 없다.
+    expect(editor.commands.undo().ok).toBe(false);
   });
 });
 

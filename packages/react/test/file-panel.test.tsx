@@ -328,10 +328,14 @@ describe("FilePanel 파일 패널", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
 
+    // Issue #374 — 추출한 이름을 URL 명령 인자로 함께 넘겨 한 undo 단위로
+    // 적용한다(별도 setMediaBlockName 호출 없음).
     expect(controller.commands.setMediaBlockUrl).toHaveBeenCalledWith(
       "media-1",
       "https://example.com/dir/photo.png",
+      "photo.png",
     );
+    expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
   });
 
   it("Enter로도 URL을 제출한다", () => {
@@ -349,7 +353,9 @@ describe("FilePanel 파일 패널", () => {
     expect(controller.commands.setMediaBlockUrl).toHaveBeenCalledWith(
       "media-1",
       "https://example.com/dir/photo.png",
+      "photo.png",
     );
+    expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
   });
 
   it("IME 조합 중 Enter는 URL을 제출하지 않고 preventDefault하지 않는다(Issue #230)", () => {
@@ -389,7 +395,7 @@ describe("FilePanel 파일 패널", () => {
     });
   }
 
-  it("제출 성공 시 마지막 path segment로 이름을 추출해 저장하고 패널에 표시한다", () => {
+  it("제출 성공 시 마지막 path segment로 이름을 추출해 URL 명령 인자로 넘기고 패널에 표시한다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => emptyImageBlock,
     });
@@ -400,14 +406,16 @@ describe("FilePanel 파일 패널", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
 
-    expect(controller.commands.setMediaBlockName).toHaveBeenCalledWith(
+    expect(controller.commands.setMediaBlockUrl).toHaveBeenCalledWith(
       "media-1",
+      "https://example.com/dir/photo.png",
       "photo.png",
     );
+    expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
     expect(screen.getByText("Name: photo.png")).not.toBeNull();
   });
 
-  it("이름 추출에 실패하면 setMediaBlockName을 호출하지 않고 URL 자체를 표시한다", () => {
+  it("이름 추출에 실패하면 URL 명령의 name 인자는 undefined이고 URL 자체를 표시한다", () => {
     const controller = fakeController({
       getSelectionMediaBlock: () => emptyImageBlock,
     });
@@ -418,6 +426,11 @@ describe("FilePanel 파일 패널", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
 
+    expect(controller.commands.setMediaBlockUrl).toHaveBeenCalledWith(
+      "media-1",
+      "https://example.com",
+      undefined,
+    );
     expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
     expect(screen.getByText("Name: https://example.com")).not.toBeNull();
   });
@@ -918,8 +931,10 @@ describe("FilePanel iframe 전용(CUS-001~004, roadmap Issue #212 RD-004 DELTA-0
     expect(controller.commands.setIframeSrc).toHaveBeenCalledWith(
       "media-1",
       "https://www.youtube.com/embed/y",
+      "y",
     );
     expect(controller.commands.setMediaBlockUrl).not.toHaveBeenCalled();
+    expect(controller.commands.setMediaBlockName).not.toHaveBeenCalled();
   });
 
   it.each([

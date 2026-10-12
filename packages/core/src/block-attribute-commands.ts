@@ -383,9 +383,14 @@ export const createBlockAttributeCommands = (
   // image/video/audio 전용)를 재사용하지 않는다 — 대상 kind가 "iframe"
   // 단일 타입이고(4종 전체가 아님), 로컬 프리뷰 정리 감지도 필요 없다
   // (iframe은 업로드 플로우가 없어 localPreviewUrl이 항상 null).
+  //
+  // name을 지정하면 같은 setNodeMarkup의 attrs에 url과 함께 넣는다(Issue
+  // #374) — URL 적용과 이름 갱신이 별도 명령이면 closeHistory가 각각 박혀
+  // undo가 두 번 필요하다. 거절 판정은 name과 무관하게 url 기준이다.
   const runSetIframeSrcCommand = (
     blockId: string,
     url: string,
+    name?: string,
   ): Result<void, EditorError> => {
     const command = "setIframeSrc";
     if (session.isDestroyed) return commandNotApplicable(command);
@@ -412,7 +417,7 @@ export const createBlockAttributeCommands = (
       const transaction = session.editor.state.tr.setNodeMarkup(
         position,
         undefined,
-        { ...node.attrs, url },
+        { ...node.attrs, url, ...(name === undefined ? {} : { name }) },
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
@@ -461,9 +466,13 @@ export const createBlockAttributeCommands = (
           : { code: "INVALID_ALIGN", align: value },
       (attrs, value) => ({ ...attrs, textAlignment: value }),
     );
+  // name을 지정하면 url과 같은 트랜잭션에서 세팅한다(Issue #374, G-EDT-001) —
+  // 호출부가 setMediaBlockName을 따로 부르면 undo가 두 번 필요해진다.
+  // 생략하면 name은 그대로다.
   const setMediaBlockUrl = (
     blockId: string,
     url: string,
+    name?: string,
   ): Result<void, EditorError> =>
     runSetMediaBlockAttrCommand(
       "setMediaBlockUrl",
@@ -481,6 +490,7 @@ export const createBlockAttributeCommands = (
       (attrs, value) => ({
         ...attrs,
         url: value,
+        ...(name === undefined ? {} : { name }),
         ...(attrs.localPreviewUrl === null
           ? {}
           : { localPreviewUrl: null, localPreviewFile: null }),
@@ -546,7 +556,8 @@ export const createBlockAttributeCommands = (
   const setIframeSrc = (
     blockId: string,
     url: string,
-  ): Result<void, EditorError> => runSetIframeSrcCommand(blockId, url);
+    name?: string,
+  ): Result<void, EditorError> => runSetIframeSrcCommand(blockId, url, name);
   const setCodeBlockWrap = (
     blockId: string,
     wrap: boolean,

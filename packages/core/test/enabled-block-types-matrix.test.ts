@@ -250,7 +250,7 @@ const UNRELATED_COMMANDS: Partial<Record<CommandName, string>> = {
   setBlockTextAlignment:
     "blockContainer의 textAlignment attr만 바꾼다(block-attribute-commands.ts).",
   setMediaBlockUrl:
-    "기존 미디어 블록의 url attr만 바꾼다(block-attribute-commands.ts). 막은 kind는 문서에 없다.",
+    "기존 미디어 블록의 url attr(선택 인자 name이 있으면 name attr도)만 바꾼다(block-attribute-commands.ts). 막은 kind는 문서에 없다.",
   setMediaBlockName:
     "기존 미디어 블록의 name attr만 바꾼다(block-attribute-commands.ts).",
   setMediaBlockCaption:
@@ -264,7 +264,7 @@ const UNRELATED_COMMANDS: Partial<Record<CommandName, string>> = {
   setMediaTextAlignment:
     "기존 미디어 블록의 textAlignment attr만 바꾼다(block-attribute-commands.ts).",
   setIframeSrc:
-    "기존 iframe 블록의 src attr만 바꾼다(block-attribute-commands.ts). 막은 iframe은 문서에 없다.",
+    "기존 iframe 블록의 url attr(선택 인자 name이 있으면 name attr도)만 바꾼다(block-attribute-commands.ts). 막은 iframe은 문서에 없다.",
   setCodeBlockWrap:
     "기존 codeBlock의 wrap attr만 바꾼다(block-attribute-commands.ts).",
   setCodeBlockCaption:
