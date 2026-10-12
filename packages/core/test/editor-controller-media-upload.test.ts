@@ -405,6 +405,188 @@ describe("uploadMediaFile — 경합 가드", () => {
     pending[0]!.resolve({ status: "cancelled" });
     await first;
   });
+
+  // Issue #387 — 가드가 blockId만 보던 때는 같은 id의 다른 블록으로 교체돼도
+  // 옛 업로드 결과가 새 블록 url을 덮어썼다. 시작 시점의 type·url과 다르면
+  // 교체된 것으로 보고 결과를 무시한다.
+  it("업로드 중 replaceBlocks로 같은 id의 url이 다른 미디어 블록으로 교체되면 완료 결과를 무시하고 교체한 블록을 유지한다(Issue #387)", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    const replacement = mediaBlock("image", "m-1", {
+      url: "https://example.com/new.png",
+    });
+    expect(editor.replaceBlocks(["m-1"], [replacement]).ok).toBe(true);
+    const afterReplace = editorState(editor, tiptap);
+    const changesAfterReplace = [...changes];
+
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/old-upload.png",
+    });
+    expect(await uploadPromise).toEqual(okResult);
+
+    expect(editor.getDocument().blocks).toEqual([
+      replacement,
+      tailParagraphBlock,
+    ]);
+    expect(editorState(editor, tiptap)).toEqual(afterReplace);
+    expect(changes).toEqual(changesAfterReplace);
+    expect(editor.getMediaUploadState("m-1")).toBeNull();
+  });
+
+  it("업로드 중 updateBlock으로 같은 id의 url이 바뀌면 완료 결과를 무시하고 바꾼 블록을 유지한다(Issue #387)", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap, changes } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    expect(
+      editor.updateBlock("m-1", {
+        type: "image",
+        url: "https://example.com/new.png",
+      }).ok,
+    ).toBe(true);
+    const afterUpdate = editorState(editor, tiptap);
+    const changesAfterUpdate = [...changes];
+
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/old-upload.png",
+    });
+    expect(await uploadPromise).toEqual(okResult);
+
+    expect(editor.getDocument().blocks).toEqual([
+      mediaBlock("image", "m-1", { url: "https://example.com/new.png" }),
+      tailParagraphBlock,
+    ]);
+    expect(editorState(editor, tiptap)).toEqual(afterUpdate);
+    expect(changes).toEqual(changesAfterUpdate);
+    expect(editor.getMediaUploadState("m-1")).toBeNull();
+  });
+
+  it.each<[string, UploadResult]>([
+    [
+      "error",
+      { status: "error", code: "UPLOAD_FAILED", message: "네트워크 오류" },
+    ],
+    ["cancelled", { status: "cancelled" }],
+  ])(
+    "같은 id가 paragraph로 바뀐 뒤 %s 결과가 와도 pending 상태를 지우고 새 블록에 상태를 남기지 않는다(Issue #387)",
+    async (_label, result) => {
+      const { uploadFile, pending } = controllableUploadFile();
+      const { editor, tiptap, changes, uploadStateChanges } = mountedWithUpload(
+        documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+        { uploadFile },
+      );
+
+      const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+      expect(
+        editor.replaceBlocks(["m-1"], [paragraphBlock("m-1", "교체")]).ok,
+      ).toBe(true);
+      const afterReplace = editorState(editor, tiptap);
+      const changesAfterReplace = [...changes];
+
+      pending[0]!.resolve(result);
+      expect(await uploadPromise).toEqual(okResult);
+
+      expect(editor.getMediaUploadState("m-1")).toBeNull();
+      expect(uploadStateChanges).toEqual([
+        { blockId: "m-1", state: "uploading" },
+        { blockId: "m-1", state: null },
+      ]);
+      expect(editorState(editor, tiptap)).toEqual(afterReplace);
+      expect(changes).toEqual(changesAfterReplace);
+    },
+  );
+
+  it("업로드 중 setMediaBlockUrl로 url이 바뀌면 완료 결과를 무시하고 바꾼 url을 유지한다(Issue #387)", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, changes } = mountedWithUpload(
+      documentOf(
+        mediaBlock("image", "m-1", { url: "https://example.com/first.png" }),
+        tailParagraphBlock,
+      ),
+      { uploadFile },
+    );
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    expect(
+      editor.commands.setMediaBlockUrl("m-1", "https://example.com/other.png"),
+    ).toEqual(okResult);
+    const changesAfterSet = [...changes];
+
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/old-upload.png",
+    });
+    expect(await uploadPromise).toEqual(okResult);
+
+    expect(editor.getDocument().blocks[0]).toEqual(
+      mediaBlock("image", "m-1", { url: "https://example.com/other.png" }),
+    );
+    expect(changes).toEqual(changesAfterSet);
+    expect(editor.getMediaUploadState("m-1")).toBeNull();
+  });
+
+  it("업로드 중 updateBlock으로 caption만 바뀌면 url이 같아 success 결과를 적용하고 caption을 유지한다(Issue #387)", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor } = mountedWithUpload(
+      documentOf(
+        mediaBlock("image", "m-1", { url: "https://example.com/first.png" }),
+        tailParagraphBlock,
+      ),
+      { uploadFile },
+    );
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    expect(
+      editor.updateBlock("m-1", { type: "image", caption: "새 캡션" }).ok,
+    ).toBe(true);
+
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/uploaded.png",
+    });
+    expect(await uploadPromise).toEqual(okResult);
+
+    expect(editor.getDocument().blocks[0]).toEqual(
+      mediaBlock("image", "m-1", {
+        url: "https://example.com/uploaded.png",
+        caption: "새 캡션",
+      }),
+    );
+    expect(editor.getMediaUploadState("m-1")).toBeNull();
+  });
+
+  it("업로드 중 deleteBlock 뒤 undo로 같은 블록이 돌아오면 success 결과를 적용한다(Issue #387)", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor } = mountedWithUpload(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+      { uploadFile },
+    );
+
+    const uploadPromise = editor.commands.uploadMediaFile("m-1", testFile());
+    expect(editor.commands.deleteBlock("m-1")).toEqual(okResult);
+    expect(editor.commands.undo()).toEqual(okResult);
+
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/uploaded.png",
+    });
+    expect(await uploadPromise).toEqual(okResult);
+
+    expect(editor.getDocument().blocks[0]).toEqual(
+      mediaBlock("image", "m-1", { url: "https://example.com/uploaded.png" }),
+    );
+    expect(editor.getMediaUploadState("m-1")).toBeNull();
+  });
 });
 
 /**
