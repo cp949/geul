@@ -496,14 +496,13 @@ export class ProductionEditorSession {
     this.options.onUploadStateChange?.(blockId, state);
   }
 
-  // MediaUploadHost 표면(production-editor-media-upload.ts::
-  // applyUploadedMediaAttrs)과 block-attribute-commands.ts::setMediaBlockUrl
-  // 공용 — url 확정 시 정리된 로컬 프리뷰를 알린다(Issue #168 roadmap
-  // RD-001 DELTA-05). notifyUploadStateChange와 동일한 "options private라
-  // 위임 메서드로 대신한다" 근거.
+  // 로컬 프리뷰 정리 통지의 단일 출구다(Issue #168 roadmap RD-001
+  // DELTA-05). lifecycle 도달 판정, 거절·되돌림 정리, destroy()·
+  // replaceDocument() 스윕이 부른다. url 확정 경로는 부르지 않는다 —
+  // undo로 URL이 돌아올 수 있어서다(Issue #382). options가 private라
+  // 위임 메서드로 대신한다(notifyUploadStateChange와 같은 근거).
   //
-  // 같은 URL은 한 번만 알린다(Issue #383). 즉시 통지 경로(url 확정,
-  // updateBlock, 거절 정리, 스윕)와 lifecycle 통지가 한 URL에서 겹쳐도
+  // 같은 URL은 한 번만 알린다(Issue #383). 경로가 한 URL에서 겹쳐도
   // 이 메서드 한 곳에서 막는다.
   notifyLocalPreviewCleared(blockId: string, cleared: LocalPreviewAttrs): void {
     if (this.clearedLocalPreviewUrls.has(cleared.localPreviewUrl)) return;
@@ -582,14 +581,21 @@ export class ProductionEditorSession {
     return { ok: true, value: undefined };
   }
 
+  // options.acceptUnchangedModel은 undo·redo 전용이다(Issue #382). run()이
+  // true이고 PM state가 바뀌었으면 모델 변경이 없어도 ok를 돌려준다. 이때
+  // onChange와 revision은 올리지 않는다. 프리뷰 적용 step처럼 모델 diff가 없는
+  // step을 되돌려도 Result가 PM 상태와 어긋나지 않게 한다(G-EDT-001).
+  // PM이 바뀌지 않았으면(빈 history, 트랜잭션 거절) 기존대로 거절한다.
   runDocumentCommand(
     command: string,
     reason: ChangeReason,
     run: () => boolean,
+    options: { acceptUnchangedModel?: boolean } = {},
   ): Result<void, EditorError> {
     if (this.destroyed || this.sessionRevision >= Number.MAX_SAFE_INTEGER) {
       return commandNotApplicable(command);
     }
+    const stateBefore = this.tiptapEditor.state;
     this.activeReason = reason;
     this.pendingDocument = null;
     let applied: boolean;
@@ -602,7 +608,11 @@ export class ProductionEditorSession {
     const nextDocument =
       this.pendingDocument ?? this.readEditorDocument(this.tiptapEditor);
     this.pendingDocument = null;
-    return this.commitDocument(nextDocument, reason)
+    if (this.commitDocument(nextDocument, reason)) {
+      return { ok: true, value: undefined };
+    }
+    return options.acceptUnchangedModel === true &&
+      this.tiptapEditor.state !== stateBefore
       ? { ok: true, value: undefined }
       : commandNotApplicable(command);
   }
@@ -712,10 +722,9 @@ export class ProductionEditorSession {
       triggerMediaUpload: (blockId: string, file: File) => {
         void this.uploadMediaFile("mediaDropPasteUpload", blockId, file);
       },
-      // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-02) — url
-      // 확정 정리(notifyLocalPreviewCleared, MediaUploadHost 구현)와 같은
-      // onLocalPreviewCleanup 채널을 그대로 재사용한다(RD-002.md "결정" —
-      // 신호 채널 재사용, 신규 공개 옵션 아님).
+      // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-02) —
+      // notifyLocalPreviewCleared와 같은 onLocalPreviewCleanup 채널을 그대로
+      // 재사용한다(RD-002.md "결정" — 신호 채널 재사용, 신규 공개 옵션 아님).
       notifyLocalPreviewUnreachable: (
         blockId: string,
         cleared: LocalPreviewAttrs,
@@ -729,10 +738,6 @@ export class ProductionEditorSession {
       notifyLocalPreviewPendingChange: (pending) => {
         this.pendingUnreachableLocalPreviews = pending;
       },
-      // MediaLocalPreviewLifecycleExtension 전용(Issue #383) — 이미 알린
-      // URL은 그 확장이 다시 추적하지 않게 한다.
-      isLocalPreviewCleared: (url: string) =>
-        this.clearedLocalPreviewUrls.has(url),
     });
   }
 

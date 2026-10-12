@@ -18,9 +18,9 @@ export type PendingLocalPreview = {
 export type MediaLocalPreviewLifecycleOptions = {
   // Issue #168 roadmap RD-002 DELTA-02 — 문서에서 빠진 로컬 프리뷰(ADR 0015)
   // URL이 더 이상 undo로도 redo로도 복구 불가라고 판정되면 호출한다.
-  // production-editor-session.ts가 기존 `notifyLocalPreviewCleared`(url
-  // 확정 시 정리와 같은 채널, RD-002.md "결정" — 신호 채널 재사용)로
-  // 연결한다. 미지정이면 no-op(MediaDropPasteExtension의 기본값과 동일
+  // production-editor-session.ts가 기존 `notifyLocalPreviewCleared`
+  // (RD-002.md "결정" — 신호 채널 재사용)로 연결한다. url 확정 경로의
+  // 통지도 이 판정이 맡는다(Issue #382). 미지정이면 no-op(MediaDropPasteExtension의 기본값과 동일
   // 근거 — production-editor-assembly.ts가 항상 실제 콜백을 넘긴다).
   notifyUnreachable: (blockId: string, cleared: LocalPreviewAttrs) => void;
   // Issue #168 roadmap RD-002 DELTA-03 — 빠졌지만 아직 복구 불가 판정을
@@ -36,13 +36,6 @@ export type MediaLocalPreviewLifecycleOptions = {
   notifyPendingChange?: (
     pending: ReadonlyMap<string, PendingLocalPreview>,
   ) => void;
-  // Issue #383 — 이미 정리 신호를 낸 URL인지 묻는다. 즉시 통지 경로(url 확정,
-  // updateBlock, replaceBlocks)는 문서에서 URL을 지우고 통지는 dispatch 뒤에
-  // 나간다. 그래서 그 변경에서는 URL이 pending에 한 번 들어간다.
-  // true인 URL은 다음 문서 변경에서 pending을 비우고 새로 넣지 않는다.
-  // 그 사이 스윕의 중복 통지는 세션의 URL당 1회 차단이 막는다.
-  // 미지정이면 항상 false.
-  isCleared?: (url: string) => boolean;
 };
 
 // doc에서 로컬 프리뷰(ADR 0015) attrs가 남은 미디어 블록을 blockId 키로
@@ -132,7 +125,6 @@ export const MediaLocalPreviewLifecycleExtension =
     addProseMirrorPlugins() {
       const notifyUnreachable = this.options.notifyUnreachable;
       const notifyPendingChange = this.options.notifyPendingChange;
-      const isCleared = this.options.isCleared ?? (() => false);
       // 문서에서 빠졌지만 아직 undo·redo로 복구 가능한지 재판정 대기 중인
       // 로컬 프리뷰(키 = URL) — 확장 인스턴스(= Tiptap Editor 인스턴스, 세션
       // 재구성마다 새로 만들어짐)당 하나. BlockIdExtension의 createId 클로저와
@@ -185,19 +177,17 @@ export const MediaLocalPreviewLifecycleExtension =
 
             let changed = false;
 
-            // 새로 빠진 URL을 재판정 대기열에 추가한다. 이미 정리 신호를 낸
-            // URL은 넣지 않는다.
+            // 새로 빠진 URL을 재판정 대기열에 추가한다.
             for (const [url, entry] of oldPreviews) {
-              if (newPreviews.has(url) || isCleared(url)) continue;
+              if (newPreviews.has(url)) continue;
               pending.set(url, entry);
               changed = true;
             }
 
             // 실제 undo·redo로 복구된 URL은 대기열에서 뺀다 — 이후 아무리 새
             // undo 이벤트가 쌓여도 이 URL을 다시 정리 대상으로 보지 않는다.
-            // 이미 정리 신호를 낸 URL도 뺀다(통지는 하지 않는다).
             for (const url of pending.keys()) {
-              if (newPreviews.has(url) || isCleared(url)) {
+              if (newPreviews.has(url)) {
                 pending.delete(url);
                 changed = true;
               }

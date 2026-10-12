@@ -22,7 +22,6 @@ import type { EditorError } from "./errors.js";
 import {
   carryOverLocalPreviews,
   carryOverLocalPreviewsFromNodes,
-  type ClearedLocalPreview,
 } from "./media-local-preview-carry-over.js";
 import {
   blockToTiptapJson,
@@ -257,14 +256,15 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
     // 심긴 상태도 같은 내용으로 판정해 거절한다(정리 판정을 먼저 하면 프리뷰가
     // 사라진 fragment가 되어 eq가 false가 된다).
     const comparable = Fragment.fromJSON(session.editor.schema, [
-      carryOverLocalPreviews(node, baseJson, false).json,
+      carryOverLocalPreviews(node, baseJson, false),
     ]);
     if (comparable.eq(Fragment.from(node))) {
       return commandNotApplicable("updateBlock");
     }
     // dispatch용 fragment. url이 생긴 미디어는 프리뷰를 이어받지 않고
-    // 정리한다(setMediaBlockUrl과 같은 판정).
-    const { json, cleared } = carryOverLocalPreviews(node, baseJson, true);
+    // 정리한다(setMediaBlockUrl과 같은 판정). 통지는 하지 않는다 — undo로
+    // URL이 돌아올 수 있어서다. Lifecycle이 못 돌아올 때 낸다(Issue #382).
+    const json = carryOverLocalPreviews(node, baseJson, true);
     const fragment = Fragment.fromJSON(session.editor.schema, [json]);
 
     const result = session.runDocumentCommand("updateBlock", "local", () => {
@@ -277,10 +277,6 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       return true;
     });
     if (!result.ok) return result;
-    // 커밋이 반영된 뒤에만 정리 전 값으로 통지한다(setMediaBlockUrl과 같은 순서).
-    for (const { blockId: clearedId, attrs } of cleared) {
-      session.notifyLocalPreviewCleared(clearedId, attrs);
-    }
     return { ok: true, value: updatedBlock };
   };
 
@@ -378,8 +374,8 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
 
     // 로컬 프리뷰(ADR 0015)는 저장 모델에 없는 PM 전용 attrs라 모델에서 만든
     // JSON에는 없다. 제거 서브트리마다 blockId로 기존 프리뷰를 이어받는다
-    // (updateBlock과 같은 규칙, Issue #383). 콜백이 거절되면 통지하지 않는다.
-    const cleared: ClearedLocalPreview[] = [];
+    // (updateBlock과 같은 규칙, Issue #383). url이 생긴 미디어의 프리뷰는
+    // 이어받지 않고, 통지는 Lifecycle이 맡는다(Issue #382).
     const result = session.runDocumentCommand("replaceBlocks", "local", () => {
       // 제거 대상 위치는 삽입 전 문서에서 구한다 — 이 시점에는 id가 유일하다.
       // 삽입 뒤 id로 찾으면 같은 id의 삽입 블록을 집는다(Issue #386).
@@ -396,14 +392,11 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       }
       const anchorPosition = removedPositions[0];
       if (anchorPosition === undefined) return false;
-      cleared.length = 0;
-      const carried = carryOverLocalPreviewsFromNodes(
+      const insertedJson = carryOverLocalPreviewsFromNodes(
         removedNodes,
         insertedBlocks.map(blockToTiptapJson),
         true,
       );
-      cleared.push(...carried.cleared);
-      const insertedJson = carried.jsons;
       const fragment = Fragment.fromJSON(session.editor.schema, insertedJson);
       let transaction = session.editor.state.tr.insert(
         anchorPosition,
@@ -449,10 +442,6 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       return true;
     });
     if (!result.ok) return result;
-    // 커밋이 반영된 뒤에만 정리 전 값으로 통지한다(updateBlock과 같은 순서).
-    for (const { blockId, attrs } of cleared) {
-      session.notifyLocalPreviewCleared(blockId, attrs);
-    }
     return { ok: true, value: { insertedBlocks, removedBlocks } };
   };
 

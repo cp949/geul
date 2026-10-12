@@ -4,11 +4,6 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import type { TiptapJsonNode } from "./model-to-tiptap.js";
 
-export type ClearedLocalPreview = {
-  blockId: string;
-  attrs: LocalPreviewAttrs;
-};
-
 // oldNode 자신과 모든 후손에서 로컬 프리뷰가 남은 미디어를 blockId로 모은다.
 // Node.descendants는 자신을 방문하지 않아 oldNode를 따로 확인한다.
 // collectLocalPreviewBlocks(media-local-preview-lifecycle-extension.ts)는
@@ -43,9 +38,7 @@ const applyPreviews = (
   previews: ReadonlyMap<string, LocalPreviewAttrs>,
   json: TiptapJsonNode,
   clearWhenUrl: boolean,
-): { json: TiptapJsonNode; cleared: ClearedLocalPreview[] } => {
-  const cleared: ClearedLocalPreview[] = [];
-
+): TiptapJsonNode => {
   const visit = (node: TiptapJsonNode): TiptapJsonNode => {
     let next = node;
     const blockId = node.attrs?.blockId;
@@ -57,9 +50,9 @@ const applyPreviews = (
         : undefined;
     if (preview !== undefined) {
       const url = node.attrs?.url;
-      if (clearWhenUrl && typeof url === "string" && url.length > 0) {
-        cleared.push({ blockId: blockId as string, attrs: preview });
-      } else {
+      const confirmsUrl =
+        clearWhenUrl && typeof url === "string" && url.length > 0;
+      if (!confirmsUrl) {
         next = {
           ...node,
           attrs: {
@@ -74,7 +67,7 @@ const applyPreviews = (
     return { ...next, content: node.content.map(visit) };
   };
 
-  return { json: visit(json), cleared };
+  return visit(json);
 };
 
 // 로컬 프리뷰(ADR 0015)는 저장 모델에 없는 PM 전용 attrs다. 모델에서 PM
@@ -82,19 +75,20 @@ const applyPreviews = (
 // 만든 JSON으로 노드를 교체하는 명령이 이 함수로 기존 프리뷰를 이어받는다.
 //
 // oldNode(서브트리)에 있던 로컬 프리뷰를 blockId로 짝지어 json에 이어받는다.
-// clearWhenUrl이 true면 json의 url이 비어 있지 않은 미디어는 이어받지 않고
-// cleared에 담는다(url 확정 = 프리뷰 정리, setMediaBlockUrl과 같은 판정).
-// 입력 json은 바꾸지 않는다. json에 없는 노드(삭제된 자식)는 이어받지 않는다
-// — 그 정리는 MediaLocalPreviewLifecycleExtension이 소유한다. 이어받지
-// 못한 URL(삭제된 자식, 같은 blockId가 미디어가 아닌 타입으로 바뀐 경우)은
-// Lifecycle이 URL 기준으로 통지한다(Issue #383).
+// clearWhenUrl이 true면 json의 url이 비어 있지 않은 미디어는 이어받지 않는다
+// (url 확정 = 프리뷰 정리, setMediaBlockUrl과 같은 판정). 이어받지 않은 URL의
+// 통지는 이 모듈이 아니라 MediaLocalPreviewLifecycleExtension이 undo·redo로
+// 못 돌아올 때 낸다(Issue #382). 입력 json은 바꾸지 않는다. json에 없는
+// 노드(삭제된 자식)는 이어받지 않는다 — 그 정리도 Lifecycle이 소유한다.
+// 이어받지 못한 URL(삭제된 자식, 같은 blockId가 미디어가 아닌 타입으로 바뀐
+// 경우)은 Lifecycle이 URL 기준으로 통지한다(Issue #383).
 export const carryOverLocalPreviews = (
   oldNode: ProseMirrorNode,
   json: TiptapJsonNode,
   clearWhenUrl: boolean,
-): { json: TiptapJsonNode; cleared: ClearedLocalPreview[] } => {
+): TiptapJsonNode => {
   const previews = collectSubtreePreviews(oldNode);
-  if (previews.size === 0) return { json, cleared: [] };
+  if (previews.size === 0) return json;
   return applyPreviews(previews, json, clearWhenUrl);
 };
 
@@ -105,19 +99,13 @@ export const carryOverLocalPreviewsFromNodes = (
   oldNodes: readonly ProseMirrorNode[],
   jsons: readonly TiptapJsonNode[],
   clearWhenUrl: boolean,
-): { jsons: TiptapJsonNode[]; cleared: ClearedLocalPreview[] } => {
+): TiptapJsonNode[] => {
   const previews = new Map<string, LocalPreviewAttrs>();
   for (const node of oldNodes) {
     for (const [blockId, attrs] of collectSubtreePreviews(node)) {
       previews.set(blockId, attrs);
     }
   }
-  if (previews.size === 0) return { jsons: [...jsons], cleared: [] };
-  const cleared: ClearedLocalPreview[] = [];
-  const applied = jsons.map((json) => {
-    const result = applyPreviews(previews, json, clearWhenUrl);
-    cleared.push(...result.cleared);
-    return result.json;
-  });
-  return { jsons: applied, cleared };
+  if (previews.size === 0) return [...jsons];
+  return jsons.map((json) => applyPreviews(previews, json, clearWhenUrl));
 };

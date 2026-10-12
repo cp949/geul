@@ -433,10 +433,6 @@ export const createProductionEditor = (options: {
   notifyLocalPreviewPendingChange?: (
     pending: ReadonlyMap<string, PendingLocalPreview>,
   ) => void;
-  // MediaLocalPreviewLifecycleExtension 전용(Issue #383) — 이미 정리 신호를
-  // 낸 URL인지 묻는다. true인 URL은 그 확장이 다시 추적하지 않는다. 미지정이면
-  // 그 확장 자신의 기본값(항상 false)을 쓴다.
-  isLocalPreviewCleared?: (url: string) => boolean;
   // spec §5(EXT-005), RD-002-DELTA-01 — CustomKeyboardShortcutsExtension에
   // 그대로 전달한다(keyboardShortcutsEditor는 customBlockEditor와 동일한
   // 지연 바인딩 Proxy — editor-controller.ts::createEditor 배선 참고).
@@ -804,9 +800,6 @@ export const createProductionEditor = (options: {
           : {
               notifyPendingChange: options.notifyLocalPreviewPendingChange,
             }),
-        ...(options.isLocalPreviewCleared === undefined
-          ? {}
-          : { isCleared: options.isLocalPreviewCleared }),
       }),
       LinkPolicyExtension,
       RevisionGuardExtension.configure({

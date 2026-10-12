@@ -9,10 +9,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { findBlockPosition, hasSameModelMarkup } from "./block-position.js";
 import type { EditorError } from "./errors.js";
-import {
-  createLocalPreviewAttrs,
-  type LocalPreviewAttrs,
-} from "./media-local-preview.js";
+import { createLocalPreviewAttrs } from "./media-local-preview.js";
 import type {
   MediaUploadState,
   UploadFile,
@@ -61,9 +58,6 @@ export interface MediaUploadHost {
     blockId: string,
     state: MediaUploadState | null,
   ): void;
-  // Issue #168 roadmap RD-001 DELTA-05 — applyUploadedMediaAttrs가 url
-  // 확정과 함께 로컬 프리뷰를 정리할 때 알린다.
-  notifyLocalPreviewCleared(blockId: string, cleared: LocalPreviewAttrs): void;
 }
 
 // spec §4.2 — blockSelection과 같은 세션 전용 상태(모델 스키마 밖,
@@ -121,10 +115,10 @@ export class MediaUploadTracker {
   // 반환된 name을 단일 트랜잭션으로 세팅"). name이 undefined면 기존
   // node.attrs를 스프레드해 그대로 유지한다 — setNodeMarkup에 부분 attrs를
   // 넘기면 나머지가 schema default로 리셋되는 함정을 피한다. 대상에 로컬
-  // 프리뷰(ADR 0015)가 남아 있었으면 같은 트랜잭션에서 null로 정리하고,
-  // 커밋이 실제로 반영된 뒤에만(runDocumentCommand.ok) 정리 전 값으로
-  // notifyLocalPreviewCleared를 호출한다(Issue #168 roadmap RD-001
-  // DELTA-05) — replaceMediaBlockFile도 이 메서드를 공유해 command만
+  // 프리뷰(ADR 0015)가 남아 있었으면 같은 트랜잭션에서 null로 정리한다.
+  // 통지는 하지 않는다 — undo로 URL이 돌아올 수 있어서다.
+  // MediaLocalPreviewLifecycleExtension이 undo·redo로 못 돌아올 때 낸다
+  // (Issue #382). replaceMediaBlockFile도 이 메서드를 공유해 command만
   // 다르게 호출하므로 두 공개 명령 모두 동일하게 적용된다.
   private applyUploadedMediaAttrs(
     command: string,
@@ -142,20 +136,14 @@ export class MediaUploadTracker {
     ) {
       return false;
     }
-    const staleLocalPreview =
-      typeof node.attrs.localPreviewUrl === "string"
-        ? {
-            localPreviewUrl: node.attrs.localPreviewUrl,
-            localPreviewFile: node.attrs.localPreviewFile as File,
-          }
-        : null;
+    const hasLocalPreview = typeof node.attrs.localPreviewUrl === "string";
     const nextAttrs = {
       ...node.attrs,
       url,
       ...(name === undefined ? {} : { name }),
-      ...(staleLocalPreview === null
-        ? {}
-        : { localPreviewUrl: null, localPreviewFile: null }),
+      ...(hasLocalPreview
+        ? { localPreviewUrl: null, localPreviewFile: null }
+        : {}),
     };
     // Issue #375 — 결과가 현재 attrs와 같으면 dispatch하지 않는다. 빈 history
     // 단위가 남아 다음 undo를 삼킨다. 로컬 프리뷰는 저장 모델에 없는 PM 전용
@@ -164,7 +152,7 @@ export class MediaUploadTracker {
     if (hasSameModelMarkup(node, nextAttrs)) {
       return false;
     }
-    const committed = this.host.runDocumentCommand(command, "local", () => {
+    return this.host.runDocumentCommand(command, "local", () => {
       const transaction = this.host.editor.state.tr.setNodeMarkup(
         position,
         undefined,
@@ -173,10 +161,6 @@ export class MediaUploadTracker {
       this.host.editor.view.dispatch(closeHistory(transaction));
       return true;
     }).ok;
-    if (committed && staleLocalPreview !== null) {
-      this.host.notifyLocalPreviewCleared(blockId, staleLocalPreview);
-    }
-    return committed;
   }
 
   // 로컬 프리뷰(ADR 0015, Issue #168 roadmap RD-001 DELTA-04)로 대체하는

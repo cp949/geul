@@ -395,12 +395,18 @@ export const createEditor = (
       ...tableCommands,
       ...insertBlockCommands,
       undo: () =>
-        session.runDocumentCommand("undo", "undo", () =>
-          session.editor.commands.undo(),
+        session.runDocumentCommand(
+          "undo",
+          "undo",
+          () => session.editor.commands.undo(),
+          { acceptUnchangedModel: true },
         ),
       redo: () =>
-        session.runDocumentCommand("redo", "redo", () =>
-          session.editor.commands.redo(),
+        session.runDocumentCommand(
+          "redo",
+          "redo",
+          () => session.editor.commands.redo(),
+          { acceptUnchangedModel: true },
         ),
     },
     runCustomCommand(name, ...args) {

@@ -18,6 +18,8 @@
 - 이 판정은 호스트 콜백이 돌기 전에 URL이 문서에 한 번이라도 들어갔는지로 한다. Tiptap `beforeTransaction`의 `nextState`를 쓴다.
 - 명령이 끝난 뒤 최종 문서에 URL이 있는지로 판정하지 않는다. 호스트 콜백이 블록을 지우거나 `replaceDocument`를 부르면 오판한다.
 - 로컬 프리뷰(ADR-0015) blob URL의 수명은 blockId가 아니라 URL로 추적한다. 블록이 남은 채 URL만 빠지는 경로(같은 id 재삽입, 덮어쓰기, 프리뷰 적용 undo)도 `onLocalPreviewCleanup` 통지 대상이다. 모델에서 노드를 다시 만드는 명령(`updateBlock`, `replaceBlocks`)은 blockId로 이어받는다.
+- url을 확정하는 명령(`setMediaBlockUrl`, `updateBlock`, `replaceBlocks`, 업로드 완료)은 로컬 프리뷰(ADR-0015) attrs를 같은 transaction에서 정리하되 `onLocalPreviewCleanup`을 즉시 부르지 않는다. undo로 URL이 문서에 돌아올 수 있어서다. 통지는 undo·redo로 못 돌아올 때 도달 판정이 낸다.
+- `undo`·`redo`는 PM state가 바뀌었으면 모델 변경이 없어도 `ok`를 돌려준다. 프리뷰 적용 step처럼 모델 diff가 없는 step이 해당한다. `onChange`와 revision은 올리지 않는다. PM이 바뀌지 않았으면(빈 history) 기존대로 거절한다.
 - callback에서 찾은 node는 callback 밖으로 내보내지 않는다. position만 찾고, 좁힌 뒤 `doc.nodeAt(position)`으로 다시 조회한다 — TypeScript는 callback 밖 객체 narrowing을 보존하지 않는다.
 - dispatch 거절 판정에 document reference 동일성 검사는 document를 바꾸는 transaction에만 사용한다. selection-only·stored-mark transaction은 성공해도 reference가 같으므로 `tr.docChanged`, selection 또는 별도 신호로 판정한다.
 

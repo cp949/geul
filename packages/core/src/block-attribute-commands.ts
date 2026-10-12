@@ -121,14 +121,10 @@ export const createBlockAttributeCommands = (
   // node.attrs를 스프레드해 유지한다 — 부분 attrs를 넘기면 schema
   // default(null)로 리셋되는 함정을 그대로 피한다.
   //
-  // Issue #168 roadmap RD-001 DELTA-05 — nextAttrs 적용 전후로
-  // localPreviewUrl 전환(문자열→null)을 감지해 커밋 성공 시
-  // session.notifyLocalPreviewCleared를 호출한다. 4개 호출자 중
-  // setMediaBlockUrl의 nextAttrs만 실제로 그 전환을 만든다(아래 참고) —
-  // Name/Caption/BackgroundColor는 localPreviewUrl을 전혀 건드리지 않아
-  // 이 감지가 자동으로 no-op이다. command 문자열 분기 대신 attrs 상태로
-  // 판정하므로 앞으로 url을 세팅하는 새 명령이 추가돼도 같은 정리가
-  // 자동으로 적용된다.
+  // url을 확정하는 호출(setMediaBlockUrl)은 같은 transaction에서 로컬 프리뷰
+  // attrs를 null로 정리하지만 통지는 하지 않는다(Issue #382). undo로 URL이
+  // 문서에 돌아올 수 있어서다. 통지는 MediaLocalPreviewLifecycleExtension이
+  // 그 URL이 undo·redo로 못 돌아올 때 낸다.
   //
   // 모델이 같고 프리뷰 attrs만 달라지는 호출은 dispatch 전에 거절한다
   // (hasSameModelMarkup, Issue #376) — 거절 Result인데 PM만 바뀌는 것을 막는다.
@@ -160,15 +156,7 @@ export const createBlockAttributeCommands = (
     const updatedAttrs = nextAttrs(node.attrs, value);
     if (hasSameModelMarkup(node, updatedAttrs))
       return commandNotApplicable(command);
-    const clearedLocalPreview =
-      typeof node.attrs.localPreviewUrl === "string" &&
-      updatedAttrs.localPreviewUrl === null
-        ? {
-            localPreviewUrl: node.attrs.localPreviewUrl,
-            localPreviewFile: node.attrs.localPreviewFile as File,
-          }
-        : null;
-    const result = session.runDocumentCommand(command, "local", () => {
+    return session.runDocumentCommand(command, "local", () => {
       const transaction = session.editor.state.tr.setNodeMarkup(
         position,
         undefined,
@@ -177,10 +165,6 @@ export const createBlockAttributeCommands = (
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
     });
-    if (result.ok && clearedLocalPreview !== null) {
-      session.notifyLocalPreviewCleared(blockId, clearedLocalPreview);
-    }
-    return result;
   };
 
   // media 5종 중 image/video/iframe만 리사이즈를 지원한다(spec §3 —
@@ -516,8 +500,7 @@ export const createBlockAttributeCommands = (
           ? null
           : { code: "LINK_HREF_REJECTED", href: value },
       // 로컬 프리뷰(ADR 0015)가 남아 있었으면 url 확정과 같은 트랜잭션에서
-      // 정리한다(RD-001 DELTA-05) — 신호 발생은 runSetMediaBlockAttrCommand가
-      // 이 전환(문자열→null) 자체를 감지해 담당한다.
+      // 정리한다(RD-001 DELTA-05). 통지는 하지 않는다(Issue #382).
       (attrs, value) => ({
         ...attrs,
         url: value,
