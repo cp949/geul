@@ -143,3 +143,62 @@ export const isLeafBlock = <B extends { type: string }>(
   block: B,
 ): block is Extract<B, { type: LeafBlockType }> =>
   LEAF_BLOCK_TYPES.has(block.type);
+
+// 미디어 블록 종류별 필드 소유 표다(아키텍처 리뷰 07 후보 04).
+// - 공통 필드(url·name·caption·backgroundColor)는 5종 모두 가져서 표에 없다.
+// - 표는 "어느 종류가 이 필드를 갖는가"만 답한다. data 속성·style·마크다운
+//   강등 같은 표현과, url·caption 편집 같은 정책 집합은 각 패키지가 정한다.
+// - Record<MediaBlockType, ...> 제약이라 미디어 종류가 늘면 이 표가 비어 tsc가
+//   실패한다. 손으로 쓴 Block 타입과의 일치는 media-block-fields.test.ts가
+//   컴파일 타임에 고정한다.
+export type MediaOwnField =
+  "showPreview" | "previewWidth" | "textAlignment" | "aspectRatio";
+
+export const MEDIA_BLOCK_FIELDS = {
+  file: [],
+  image: ["showPreview", "previewWidth", "textAlignment"],
+  video: ["showPreview", "previewWidth", "textAlignment"],
+  audio: ["showPreview"],
+  iframe: ["previewWidth", "textAlignment", "aspectRatio"],
+} as const satisfies Record<MediaBlockType, readonly MediaOwnField[]>;
+
+/** 필드 F를 소유하는 미디어 블록 종류. 표에서 파생한다. */
+export type MediaBlockTypeWithField<F extends MediaOwnField> = {
+  [K in MediaBlockType]: F extends (typeof MEDIA_BLOCK_FIELDS)[K][number]
+    ? K
+    : never;
+}[MediaBlockType];
+
+// 필드별 Set은 모듈 로드 시 표에서 만든다. Set.has만 쓰는 이유는 위
+// blockTypesOfFamilies와 같다.
+const typesOwningField = (field: MediaOwnField): ReadonlySet<string> =>
+  new Set(
+    Object.entries(MEDIA_BLOCK_FIELDS)
+      .filter(([, fields]) =>
+        (fields as readonly MediaOwnField[]).includes(field),
+      )
+      .map(([type]) => type),
+  );
+
+const MEDIA_FIELD_OWNERS: Record<MediaOwnField, ReadonlySet<string>> = {
+  showPreview: typesOwningField("showPreview"),
+  previewWidth: typesOwningField("previewWidth"),
+  textAlignment: typesOwningField("textAlignment"),
+  aspectRatio: typesOwningField("aspectRatio"),
+};
+
+export const mediaBlockTypeHasField = <F extends MediaOwnField>(
+  type: string,
+  field: F,
+): type is MediaBlockTypeWithField<F> => MEDIA_FIELD_OWNERS[field].has(type);
+
+// block 자체를 좁힌다. isMediaBlock과 같이 CustomBlock(type: string)은 Extract에서
+// 빠져 좁혀진 결과에 들지 않는다.
+export const mediaBlockHasField = <
+  B extends { type: string },
+  F extends MediaOwnField,
+>(
+  block: B,
+  field: F,
+): block is Extract<B, { type: MediaBlockTypeWithField<F> }> =>
+  MEDIA_FIELD_OWNERS[field].has(block.type);

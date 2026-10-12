@@ -4,9 +4,12 @@ export type {
   ListEntryBlockType,
   ListItemBlockType,
   MediaBlockType,
+  MediaBlockTypeWithField,
+  MediaOwnField,
   NestableBlockType,
 } from "./block-kind.js";
 export {
+  MEDIA_BLOCK_FIELDS,
   isInlineContentBlockType,
   isLeafBlock,
   isLeafBlockType,
@@ -15,6 +18,8 @@ export {
   isMediaBlock,
   isMediaBlockType,
   isNestableBlockType,
+  mediaBlockHasField,
+  mediaBlockTypeHasField,
 } from "./block-kind.js";
 export { isCanonicalCellAlign } from "./cell-align.js";
 export { isCanonicalCellColor } from "./cell-color.js";
