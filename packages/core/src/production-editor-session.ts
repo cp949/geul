@@ -115,7 +115,9 @@ const flattenBlockTree = (
   return map;
 };
 
-const blockChanges = (
+// commitDocument의 no-op 거절 기준이다. replaceBlocks가 dispatch 전에 같은
+// 기준으로 판정하려고 export한다(Issue #386).
+export const blockChanges = (
   previous: BlockDocument,
   next: BlockDocument,
 ): string[] => {

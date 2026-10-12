@@ -120,21 +120,19 @@ export const updateBlockInTree = (
   return null;
 };
 
-// idsToRemove에 속한 블록을 트리 전 깊이에서 제거한 새 트리와, 제거된
-// 블록들(자신의 children 서브트리 포함, 문서 순서)을 함께 반환한다(불변
-// 갱신). replaceBlocks(spec §3.2, RD-002-DELTA-02)가 소비한다 — 제거
-// 대상의 자식은 승격하지 않는다(RD-002-DELTA-02 "## 계획"의 설계 결정,
-// 기존 commands.deleteBlock이 PM nodeSize 범위를 통째로 지우는 것과 같은
-// 의미). 한 블록이 제거되면 그 서브트리 안에서 다시 idsToRemove를 찾지
+// 제거 여부를 `shouldRemove`로 판정하는 공통 재귀 — removeBlocksFromTree
+// (id 기준)와 removeBlockNodesFromTree(원래 노드 기준)가 같은 구현을 쓴다.
+// 제거된 블록들(자신의 children 서브트리 포함, 문서 순서)과 새 트리를 함께
+// 반환한다(불변 갱신). 한 블록이 제거되면 그 서브트리 안에서 다시 찾지
 // 않는다 — 이미 제거된 블록의 자식은 제거 사유를 물을 필요가 없다.
-export const removeBlocksFromTree = (
+const removeFromTree = (
   blocks: readonly DocumentBlock[],
-  idsToRemove: ReadonlySet<string>,
+  shouldRemove: (block: DocumentBlock) => boolean,
 ): { blocks: DocumentBlock[]; removed: DocumentBlock[] } => {
   const removed: DocumentBlock[] = [];
   const nextBlocks: DocumentBlock[] = [];
   for (const block of blocks) {
-    if (idsToRemove.has(block.id)) {
+    if (shouldRemove(block)) {
       removed.push(block);
       continue;
     }
@@ -143,7 +141,7 @@ export const removeBlocksFromTree = (
       nextBlocks.push(block);
       continue;
     }
-    const childResult = removeBlocksFromTree(children, idsToRemove);
+    const childResult = removeFromTree(children, shouldRemove);
     removed.push(...childResult.removed);
     // insertSiblingsInTree와 동일 근거 — children 재귀 결과는 항상 Block[].
     nextBlocks.push(
@@ -154,3 +152,26 @@ export const removeBlocksFromTree = (
   }
   return { blocks: nextBlocks, removed };
 };
+
+// idsToRemove에 속한 블록을 트리 전 깊이에서 제거한 새 트리와, 제거된
+// 블록들(자신의 children 서브트리 포함, 문서 순서)을 함께 반환한다(불변
+// 갱신). removeBlocks(spec §3.2, RD-002-DELTA-03)가 소비한다 — 제거
+// 대상의 자식은 승격하지 않는다(RD-002-DELTA-02 "## 계획"의 설계 결정,
+// 기존 commands.deleteBlock이 PM nodeSize 범위를 통째로 지우는 것과 같은
+// 의미). 삽입 블록이 섞인 트리에서는 쓰지 않는다 — 삽입 블록이 제거 id를
+// 재사용하면 함께 지워진다(removeBlockNodesFromTree 참고).
+export const removeBlocksFromTree = (
+  blocks: readonly DocumentBlock[],
+  idsToRemove: ReadonlySet<string>,
+): { blocks: DocumentBlock[]; removed: DocumentBlock[] } =>
+  removeFromTree(blocks, (block) => idsToRemove.has(block.id));
+
+// nodesToRemove에 든 블록을 객체 참조로 찾아 트리 전 깊이에서 제거한다.
+// id가 같아도 다른 객체(replaceBlocks가 삽입한 블록 등)는 지우지 않는다 —
+// 호출자는 현재 문서에서 읽은 원래 객체를 넘긴다(Issue #386). 그 밖의 규칙은
+// removeBlocksFromTree와 같다.
+export const removeBlockNodesFromTree = (
+  blocks: readonly DocumentBlock[],
+  nodesToRemove: ReadonlySet<DocumentBlock>,
+): { blocks: DocumentBlock[]; removed: DocumentBlock[] } =>
+  removeFromTree(blocks, (block) => nodesToRemove.has(block));

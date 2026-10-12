@@ -7,12 +7,13 @@ import {
   type Result,
 } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
-import { Fragment } from "@tiptap/pm/model";
+import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { findBlockPosition } from "./block-position.js";
 import { findBlockInTree, findSiblingContext } from "./block-tree.js";
 import {
   insertSiblingsInTree,
+  removeBlockNodesFromTree,
   removeBlocksFromTree,
   updateBlockInTree,
 } from "./block-tree-edit.js";
@@ -29,6 +30,7 @@ import {
   findDisabledBlock,
 } from "./model-to-tiptap.js";
 import {
+  blockChanges,
   commandNotApplicable,
   type ProductionEditorSession,
 } from "./production-editor-session.js";
@@ -288,6 +290,14 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
   // 때 그 앞에 삽입 → 이후 blockIdsToRemove 전부(앵커 포함) 제거"다
   // (RD-002-DELTA-02 "## 계획"의 설계 결정, 제거 후에는 앵커 위치를 가리킬
   // 안정적 참조가 없다).
+  //
+  // 제거는 id가 아니라 원래 있던 노드 기준이다(Issue #386) — 삽입 블록이
+  // 제거 대상과 같은 id를 가져도(자식 포함) 지워지지 않고 문서에 남는다.
+  // 모델 단계는 현재 문서에서 읽은 객체 참조로, PM 단계는 삽입 전 위치를
+  // transaction.mapping으로 옮겨 제거한다. 제거 대상 id가 중복이거나 한
+  // 대상이 다른 대상의 서브트리 안에 있으면(조상+자손) transaction 전에
+  // COMMAND_NOT_APPLICABLE로 거절한다. 제거하지 않는 id와 삽입 블록이
+  // 겹치면 후보 문서 검증이 DOCUMENT_INVALID로 거절한다.
   const replaceBlocksImpl = (
     blockIdsToRemove: string[],
     blocksToInsert: PartialBlock[],
@@ -310,6 +320,18 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       }
       removedBlocks.push(found);
     }
+    // 중복 id와 조상+자손 동시 제거는 삽입 전에 거절한다(G-EDT-001) — 원래
+    // 노드 기준 제거는 이 둘을 스스로 걸러내지 못한다. 서브트리 안에 든
+    // 제거 대상은 removeBlockNodesFromTree가 수집하지 않으므로 수집 수가
+    // 모자라면 조상+자손이다.
+    const removeNodeSet = new Set<DocumentBlock>(removedBlocks);
+    if (
+      new Set(blockIdsToRemove).size !== blockIdsToRemove.length ||
+      removeBlockNodesFromTree(currentDocument.blocks, removeNodeSet).removed
+        .length !== removeNodeSet.size
+    ) {
+      return commandNotApplicable("replaceBlocks");
+    }
 
     const withIds = blocksToInsert.map(
       (block) => ({ ...block, id: block.id ?? session.createId() }) as Block,
@@ -328,14 +350,23 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
         error: { code: "BLOCK_NOT_FOUND", blockId: anchorId },
       };
     }
-    const removeIdSet = new Set(blockIdsToRemove);
-    const { blocks: nextBlocks } = removeBlocksFromTree(
+    // id가 아니라 원래 노드로 제거한다 — withInserted의 원래 형제·앵커는
+    // currentDocument의 객체 그대로다(insertSiblingsInTree는 삽입 레벨 배열과
+    // 조상만 새로 만든다, 조상은 위에서 제거 대상이 아님을 확인했다).
+    const { blocks: nextBlocks } = removeBlockNodesFromTree(
       withInserted,
-      removeIdSet,
+      removeNodeSet,
     );
 
     const validated = validateCandidateDocument(nextBlocks, currentDocument);
     if (!validated.ok) return validated;
+    // 후보 문서가 현재 문서와 같으면 dispatch 전에 거절한다 — 내용까지 같은
+    // 같은 id 교체가 PM 단계까지 가면 commitDocument가 no-op으로 거절한 뒤에도
+    // 빈 undo 단위가 남는다(Issue #377과 같은 증상, G-EDT-001). 판정 기준은
+    // commitDocument와 같은 blockChanges다.
+    if (blockChanges(currentDocument, validated.value).length === 0) {
+      return commandNotApplicable("replaceBlocks");
+    }
 
     const insertedBlocks = withIds
       .map((block) => findBlockInTree(validated.value.blocks, block.id))
@@ -350,20 +381,22 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
     // (updateBlock과 같은 규칙, Issue #383). 콜백이 거절되면 통지하지 않는다.
     const cleared: ClearedLocalPreview[] = [];
     const result = session.runDocumentCommand("replaceBlocks", "local", () => {
-      const anchorPosition = findBlockPosition(
-        session.editor.state.doc,
-        anchorId,
-      );
-      if (anchorPosition === null) return false;
-      cleared.length = 0;
-      const removedNodes = blockIdsToRemove.flatMap((id) => {
-        const removedPosition = findBlockPosition(session.editor.state.doc, id);
+      // 제거 대상 위치는 삽입 전 문서에서 구한다 — 이 시점에는 id가 유일하다.
+      // 삽입 뒤 id로 찾으면 같은 id의 삽입 블록을 집는다(Issue #386).
+      const { doc } = session.editor.state;
+      const removedPositions: number[] = [];
+      const removedNodes: ProseMirrorNode[] = [];
+      for (const id of blockIdsToRemove) {
+        const removedPosition = findBlockPosition(doc, id);
         const removedNode =
-          removedPosition === null
-            ? null
-            : session.editor.state.doc.nodeAt(removedPosition);
-        return removedNode === null ? [] : [removedNode];
-      });
+          removedPosition === null ? null : doc.nodeAt(removedPosition);
+        if (removedPosition === null || removedNode === null) return false;
+        removedPositions.push(removedPosition);
+        removedNodes.push(removedNode);
+      }
+      const anchorPosition = removedPositions[0];
+      if (anchorPosition === undefined) return false;
+      cleared.length = 0;
       const carried = carryOverLocalPreviewsFromNodes(
         removedNodes,
         insertedBlocks.map(blockToTiptapJson),
@@ -377,29 +410,40 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
         fragment,
       );
 
-      // blockIdsToRemove 전부를 제거한다. 매 삭제 뒤 남은 블록 위치가
-      // 바뀌므로 transaction.doc(그 시점까지의 누적 결과)에서 매번 다시
-      // 조회한다 — 인자 순서와 무관하게 항상 최신 위치를 얻는다. 조상과
-      // 자손이 함께 들어오면 자손이 조상과 함께 이미 사라져 findBlockPosition이
-      // null을 반환하고, 이 경우 명령 전체를 거절한다(dispatch 전이라 부분
-      // 적용 없음, RD-002-DELTA-02 "## 계획"의 설계 결정).
-      for (const id of blockIdsToRemove) {
-        const position = findBlockPosition(transaction.doc, id);
-        if (position === null) return false;
-        const node = transaction.doc.nodeAt(position);
-        if (node === null) return false;
+      // blockIdsToRemove 전부를 제거한다. 삽입 전 위치를 transaction.mapping으로
+      // 현재 문서 좌표에 옮긴 뒤 그 자리의 노드를 다시 조회한다 — 삽입이
+      // 앵커 위치에 들어가므로 기본 assoc(1) 매핑이 원래 노드의 시작을
+      // 가리키고, 매 삭제 뒤 매핑이 갱신되어 인자 순서와 무관하다. 조상+자손과
+      // 중복 id는 모델 단계가 이미 거절했다(dispatch 전이라 부분 적용 없음).
+      for (const [index, removedNode] of removedNodes.entries()) {
+        const mappedPosition = transaction.mapping.map(
+          removedPositions[index] ?? 0,
+        );
+        const node = transaction.doc.nodeAt(mappedPosition);
+        // 도달 불가 방어선 — 매핑한 자리가 원래 노드가 아니면 거절한다.
+        if (node === null || node.attrs.blockId !== removedNode.attrs.blockId) {
+          return false;
+        }
         // deleteBlock(generic-block-commands.ts)과 동일한 판정 — 대상이
         // blockGroup의 유일한 자식이면 대상만 지워서는 "block+"를 위반하는
         // 빈 그룹이 남는다, 그룹 자체를 지운다.
-        const $position = transaction.doc.resolve(position);
+        const $position = transaction.doc.resolve(mappedPosition);
         const removesWholeGroup =
           $position.parent.type.name === "blockGroup" &&
           $position.parent.childCount === 1;
         transaction = transaction.delete(
-          removesWholeGroup ? $position.before() : position,
-          removesWholeGroup ? $position.after() : position + node.nodeSize,
+          removesWholeGroup ? $position.before() : mappedPosition,
+          removesWholeGroup
+            ? $position.after()
+            : mappedPosition + node.nodeSize,
         );
       }
+
+      // PM 수준 no-op 판정 — 모델은 인접한 같은 서식 run을 합치지 않고 PM은
+      // 합치므로 모델 기준 가드를 지나도 PM 문서가 같을 수 있다. dispatch하면
+      // commitDocument가 거절해도 selection·undo 단위가 바뀐다(Issue #377과
+      // 같은 취지). false 반환은 dispatch 없이 COMMAND_NOT_APPLICABLE이다.
+      if (transaction.doc.eq(session.editor.state.doc)) return false;
 
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
