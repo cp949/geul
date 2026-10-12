@@ -1,12 +1,12 @@
 import {
-  handleMenuKeyDown,
+  readCaretBounds,
+  useCaretTriggerPopup,
   useClampedMenuPosition,
-  useDismissibleOverlay,
   useEditor,
   useEditorElement,
   useFocusEditor,
 } from "@cp949/geul-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef } from "react";
 
 /**
  * mention이 연결할 수 있는 모의 데이터 종류(Issue #210 "## 결정" D2) —
@@ -104,70 +104,8 @@ export const filterMentionOptions = (
 ): MentionOption[] =>
   options.filter((option) => matchesMentionOption(option, query));
 
-type MenuPosition = { left: number; top: number };
-
-type MenuState = {
-  blockId: string;
-  query: string;
-  highlightedIndex: number;
-} & MenuPosition;
-
-/** `emoji-picker.tsx`/`slash-menu.tsx`의 동명 함수와 동일 계약 — 캐럿 뒤
- * 팝업 배치를 위해 같은 방식으로 캐럿 rect를 읽는다. 빈 블록에서
- * getBoundingClientRect()가 (0,0,0,0)을 돌려주는 Chromium 케이스(QA-086)도
- * 같은 방식으로 우회한다. */
-const readCaretBounds = (element: HTMLElement): MenuPosition | null => {
-  const selection = element.ownerDocument.getSelection();
-  if (
-    selection === null ||
-    selection.rangeCount === 0 ||
-    selection.anchorNode === null ||
-    !element.contains(selection.anchorNode)
-  ) {
-    return null;
-  }
-  const bounds = selection.getRangeAt(0).getBoundingClientRect?.() ?? {
-    left: 0,
-    top: 0,
-    height: 0,
-  };
-  if (bounds.height === 0) {
-    const anchorElement =
-      selection.anchorNode.nodeType === Node.ELEMENT_NODE
-        ? (selection.anchorNode as Element)
-        : selection.anchorNode.parentElement;
-    const elementRect = anchorElement?.getBoundingClientRect();
-    if (elementRect !== undefined && elementRect.height > 0) {
-      return { left: elementRect.left, top: elementRect.bottom };
-    }
-  }
-  return { left: bounds.left, top: bounds.top + bounds.height };
-};
-
-/**
- * 브라우저 DOM selection이 접힌 캐럿일 때 그 캐럿이 속한 블록의 id. 편집기 밖,
- * 범위 선택, 블록 컨테이너 밖(atom 블록 선택 등)이면 `null`이다.
- *
- * `editor.getCaretBlockContext()`는 쓰지 않는다. 키보드로 블록을 옮긴 직후에는
- * ProseMirror가 `selectionchange`를 비동기로 반영해 이전 블록을 돌려준다.
- * DOM selection은 그때 이미 새 위치를 가리킨다. 블록 id는 `renderHTML`이 내는
- * `data-geul-block-id`로 읽는다(G-EDT-003).
- */
-const readDomCaretBlockId = (element: HTMLElement): string | null => {
-  const selection = element.ownerDocument.getSelection();
-  if (selection === null || !selection.isCollapsed) return null;
-  const anchorNode = selection.anchorNode;
-  if (anchorNode === null || !element.contains(anchorNode)) return null;
-  const anchorElement =
-    anchorNode.nodeType === Node.ELEMENT_NODE
-      ? (anchorNode as Element)
-      : anchorNode.parentElement;
-  return (
-    anchorElement
-      ?.closest("[data-geul-block-id]")
-      ?.getAttribute("data-geul-block-id") ?? null
-  );
-};
+// 캐럿 rect를 읽을 수 없는 채 열릴 때(편집기 밖 DOM 선택)의 첫 좌표.
+const FALLBACK_MENU_POSITION = { left: 96, top: 48 } as const;
 
 const targetTypeLabel = (targetType: MentionTargetType): string =>
   targetType === "user" ? "User" : "Document";
@@ -179,131 +117,67 @@ const targetTypeLabel = (targetType: MentionTargetType): string =>
  * 공개 컴포넌트(EmojiPicker/SlashMenu와 같은 급)가 아니라 이 예제 폴더
  * 로컬 컴포넌트로만 존재한다(이슈 본문 결정).
  *
- * `EmojiPicker`의 캐럿-폴링·클램프 위치·바깥클릭/Escape dismiss 골격을
- * 그대로 재사용한다 — `@cp949/geul-react`가 공개하는
- * `useEditorElement`/`useFocusEditor`/`useClampedMenuPosition`/
- * `useDismissibleOverlay`가 그 배선이다(01-계획.md "## 결정" D4).
+ * 열림 판정·재오픈 억제·keydown 배선·Escape·바깥 클릭 닫기는
+ * `useCaretTriggerPopup`이 맡는다(Issue #372). 이 컴포넌트는 트리거 규칙
+ * (`parseMentionQuery`), 후보, 이동 규칙, 확정, 렌더, 배치만 소유한다.
+ * 배치는 `useClampedMenuPosition`이고 앵커는 `readCaretBounds`로 렌더마다 읽는다.
  */
 export const MentionPicker = () => {
   const editor = useEditor();
   const element = useEditorElement();
   const menuId = useId();
-  const [menuState, setMenuState] = useState<MenuState | null>(null);
-  const { menuRef, style } = useClampedMenuPosition(
-    menuState?.left ?? 0,
-    menuState?.top ?? 0,
-  );
-  const menuStateRef = useRef<MenuState | null>(null);
-  menuStateRef.current = menuState;
   const focusEditor = useFocusEditor(element);
-  // Escape로 닫힌 직후 지연된 selectionchange가 같은 텍스트로 재발생해
-  // 방금 닫은 메뉴를 곧바로 재오픈하는 레이스 방지(emoji-picker.tsx/
-  // slash-menu.tsx와 동일 이유).
-  const dismissedQueryRef = useRef<{ blockId: string; text: string } | null>(
-    null,
+  const popup = useCaretTriggerPopup({
+    parseQuery: parseMentionQuery,
+    getItemCount: ({ query }) =>
+      filterMentionOptions(MENTION_OPTIONS, query).length,
+    navigate: (key, current) => {
+      if (key !== "ArrowDown" && key !== "ArrowUp") return null;
+      const step = key === "ArrowDown" ? 1 : -1;
+      const count = Math.max(
+        filterMentionOptions(MENTION_OPTIONS, current.query).length,
+        1,
+      );
+      return (current.highlightedIndex + step + count) % count;
+    },
+    onActivate: (current) => {
+      const item = filterMentionOptions(MENTION_OPTIONS, current.query)[
+        current.highlightedIndex
+      ];
+      if (item !== undefined) selectItem(item, current);
+    },
+    allowSelectors: MENTION_PICKER_DISMISS_ALLOW_SELECTORS,
+  });
+  const { state: menuState, refresh } = popup;
+  const isOpen = menuState !== null;
+
+  // 좌표는 state에 담지 않고 열려 있는 동안 렌더마다 캐럿에서 읽는다. 캐럿
+  // rect를 읽을 수 없으면 마지막 좌표를 유지하고, 닫히면 처음 값으로 되돌린다.
+  const lastPositionRef = useRef<{ left: number; top: number }>(
+    FALLBACK_MENU_POSITION,
+  );
+  const caretPosition =
+    isOpen && element !== null ? readCaretBounds(element) : null;
+  if (!isOpen) lastPositionRef.current = FALLBACK_MENU_POSITION;
+  else if (caretPosition !== null) lastPositionRef.current = caretPosition;
+  const position = caretPosition ?? lastPositionRef.current;
+  const { menuRef, style } = useClampedMenuPosition(
+    position.left,
+    position.top,
   );
 
-  const dismissMenu = useCallback(() => {
-    const context = editor.getCaretBlockContext();
-    dismissedQueryRef.current =
-      context === null
-        ? null
-        : { blockId: context.blockId, text: context.text };
-    setMenuState(null);
-  }, [editor]);
-  const dismissMenuAndFocusEditor = useCallback(() => {
-    dismissMenu();
-    focusEditor();
-  }, [dismissMenu, focusEditor]);
-
+  // 스크롤·resize는 렌더 없이 캐럿 위치를 옮긴다. 열려 있는 동안만 훅에 다시
+  // 그리게 한다. 중첩 스크롤 컨테이너를 위해 scroll은 capture로 건다.
   useEffect(() => {
-    const updateFromCaret = () => {
-      const context = editor.getCaretBlockContext();
-      if (context === null) {
-        dismissedQueryRef.current = null;
-        setMenuState(null);
-        return;
-      }
-
-      // CodeBlock 안의 "@foo"는 트리거가 아니라 보존할 코드다
-      // (emoji-picker.tsx와 동일한 discriminator 우선 확인 이유).
-      if (context.blockType.type === "codeBlock") {
-        dismissedQueryRef.current = null;
-        setMenuState(null);
-        return;
-      }
-
-      const dismissed = dismissedQueryRef.current;
-      if (
-        dismissed !== null &&
-        dismissed.blockId === context.blockId &&
-        dismissed.text === context.text
-      ) {
-        return;
-      }
-      if (dismissed !== null) dismissedQueryRef.current = null;
-
-      const query = parseMentionQuery(context.text);
-      if (query === null) {
-        setMenuState(null);
-        return;
-      }
-
-      const bounds = element === null ? null : readCaretBounds(element);
-      setMenuState((current) => ({
-        blockId: context.blockId,
-        query,
-        highlightedIndex:
-          current !== null && current.blockId === context.blockId
-            ? Math.min(
-                current.highlightedIndex,
-                Math.max(
-                  filterMentionOptions(MENTION_OPTIONS, query).length - 1,
-                  0,
-                ),
-              )
-            : 0,
-        left: bounds?.left ?? current?.left ?? 96,
-        top: bounds?.top ?? current?.top ?? 48,
-      }));
-    };
-
-    const ownerDocument = element?.ownerDocument;
-    const ownerWindow = ownerDocument?.defaultView;
-    // selectionchange는 즉시 한 번, 매크로태스크 뒤 한 번 더 읽는다(Issue #247,
-    // slash-menu.tsx·emoji-picker.tsx의 Issue #229와 같은 이유).
-    // ProseMirror의 DOMObserver는 state 갱신마다 자기 selectionchange 리스너를
-    // 떼었다 다시 붙여 항상 이 리스너보다 뒤에 호출된다. 즉시 읽기는 이동 직전
-    // 낡은 state.selection을 본다. 캐럿이 `@query` 블록을 벗어난 이동은 즉시
-    // 읽기에서 열린 채 남고 재통지가 없다. 뒤늦은 읽기는 PM flush가 끝난 최신
-    // state를 본다. 즉시 읽기는 남긴다. 기존 동기 반응을 바꾸지 않는다.
-    let deferredUpdateTimeout: number | null = null;
-    const onSelectionChange = () => {
-      updateFromCaret();
-      if (ownerWindow === undefined || ownerWindow === null) return;
-      if (deferredUpdateTimeout !== null) {
-        ownerWindow.clearTimeout(deferredUpdateTimeout);
-      }
-      deferredUpdateTimeout = ownerWindow.setTimeout(() => {
-        deferredUpdateTimeout = null;
-        updateFromCaret();
-      }, 0);
-    };
-    ownerDocument?.addEventListener("selectionchange", onSelectionChange);
-    ownerDocument?.addEventListener("input", updateFromCaret);
-    ownerWindow?.addEventListener("scroll", updateFromCaret, true);
-    ownerWindow?.addEventListener("resize", updateFromCaret);
-    updateFromCaret();
+    const ownerWindow = element?.ownerDocument.defaultView;
+    if (!isOpen || ownerWindow === undefined || ownerWindow === null) return;
+    ownerWindow.addEventListener("scroll", refresh, true);
+    ownerWindow.addEventListener("resize", refresh);
     return () => {
-      ownerDocument?.removeEventListener("selectionchange", onSelectionChange);
-      if (deferredUpdateTimeout !== null) {
-        ownerWindow?.clearTimeout(deferredUpdateTimeout);
-      }
-      ownerDocument?.removeEventListener("input", updateFromCaret);
-      ownerWindow?.removeEventListener("scroll", updateFromCaret, true);
-      ownerWindow?.removeEventListener("resize", updateFromCaret);
+      ownerWindow.removeEventListener("scroll", refresh, true);
+      ownerWindow.removeEventListener("resize", refresh);
     };
-  }, [editor, element]);
+  }, [element, isOpen, refresh]);
 
   const items =
     menuState === null
@@ -331,112 +205,43 @@ export const MentionPicker = () => {
     };
   }, [activeOptionId, element]);
 
-  const selectItem = useCallback(
-    (item: MentionOption) => {
-      const current = menuStateRef.current;
-      if (current === null) return;
-      // 트리거가 블록 텍스트 전체와 일치할 때만 메뉴가 열리므로
-      // (parseMentionQuery), 블록을 비운 뒤 그 자리에 mention atom을 넣는
-      // 것이 곧 "트리거 치환"이다(emoji-picker.tsx의 setText(char) + end
-      // 커서 배치와 동일 방식). insertCustomInlineContent는 현재
-      // selection(caret)에 삽입하므로 setText로 블록을 비운 직후 caret이
-      // 그 자리에 남아 있어야 한다.
-      editor.commands.setText(current.blockId, "");
+  const selectItem = (
+    item: MentionOption,
+    current: { blockId: string; query: string },
+  ) => {
+    // 트리거가 블록 텍스트 전체와 일치할 때만 메뉴가 열리므로
+    // (parseMentionQuery), 블록을 비운 뒤 그 자리에 mention atom을 넣는
+    // 것이 곧 "트리거 치환"이다(emoji-picker.tsx의 setText(char) + end
+    // 커서 배치와 동일 방식). insertCustomInlineContent는 현재
+    // selection(caret)에 삽입하므로 setText로 블록을 비운 직후 caret이
+    // 그 자리에 남아 있어야 한다.
+    editor.commands.setText(current.blockId, "");
+    editor.setTextCursorPosition(current.blockId, "end");
+    const inserted = editor.commands.insertCustomInlineContent("mention", {
+      targetType: item.targetType,
+      targetId: item.targetId,
+      label: item.label,
+    });
+    // insertCustomInlineContent는 Result<void, EditorError>를 반환한다
+    // (packages/react/README.md의 InsertMentionButton 예제와 동일 계약).
+    // 실패하면 위에서 이미 비운 블록 텍스트("@query")를 그대로 되돌린다
+    // — 그러지 않으면 트랜잭션 거절 시 사용자 입력이 조용히 사라진다
+    // (IMPL-REVIEW-01 F1).
+    if (!inserted.ok) {
+      console.error(inserted.error);
+      // 복원된 "@query" 텍스트를 곧바로 새 트리거로 재인식해 메뉴가
+      // 재오픈되지 않도록 dismiss()로 현재 블록·텍스트를 재오픈 방지에
+      // 기록한다(G-UI-001).
+      editor.commands.setText(current.blockId, `@${current.query}`);
       editor.setTextCursorPosition(current.blockId, "end");
-      const inserted = editor.commands.insertCustomInlineContent("mention", {
-        targetType: item.targetType,
-        targetId: item.targetId,
-        label: item.label,
-      });
-      // insertCustomInlineContent는 Result<void, EditorError>를 반환한다
-      // (packages/react/README.md의 InsertMentionButton 예제와 동일 계약).
-      // 실패하면 위에서 이미 비운 블록 텍스트("@query")를 그대로 되돌린다
-      // — 그러지 않으면 트랜잭션 거절 시 사용자 입력이 조용히 사라진다
-      // (IMPL-REVIEW-01 F1).
-      if (!inserted.ok) {
-        console.error(inserted.error);
-        // 복원된 "@query" 텍스트를 곧바로 새 트리거로 재인식해 메뉴가
-        // 재오픈되지 않도록 dismissMenu()와 동일한 가드를 남긴다(위
-        // updateFromCaret의 dismissedQueryRef 대조 로직 — G-UI-001).
-        const restoredText = `@${current.query}`;
-        editor.commands.setText(current.blockId, restoredText);
-        editor.setTextCursorPosition(current.blockId, "end");
-        dismissedQueryRef.current = {
-          blockId: current.blockId,
-          text: restoredText,
-        };
-      } else {
-        // 삽입 성공 시 블록 텍스트가 mention atom으로 바뀌므로 dismiss
-        // 가드가 필요 없다(기존과 동일).
-        dismissedQueryRef.current = null;
-      }
-      setMenuState(null);
-      focusEditor();
-    },
-    [editor, focusEditor],
-  );
-
-  // Escape는 메뉴만 닫고 입력한 "@query" 텍스트는 보존한다(EmojiPicker/
-  // SlashMenu와 동일 계약). element의 상시 keydown 리스너가 먼저 닫고, 편집기
-  // 안에서 막힌 Escape는 이 훅도 한 번 더 닫는다. `dismissMenu`가 멱등이라
-  // 이중 호출이 무해하다.
-  useDismissibleOverlay({
-    open: menuState !== null,
-    element,
-    allowSelectors: MENTION_PICKER_DISMISS_ALLOW_SELECTORS,
-    onClose: dismissMenu,
-  });
-
-  useEffect(() => {
-    if (element === null) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const current = menuStateRef.current;
-      if (current === null) return;
-
-      // IME → Escape → Enter 반복 → 수식 키 → 이동·확정 순서와 `preventDefault`는
-      // handleMenuKeyDown이 소유한다(Issue #211, #227, #230, #247). 후보가 0건인
-      // Enter도 module이 막고 확정만 건너뛴다.
-      handleMenuKeyDown(event, {
-        escape: dismissMenuAndFocusEditor,
-        navigate: (key) => {
-          if (key !== "ArrowDown" && key !== "ArrowUp") return false;
-          const step = key === "ArrowDown" ? 1 : -1;
-          setMenuState((currentState) => {
-            if (currentState === null) return null;
-            const count = Math.max(
-              filterMentionOptions(MENTION_OPTIONS, currentState.query).length,
-              1,
-            );
-            return {
-              ...currentState,
-              highlightedIndex:
-                (currentState.highlightedIndex + step + count) % count,
-            };
-          });
-          return true;
-        },
-        activate: () => {
-          // 키보드로 `@query` 블록을 떠난 직후의 Enter는 확정하지 않는다.
-          // PM state는 이동 직후 낡아 selectionchange 재읽기도 이 keydown보다
-          // 늦을 수 있다. DOM selection이 같은 블록의 접힌 캐럿이 아니면
-          // (다른 블록, 범위 선택, 블록 밖) 메뉴만 닫는다.
-          // handleMenuKeyDown이 이미 막았으므로 이 Enter는 문서를 바꾸지 않는다.
-          if (readDomCaretBlockId(element) !== current.blockId) {
-            setMenuState(null);
-            return;
-          }
-          const item = filterMentionOptions(MENTION_OPTIONS, current.query)[
-            current.highlightedIndex
-          ];
-          if (item !== undefined) selectItem(item);
-        },
-      });
-    };
-
-    element.addEventListener("keydown", handleKeyDown, true);
-    return () => element.removeEventListener("keydown", handleKeyDown, true);
-  }, [dismissMenuAndFocusEditor, element, selectItem]);
+      popup.dismiss();
+    } else {
+      // 삽입 성공 시 블록 텍스트가 mention atom으로 바뀌므로 재오픈 방지가
+      // 필요 없다. close()는 방지 기록을 남기지 않는다.
+      popup.close();
+    }
+    focusEditor();
+  };
 
   if (menuState === null) return null;
 
@@ -469,7 +274,7 @@ export const MentionPicker = () => {
           aria-selected={index === menuState.highlightedIndex}
           id={`${menuId}-${item.id}`}
           key={item.id}
-          onClick={() => selectItem(item)}
+          onClick={() => selectItem(item, menuState)}
           onPointerDown={(event) => event.preventDefault()}
           role="option"
           style={{

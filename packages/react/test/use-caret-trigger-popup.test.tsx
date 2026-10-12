@@ -204,6 +204,38 @@ describe("useCaretTriggerPopup 열림 판정", () => {
 
     expect(readState()?.highlightedIndex).toBe(1);
   });
+
+  it("refresh()도 후보 수가 줄었으면 highlightedIndex를 마지막 후보로 줄인다", () => {
+    const rendered = mountProbe();
+    typeIntoBlock(rendered, 0, "/ab");
+    act(() => rendered.handle().popup.setHighlightedIndex(4));
+    act(() => rendered.handle().setItemCount(2));
+    // 전제: 후보 수만 바뀌었고 아직 아무도 다시 읽지 않았다.
+    expect(readState()?.highlightedIndex).toBe(4);
+
+    act(() => rendered.handle().popup.refresh());
+
+    expect(readState()).toEqual({
+      blockId: rendered.blockIds[0],
+      query: "ab",
+      highlightedIndex: 1,
+    });
+  });
+
+  it("refresh()는 후보가 0건이면 highlightedIndex를 0으로 줄이고 후보가 늘어도 키우지 않는다", () => {
+    const rendered = mountProbe();
+    typeIntoBlock(rendered, 0, "/ab");
+    act(() => rendered.handle().popup.setHighlightedIndex(3));
+
+    act(() => rendered.handle().setItemCount(0));
+    act(() => rendered.handle().popup.refresh());
+    expect(readState()?.highlightedIndex).toBe(0);
+
+    act(() => rendered.handle().popup.setHighlightedIndex(1));
+    act(() => rendered.handle().setItemCount(5));
+    act(() => rendered.handle().popup.refresh());
+    expect(readState()?.highlightedIndex).toBe(1);
+  });
 });
 
 describe("useCaretTriggerPopup dismiss·close·open", () => {

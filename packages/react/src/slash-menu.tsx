@@ -316,7 +316,13 @@ export const SlashMenu = ({
     },
     allowSelectors: SLASH_MENU_DISMISS_ALLOW_SELECTORS,
   });
-  const { state: menuState } = popup;
+  const { state: menuState, refresh } = popup;
+  // `items`가 바뀌면 후보 수가 달라질 수 있다. 옵션 콜백은 참조가 안정적이라
+  // 훅의 열림 판정 effect가 다시 돌지 않으므로 여기서 강조 위치를 다시 맞춘다.
+  // 닫혀 있으면 refresh는 아무것도 하지 않는다.
+  useEffect(() => {
+    refresh();
+  }, [customItems, refresh]);
   // 배치는 열림 판정과 분리한다(Issue #234). 열림 상태는 좌표를 보관하지 않고
   // 이 훅이 렌더마다 캐럿 rect를 다시 읽는다. 캐럿이 편집기 밖이면 마지막 좌표를 유지한다.
   const { menuRef, style } = useFixedPlacement({

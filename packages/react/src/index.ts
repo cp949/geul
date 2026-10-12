@@ -17,6 +17,7 @@ export type {
 // 패턴("DEFAULT_DICTIONARY를 스프레드해 필요한 key만 override")을 react
 // 표면만 쓰는 소비자도 실행할 수 있도록 값을 그대로 re-export한다.
 export { DEFAULT_DICTIONARY } from "@cp949/geul-core";
+export { readCaretBounds } from "./caret-bounds.js";
 export type { CodeBlockLanguageOption } from "./code-block-language-option.js";
 export { EditorContent } from "./editor-content.js";
 export { EditorProvider, type EditorProviderProps } from "./editor-provider.js";
@@ -40,14 +41,21 @@ export {
   type SlashMenuProps,
 } from "./slash-menu.js";
 export { StaticToolbar, type StaticToolbarProps } from "./static-toolbar.js";
-// EmojiPicker/SlashMenu가 내부에서만 쓰던 오버레이 인프라 4종을 공개한다
-// (Issue #210 "## 결정" D4) — mention처럼 소비자 앱이 직접 만드는 커스텀
-// 트리거 popup(`apps/showcase`의 `17-mention` 예제)이 캐럿-폴링·클램프
-// 위치·바깥클릭/Escape dismiss·포커스 복구를 새로 구현하지 않고 그대로
-// 재사용하게 한다. `useEditorMount` 자체와 그 `setElement`(내부 전용
-// mutator)는 노출하지 않는다 — `useEditorElement`가 `element`만 읽기
-// 전용으로 감싼다(`use-editor-element.ts`). 이 4종은 파일명 알파벳 순서를
-// 따르느라 아래에서 `use-editor.js` export를 사이에 두고 나뉜다.
+// 훅 4종 공개(Issue #210 "## 결정" D4) + 캐럿 트리거 popup 훅 공개(#372).
+// EmojiPicker/SlashMenu가 내부에서만 쓰던 오버레이 인프라 4종을 공개해,
+// mention처럼 소비자 앱이 만드는 커스텀 트리거 popup(`apps/showcase`의
+// `17-mention` 예제)이 클램프 위치·바깥클릭/Escape dismiss·포커스 복구를
+// 새로 구현하지 않게 한다. #372부터 캐럿 폴링·재오픈 억제·keydown 배선도
+// `useCaretTriggerPopup`이 맡고, 배치 앵커는 `readCaretBounds`로 읽는다.
+// `useEditorMount` 자체와 그 `setElement`(내부 전용 mutator)는 노출하지
+// 않는다 — `useEditorElement`가 `element`만 읽기 전용으로 감싼다
+// (`use-editor-element.ts`). 이 export들은 파일명 알파벳 순서를 따르느라
+// 아래에서 `use-editor.js` export를 사이에 두고 나뉜다.
+export {
+  type CaretTriggerPopupState,
+  type UseCaretTriggerPopupOptions,
+  useCaretTriggerPopup,
+} from "./use-caret-trigger-popup.js";
 export {
   type ClampAnchor,
   useClampedMenuPosition,

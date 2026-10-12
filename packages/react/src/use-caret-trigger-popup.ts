@@ -119,11 +119,24 @@ export const useCaretTriggerPopup = ({
     [commit],
   );
 
-  /** 열려 있으면 새 state 객체를 커밋한다. 좌표를 렌더에서 읽는 소비자가 다시 그리게 한다. */
+  /**
+   * 열려 있으면 새 state 객체를 커밋한다. 좌표를 렌더에서 읽는 소비자가 다시
+   * 그리게 한다. 후보 수가 줄었으면 `highlightedIndex`도 마지막 후보로 줄인다.
+   * 후보 목록이 바뀌는 소비자(예: `items` prop 변경)가 부른다. 닫혀 있으면
+   * 아무것도 하지 않는다.
+   */
   const refresh = useCallback(() => {
     const current = stateRef.current;
-    if (current !== null) commit({ ...current });
-  }, [commit]);
+    if (current === null) return;
+    const lastIndex = Math.max(
+      countItems({ blockId: current.blockId, query: current.query }) - 1,
+      0,
+    );
+    commit({
+      ...current,
+      highlightedIndex: Math.min(current.highlightedIndex, lastIndex),
+    });
+  }, [commit, countItems]);
 
   const setHighlightedIndex = useCallback(
     (highlightedIndex: number) => {

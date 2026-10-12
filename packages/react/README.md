@@ -152,7 +152,83 @@ function Editor() {
 }
 ```
 
-**알려진 제약**: `insertCustomInlineContent`는 caret 앞 텍스트를 지우고 그 자리를 대체하는 offset 기반 API가 아니다 — 현재 selection에 원소를 끼워 넣기만 한다. `@query`처럼 텍스트 트리거로 popup을 여는 UI(mention 등)를 만들려면 소비자가 직접 트리거 감지·팝업·후보 필터링·키보드 네비게이션을 구현해야 한다 — 캐럿-폴링·클램프 위치·바깥클릭/Escape dismiss까지 포함한 실행 가능한 전체 예제는 `apps/showcase`의 `src/examples/17-mention`을 참고한다(`useEditorElement`/`useFocusEditor`/`useClampedMenuPosition`/`useDismissibleOverlay`/`handleMenuKeyDown`을 그 예제가 그대로 재사용한다). `customInlineContent`의 `toHtml`은 저장만 될 뿐 `io`(HTML/GFM export)에는 아직 연결돼 있지 않다 — 등록해도 HTML/GFM 내보내기에서는 그 원소가 사라진다(기존 갭, 이 문서가 메우지 않는다).
+**알려진 제약**: `insertCustomInlineContent`는 caret 앞 텍스트를 지우고 그 자리를 대체하는 offset 기반 API가 아니다 — 현재 selection에 원소를 끼워 넣기만 한다. `customInlineContent`의 `toHtml`은 저장만 될 뿐 `io`(HTML/GFM export)에는 아직 연결돼 있지 않다 — 등록해도 HTML/GFM 내보내기에서는 그 원소가 사라진다(기존 갭, 이 문서가 메우지 않는다).
+
+`@query`처럼 텍스트 트리거로 여는 popup(mention 등)은 `useCaretTriggerPopup`으로 만든다. 훅이 상태 기계를, 소비자가 규칙·후보·렌더·배치를 맡는다.
+
+| 훅이 맡는 것 | 소비자가 맡는 것 |
+| --- | --- |
+| 캐럿 폴링(`selectionchange` 이중 읽기, `input`) | 트리거 규칙 `parseQuery` |
+| 닫은 뒤 같은 텍스트로 다시 열지 않기 | 후보 목록과 후보 수 `getItemCount` |
+| codeBlock 안에서 열지 않기 | 이동 규칙 `navigate` |
+| 블록 이탈 직후 Enter 억제 | 확정 동작 `onActivate` |
+| 후보 0건 Enter 건너뛰기 | 렌더 |
+| keydown 배선(`handleMenuKeyDown` 순서) | 배치(`readCaretBounds`와 `useClampedMenuPosition`) |
+| Escape·바깥 클릭 닫기 | |
+
+`state`는 `{ blockId, query, highlightedIndex }` 또는 `null`이다. 좌표는 담지 않는다. 열려 있는 동안 렌더에서 `readCaretBounds(element)`로 읽는다. 스크롤·resize처럼 렌더 없이 캐럿이 움직이면 `refresh()`로 다시 그리게 한다. 후보 목록이 바뀌면 `refresh()`가 `highlightedIndex`도 마지막 후보로 줄인다. 확정 뒤에는 `close()`를 부른다. `dismiss()`는 같은 텍스트로 다시 열지 않게 닫는다. `open(blockId, "")`는 트리거 문자 없이 연다. `parseQuery`·`getItemCount`·`navigate`·`onActivate`는 매 렌더 새 함수여도 된다. `allowSelectors`는 모듈 스코프 상수로 넘긴다.
+
+```tsx
+import {
+  readCaretBounds,
+  useCaretTriggerPopup,
+  useClampedMenuPosition,
+  useEditor,
+  useEditorElement,
+} from "@cp949/geul-react";
+
+const NAMES = ["Ada Lovelace", "Alan Turing", "Grace Hopper"];
+const MENTION_POPUP_SELECTORS = ['[data-mention-popup="true"]'] as const;
+const matches = (query: string) =>
+  NAMES.filter((name) => name.toLowerCase().includes(query.toLowerCase()));
+
+function MentionPopup() {
+  const editor = useEditor();
+  const element = useEditorElement();
+  const popup = useCaretTriggerPopup({
+    parseQuery: (text) => /^@(\S*)$/.exec(text)?.[1] ?? null,
+    getItemCount: ({ query }) => matches(query).length,
+    navigate: (key, state) => {
+      if (key !== "ArrowDown" && key !== "ArrowUp") return null;
+      const count = Math.max(matches(state.query).length, 1);
+      const step = key === "ArrowDown" ? 1 : -1;
+      return (state.highlightedIndex + step + count) % count;
+    },
+    onActivate: (state) => {
+      const name = matches(state.query)[state.highlightedIndex];
+      if (name === undefined) return;
+      editor.commands.setText(state.blockId, "");
+      editor.setTextCursorPosition(state.blockId, "end");
+      editor.commands.insertCustomInlineContent("mention", {
+        targetType: "user",
+        targetId: name,
+        label: name,
+      });
+      popup.close();
+    },
+    allowSelectors: MENTION_POPUP_SELECTORS,
+  });
+  const anchor =
+    popup.state !== null && element !== null ? readCaretBounds(element) : null;
+  const { menuRef, style } = useClampedMenuPosition(
+    anchor?.left ?? 0,
+    anchor?.top ?? 0,
+  );
+
+  if (popup.state === null) return null;
+  return (
+    <div data-mention-popup="true" ref={menuRef} role="listbox" style={{ ...style, position: "fixed" }}>
+      {matches(popup.state.query).map((name, index) => (
+        <div aria-selected={index === popup.state?.highlightedIndex} key={name} role="option">
+          {name}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+`MentionPopup`을 `EditorProvider` 안에 둔다. 마지막 좌표 유지, 스크롤·resize 구독, `insertCustomInlineContent` 실패 시 텍스트 복원, 마우스 클릭 확정, `aria-activedescendant`까지 갖춘 실행 가능한 전체 예제는 `apps/showcase`의 `src/examples/17-mention`을 참고한다.
 
 **트리거 popup의 keydown**: `handleMenuKeyDown`으로 처리한다. IME 조합 중 키, Enter 자동 반복, Ctrl·Alt·Meta 조합 키를 이 함수가 걸러 준다. IME가 처리한 Enter(`keyCode` 229)는 막기만 하고 `activate`를 부르지 않는다. `navigate`가 `true`를 돌려주면 `preventDefault`도 이 함수가 한다. `activate`를 부른 Enter의 자동 반복은 문서 capture 단계에서 삼킨다. Enter keyup에서 푼다. 반복 Enter도 수식 키도 아닌 keydown에서도 푼다. Shift·Control·Alt·AltGraph·Meta keydown은 풀지 않는다. 처리 순서의 정본은 `menu-keyboard.d.ts` 맨 위 주석이다(저장소에서는 `packages/react/src/menu-keyboard.ts` 헤더).
 
@@ -168,7 +244,7 @@ handleMenuKeyDown(event, {
 });
 ```
 
-키보드로 `@query` 블록을 떠난 직후의 Enter는 `activate`에서 막는다. `editor.getCaretBlockContext()`는 그때 낡은 블록을 돌려준다. DOM selection이 속한 블록이 popup을 연 블록과 같은지 확인한다. 예제의 `readDomCaretBlockId`가 그 구현이다. 내장 `SlashMenu`와 `EmojiPicker`는 같은 확인을 이미 한다. 이 헬퍼는 공개 API가 아니다.
+키보드로 `@query` 블록을 떠난 직후의 Enter는 `activate`에서 막는다. `editor.getCaretBlockContext()`는 그때 낡은 블록을 돌려준다. DOM selection이 속한 블록이 popup을 연 블록과 같은지 확인한다. `useCaretTriggerPopup`, 내장 `SlashMenu`, `EmojiPicker`는 이 확인을 이미 한다. `handleMenuKeyDown`을 직접 배선하는 소비자만 스스로 확인한다. 확인에 쓰는 내부 헬퍼 `readDomCaretBlockId`는 공개 API가 아니다.
 
 ### 이미지 업로드
 
