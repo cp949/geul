@@ -137,10 +137,10 @@ type MediaInfo = {
   url: string;
   name: string | null;
   caption: string | null;
-  // file은 null(preview 토글 자체가 없는 kind, getSelectionMediaBlock과 같은
-  // 경계). image/video/audio는 실제 유효값(슬라이스5 RD-002 DELTA-02).
+  // file·iframe은 null(preview 토글 자체가 없는 kind, getSelectionMediaBlock과
+  // 같은 경계). image/video/audio는 실제 유효값(슬라이스5 RD-002 DELTA-02).
   showPreview: boolean | null;
-  // image/video만 실제 유효값(Issue #154, MED-009) — audio/file은
+  // image/video/iframe만 실제 유효값(Issue #154, MED-009) — audio/file은
   // 정렬 자체가 없는 kind라 null(showPreview와 반대 kind 집합,
   // getSelectionMediaBlock과 같은 경계).
   textAlignment: "left" | "center" | "right" | null;

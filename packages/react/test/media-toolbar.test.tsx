@@ -190,9 +190,8 @@ const filledAudioBlock: SelectionMediaBlock = {
 };
 
 // CUS-001~004(roadmap Issue #212 RD-004 DELTA-02) — iframe은
-// getSelectionMediaBlock() 실제 계약대로 showPreview가 항상 의미 없는
-// true를 보고한다(RD-002 DELTA-03이 고정한 동작, react 쪽에서만
-// Preview 게이트로 숨긴다).
+// getSelectionMediaBlock() 실제 계약대로 showPreview 필드가 없어 null을
+// 보고한다. react는 이 null로 Preview 토글을 숨긴다.
 const filledIframeBlock: SelectionMediaBlock = {
   blockId: "media-1",
   kind: "iframe",
