@@ -1,4 +1,8 @@
-import type { EditorController, MediaBlockKind } from "@cp949/geul-core";
+import {
+  mediaBlockTypeHasField,
+  type EditorController,
+  type MediaBlockKind,
+} from "@cp949/geul-core";
 import {
   AlignCenter,
   AlignLeft,
@@ -1277,10 +1281,8 @@ export const MediaToolbar = ({
           {dictionary.toolbar.media.editCaptionAriaLabel}
         </MenuItemButton>
       )}
-      {/* iframe도 제외한다 — getSelectionMediaBlock().showPreview가 iframe에
-          대해 의미 없는 true를 항상 보고한다(RD-002 DELTA-03이 고정한 core
-          동작, core는 고치지 않는다 — RD-004 DELTA-01 결정과 같은 근거). */}
-      {toolbarState.kind !== "file" && toolbarState.kind !== "iframe" && (
+      {/* showPreview 필드가 없는 file·iframe은 null이라 토글을 내지 않는다. */}
+      {toolbarState.showPreview !== null && (
         <MenuItemButton
           aria-checked={toolbarState.showPreview === true}
           className={mediaToolbarMoreMenuItemClassName}
@@ -1290,11 +1292,8 @@ export const MediaToolbar = ({
           {dictionary.toolbar.media.preview}
         </MenuItemButton>
       )}
-      {(toolbarState.kind === "image" ||
-        toolbarState.kind === "video" ||
-        // iframe(CUS-001~004, RD-004 DELTA-02) — model MEDIA_BLOCK_FIELDS가
-        // image/video/iframe 3종을 textAlignment 소유로 둔다.
-        toolbarState.kind === "iframe") && (
+      {/* textAlignment 소유 종류(MEDIA_BLOCK_FIELDS)만 정렬 행을 낸다. */}
+      {mediaBlockTypeHasField(toolbarState.kind, "textAlignment") && (
         // block-side-menu-menu.tsx 정렬 행 클래스를 코드 복제 없이 그대로
         // 재사용한다(01-계획.md 6절 "결정") — 4번째 해제(×) 버튼은 추가하지
         // 않는다: media는 같은 값 재클릭 시 해제하는 기존 setMediaAlignment

@@ -1,3 +1,4 @@
+import { mediaBlockTypeHasField } from "@cp949/geul-core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { findElementByAttribute } from "./find-by-attribute.js";
@@ -126,13 +127,7 @@ const resolveRenderTarget = (
   if (element === null) return null;
   const media = editor.getSelectionMediaBlock();
   if (media === null || media.url === null) return null;
-  if (
-    media.kind !== "image" &&
-    media.kind !== "video" &&
-    media.kind !== "iframe"
-  ) {
-    return null;
-  }
+  if (!mediaBlockTypeHasField(media.kind, "previewWidth")) return null;
   const wrapper = findMediaWrapper(element, media.blockId);
   if (wrapper === null) return null;
   const mediaElement = findMediaElement(wrapper);

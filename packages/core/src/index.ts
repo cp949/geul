@@ -14,6 +14,7 @@ export type {
   InlineContentBlockType,
   ListItemBlock,
   ListItemBlockType,
+  MediaOwnField,
   NestableBlockType,
   ParagraphBlock,
   Result,
@@ -38,6 +39,9 @@ export type {
 // blockTypeDescriptorFromBlock에 그대로 넘기던 계약(BlockTypeSource 타입
 // 주석 참고)이 CustomBlock에서 깨져, 미등록 타입을 "찾지 못함"과 동일하게
 // 취급하는 기존 패턴(generic-block-commands.ts)을 여기서도 재사용한다.
+// mediaBlockTypeHasField는 미디어 종류별 필드 소유 표(MEDIA_BLOCK_FIELDS)의
+// 질의다 — react 미디어 툴바·리사이즈 핸들이 같은 표를 읽는다. 노출되는 값은
+// 문자열과 boolean뿐이다.
 export {
   isInlineContentBlockType,
   isKnownBlockType,
@@ -45,6 +49,7 @@ export {
   isListItemBlockType,
   isNestableBlockType,
   MAX_COLUMN_WIDTH,
+  mediaBlockTypeHasField,
   MIN_COLUMN_WIDTH,
   parseTableColumns,
   serializeTableColumns,
