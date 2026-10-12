@@ -246,6 +246,8 @@ export class MediaUploadTracker {
     }
     const { uploadFile } = this.host;
     if (uploadFile === undefined) {
+      // 프리뷰만 있는 블록의 재업로드는 허용한다. 덮어쓴 이전 URL은 lifecycle이
+      // URL 기준으로 통지한다(Issue #383).
       if (hasStoredUrl(node.attrs)) {
         return commandNotApplicable(command);
       }

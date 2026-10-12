@@ -4,38 +4,52 @@ import { undoDepth } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 
-import { findBlockPosition } from "./block-position.js";
 import { isLocalPreviewReachableViaHistory } from "./media-local-preview-reachability.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 
+// 문서에서 빠졌지만 아직 복구 불가 판정을 받지 못한 로컬 프리뷰. 키(URL)는
+// pending Map이 쥐고, blockId는 통지 인자 모양 `(blockId, attrs)`를 유지하려고
+// 빠지기 직전 노드의 값을 보관한다.
+export type PendingLocalPreview = {
+  blockId: string;
+  attrs: LocalPreviewAttrs;
+};
+
 export type MediaLocalPreviewLifecycleOptions = {
-  // Issue #168 roadmap RD-002 DELTA-02 — 삭제된 로컬 프리뷰(ADR 0015)
-  // 블록이 더 이상 undo로도 redo로도 복구 불가라고 판정되면 호출한다.
+  // Issue #168 roadmap RD-002 DELTA-02 — 문서에서 빠진 로컬 프리뷰(ADR 0015)
+  // URL이 더 이상 undo로도 redo로도 복구 불가라고 판정되면 호출한다.
   // production-editor-session.ts가 기존 `notifyLocalPreviewCleared`(url
   // 확정 시 정리와 같은 채널, RD-002.md "결정" — 신호 채널 재사용)로
   // 연결한다. 미지정이면 no-op(MediaDropPasteExtension의 기본값과 동일
   // 근거 — production-editor-assembly.ts가 항상 실제 콜백을 넘긴다).
   notifyUnreachable: (blockId: string, cleared: LocalPreviewAttrs) => void;
-  // Issue #168 roadmap RD-002 DELTA-03 — 사라졌지만 아직 복구 불가 판정을
+  // Issue #168 roadmap RD-002 DELTA-03 — 빠졌지만 아직 복구 불가 판정을
   // 받지 못해 `pending`에만 남아 있는 로컬 프리뷰 목록이 바뀔 때마다(추가·
   // 재등장으로 제거·판정 확정으로 제거) 그 시점의 전체 스냅샷을 알린다.
+  // 키는 URL이다(Issue #383).
   // `production-editor-session.ts::destroy()`가 세션 종료 시 이 스냅샷을
-  // 함께 훑어야 한다 — `pending`은 doc에서 이미 사라진 블록만 담으므로
-  // `collectLocalPreviewBlocks(doc)`(현재 doc 순회)만으로는 이 블록들을
+  // 함께 훑어야 한다 — `pending`은 doc에 URL이 없는 항목만 담으므로
+  // `collectLocalPreviewBlocks(doc)`(현재 doc 순회)만으로는 이 항목들을
   // 볼 수 없다(구현 중 실측 — "삭제 직후·복구 불가 판정 전 destroy()"
   // 시나리오에서 정리 신호가 전혀 나가지 않는 회귀를 이 옵션으로 막는다).
   // 미지정이면 no-op.
   notifyPendingChange?: (
-    pending: ReadonlyMap<string, LocalPreviewAttrs>,
+    pending: ReadonlyMap<string, PendingLocalPreview>,
   ) => void;
+  // Issue #383 — 이미 정리 신호를 낸 URL인지 묻는다. 즉시 통지 경로(url 확정,
+  // updateBlock, #379 거절 정리, 스윕)는 문서에서 URL을 지우므로 이 확장의
+  // 추적에도 걸린다. true인 URL은 pending에 넣지 않아 같은 URL을 두 번 알리지
+  // 않는다. 미지정이면 항상 false.
+  isCleared?: (url: string) => boolean;
 };
 
 // doc에서 로컬 프리뷰(ADR 0015) attrs가 남은 미디어 블록을 전부 찾는다.
 // editor-controller.ts::getPendingLocalPreviews()와 같은 판정 기준(4종
 // media kind + blockId + localPreviewUrl 문자열)이지만, 이 파일은 "삭제
 // 감지" 전용이라 그 공개 API의 반환 shape({blockId, file})과는 독립적으로
-// 유지한다(호출부가 attrs 전체 — url까지 — 필요하다, 아래 appendTransaction
-// 참고). Issue #168 roadmap RD-002 DELTA-03부터 두 번째 호출부가 생겼다 —
+// 유지한다(호출부가 attrs 전체 — url까지 — 필요하다). appendTransaction은
+// Issue #383부터 URL 키인 아래 collectLocalPreviewsByUrl을 쓰고, 이 함수는
+// 세션 스윕 전용이다. Issue #168 roadmap RD-002 DELTA-03부터 두 번째 호출부가 생겼다 —
 // production-editor-session.ts::destroy()가 세션 영구 종료 시 남은 로컬
 // 프리뷰를 같은 기준으로 훑어 잔여 정리 신호를 낸다(RD-002.md "결정" —
 // getPendingLocalPreviews() shape 확장도 react DOM 직접 읽기도 아니라 이
@@ -61,8 +75,40 @@ export const collectLocalPreviewBlocks = (
   return found;
 };
 
-// Issue #168 roadmap RD-002 DELTA-02 — 로컬 프리뷰가 남은 미디어 블록이
-// 삭제된 뒤 undo로도 redo로도 복구 불가능해지는 시점을 판정해 정리 신호를 낸다.
+// doc의 로컬 프리뷰를 URL 키로 모은다(Issue #383). 추적 단위가 blockId가
+// 아니라 URL이라 블록이 남은 채 URL만 빠지는 경로도 잡는다. 같은 URL을 가진
+// 노드가 여럿이면 먼저 만난 노드의 blockId를 쓴다. destroy()·replaceDocument
+// 스윕은 blockId 키인 collectLocalPreviewBlocks를 그대로 쓴다.
+export const collectLocalPreviewsByUrl = (
+  doc: ProseMirrorNode,
+): Map<string, PendingLocalPreview> => {
+  const found = new Map<string, PendingLocalPreview>();
+  doc.descendants((node) => {
+    if (
+      isMediaBlockType(node.type.name) &&
+      typeof node.attrs.blockId === "string" &&
+      node.attrs.blockId.length > 0 &&
+      typeof node.attrs.localPreviewUrl === "string" &&
+      !found.has(node.attrs.localPreviewUrl)
+    ) {
+      found.set(node.attrs.localPreviewUrl, {
+        blockId: node.attrs.blockId,
+        attrs: {
+          localPreviewUrl: node.attrs.localPreviewUrl,
+          localPreviewFile: node.attrs.localPreviewFile as File,
+        },
+      });
+    }
+    return true;
+  });
+  return found;
+};
+
+// Issue #168 roadmap RD-002 DELTA-02 — 로컬 프리뷰 URL이 문서에서 빠진 뒤
+// undo로도 redo로도 복구 불가능해지는 시점을 판정해 정리 신호를 낸다.
+// Issue #383부터 추적 단위는 URL이다. 블록이 삭제된 경우뿐 아니라 블록이 남은
+// 채 URL만 빠지는 경우(같은 id 재삽입, 프리뷰 덮어쓰기, 프리뷰 적용 undo)와
+// 같은 blockId가 미디어가 아닌 타입으로 바뀐 경우도 대상이다.
 // `media-local-preview-reachability.ts`(공개 API 시뮬레이션, 비공개
 // prosemirror-history 상수에 의존하지 않음 — `_works/roadmap/progress.md`
 // "DELTA-02 착수 전 기술 조사" 근거)를 소비하는 유일한 호출부다.
@@ -81,11 +127,23 @@ export const MediaLocalPreviewLifecycleExtension =
     addProseMirrorPlugins() {
       const notifyUnreachable = this.options.notifyUnreachable;
       const notifyPendingChange = this.options.notifyPendingChange;
-      // 사라졌지만 아직 undo·redo로 복구 가능한지 재판정 대기 중인 블록 —
-      // 확장 인스턴스(= Tiptap Editor 인스턴스, 세션 재구성마다 새로
-      // 만들어짐)당 하나. BlockIdExtension의 createId 클로저와 동일한
-      // 생애주기(session-scoped, 재구성 시 자동으로 빈 상태에서 시작).
-      const pending = new Map<string, LocalPreviewAttrs>();
+      const isCleared = this.options.isCleared ?? (() => false);
+      // 문서에서 빠졌지만 아직 undo·redo로 복구 가능한지 재판정 대기 중인
+      // 로컬 프리뷰(키 = URL) — 확장 인스턴스(= Tiptap Editor 인스턴스, 세션
+      // 재구성마다 새로 만들어짐)당 하나. BlockIdExtension의 createId 클로저와
+      // 동일한 생애주기(session-scoped, 재구성 시 자동으로 빈 상태에서 시작).
+      const pending = new Map<string, PendingLocalPreview>();
+      // 단일 슬롯 메모 — 직전 호출의 새 문서가 다음 호출의 옛 문서가 되는
+      // 흐름이 보통이라 변경당 문서 순회가 한 번이면 된다.
+      let lastDoc: ProseMirrorNode | null = null;
+      let lastPreviews = new Map<string, PendingLocalPreview>();
+      const previewsOf = (doc: ProseMirrorNode) => {
+        if (doc !== lastDoc) {
+          lastPreviews = collectLocalPreviewsByUrl(doc);
+          lastDoc = doc;
+        }
+        return lastPreviews;
+      };
       // 재진입 가드 — `EditorState.apply(tr)`는 내부적으로
       // `applyTransaction(tr)`의 별칭이라(prosemirror-state 실측,
       // `apply(tr) { return this.applyTransaction(tr).state }`) 이
@@ -95,7 +153,7 @@ export const MediaLocalPreviewLifecycleExtension =
       // `appendTransaction`이 재귀적으로 재호출돼 같은 `pending` Map을
       // 시뮬레이션 중간 상태 기준으로 잘못 변형시키는 것을 막는다(착수
       // 중 실측 — 재귀 호출이 시뮬레이션 도중 "재등장"으로 오판해 아직
-      // 처리 중인 바깥 호출의 `pending`에서 blockId를 지워버림). 이
+      // 처리 중인 바깥 호출의 `pending`에서 항목을 지워버림). 이
       // 플러그인 외 다른 appendTransaction 사용처(BlockIdExtension·
       // TrailingBlockExtension 등)는 호출마다 파라미터에서만 파생하고
       // 영속 mutable 상태를 갖지 않아(실측) 재진입해도 무해하다 — 이
@@ -110,24 +168,32 @@ export const MediaLocalPreviewLifecycleExtension =
               return null;
             }
 
-            let changed = false;
-
-            // 새로 사라진 로컬 프리뷰 블록을 재판정 대기열에 추가한다.
-            for (const [blockId, attrs] of collectLocalPreviewBlocks(
-              oldState.doc,
-            )) {
-              if (findBlockPosition(newState.doc, blockId) === null) {
-                pending.set(blockId, attrs);
-                changed = true;
-              }
+            const oldPreviews = previewsOf(oldState.doc);
+            const newPreviews = previewsOf(newState.doc);
+            if (
+              oldPreviews.size === 0 &&
+              newPreviews.size === 0 &&
+              pending.size === 0
+            ) {
+              return null;
             }
 
-            // 실제 undo·redo로 복구된 블록은 대기열에서 뺀다 — 이후 아무리 새
-            // undo 이벤트가 쌓여도 이 blockId를 다시 정리 대상으로 보지
-            // 않는다(같은 blockId 재사용 시 오탐 방지).
-            for (const blockId of pending.keys()) {
-              if (findBlockPosition(newState.doc, blockId) !== null) {
-                pending.delete(blockId);
+            let changed = false;
+
+            // 새로 빠진 URL을 재판정 대기열에 추가한다. 이미 정리 신호를 낸
+            // URL은 넣지 않는다.
+            for (const [url, entry] of oldPreviews) {
+              if (newPreviews.has(url) || isCleared(url)) continue;
+              pending.set(url, entry);
+              changed = true;
+            }
+
+            // 실제 undo·redo로 복구된 URL은 대기열에서 뺀다 — 이후 아무리 새
+            // undo 이벤트가 쌓여도 이 URL을 다시 정리 대상으로 보지 않는다.
+            // 이미 정리 신호를 낸 URL도 뺀다(통지는 하지 않는다).
+            for (const url of pending.keys()) {
+              if (newPreviews.has(url) || isCleared(url)) {
+                pending.delete(url);
                 changed = true;
               }
             }
@@ -149,10 +215,10 @@ export const MediaLocalPreviewLifecycleExtension =
             ) {
               simulating = true;
               try {
-                for (const [blockId, attrs] of pending) {
-                  if (!isLocalPreviewReachableViaHistory(newState, blockId)) {
-                    pending.delete(blockId);
-                    notifyUnreachable(blockId, attrs);
+                for (const [url, entry] of pending) {
+                  if (!isLocalPreviewReachableViaHistory(newState, url)) {
+                    pending.delete(url);
+                    notifyUnreachable(entry.blockId, entry.attrs);
                     changed = true;
                   }
                 }

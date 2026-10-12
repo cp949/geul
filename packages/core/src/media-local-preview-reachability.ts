@@ -1,11 +1,13 @@
+import { isMediaBlockType } from "@cp949/geul-model";
 import { redo, redoDepth, undo, undoDepth } from "@tiptap/pm/history";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 
-import { findBlockPosition } from "./block-position.js";
-
-// Issue #168 roadmap RD-002 DELTA-02 — "삭제된 로컬 프리뷰(ADR 0015) 블록이
-// 아직 undo·redo로 복구 가능한가"를 판정한다. Issue #380부터 redo 방향도 본다
-// (아래 "redo 시뮬레이션" 문단). `prosemirror-history`(vendored
+// Issue #168 roadmap RD-002 DELTA-02 — "문서에서 빠진 로컬 프리뷰(ADR 0015)
+// URL이 아직 undo·redo로 복구 가능한가"를 판정한다.
+// 대상은 blockId가 아니라 URL이다(Issue #383). 블록이 남은 채 URL만 빠진
+// 경우도 본다.
+// redo 방향도 본다(Issue #380, 아래 "redo 시뮬레이션" 문단). `prosemirror-history`(vendored
 // 1.5.0) 공개 API(`closeHistory`/`history`/`isHistoryTransaction`/`redo`/
 // `redoDepth`/`redoNoScroll`/`undo`/`undoDepth`/`undoNoScroll`, `dist/
 // index.d.ts` 확인)에는 "이 이벤트가 아직 done 브랜치에 남아있는가"를 직접
@@ -15,7 +17,7 @@ import { findBlockPosition } from "./block-position.js";
 // progress.md` "DELTA-02 착수 전 기술 조사" 절 근거).
 //
 // 이 함수는 그 비공개 상수에 의존하지 않는다 — `undo(state, cb)`를
-// `undoDepth(state)`번 반복 호출해, 실제로 몇 번 undo해야 대상 블록이
+// `undoDepth(state)`번 반복 호출해, 실제로 몇 번 undo해야 대상 URL이
 // doc에 재등장하는지 그대로 재현한다. prosemirror-history의 실제 popEvent
 // 로직을 그대로 태우므로 근사가 아니라 정확하다.
 //
@@ -42,12 +44,29 @@ import { findBlockPosition } from "./block-position.js";
 // 게이트한다, media-local-preview-lifecycle-extension.ts 참고.
 export function isLocalPreviewReachableViaHistory(
   state: EditorState,
-  blockId: string,
+  url: string,
 ): boolean {
   return (
-    reappearsWhileStepping(state, blockId, undoDepth(state), undo) ||
-    reappearsWhileStepping(state, blockId, redoDepth(state), redo)
+    reappearsWhileStepping(state, url, undoDepth(state), undo) ||
+    reappearsWhileStepping(state, url, redoDepth(state), redo)
   );
+}
+
+// doc에 localPreviewUrl이 url인 미디어 노드가 있는지 본다. 찾으면 즉시 멈춘다.
+function hasLocalPreviewUrl(doc: ProseMirrorNode, url: string): boolean {
+  let found = false;
+  doc.descendants((node) => {
+    if (found) return false;
+    if (
+      isMediaBlockType(node.type.name) &&
+      node.attrs.localPreviewUrl === url
+    ) {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found;
 }
 
 type HistoryStep = (
@@ -55,10 +74,10 @@ type HistoryStep = (
   dispatch: (transaction: Transaction) => void,
 ) => boolean;
 
-// `step`(undo 또는 redo)을 `steps`번 시뮬레이션하며 블록이 doc에 나타나는지 본다.
+// `step`(undo 또는 redo)을 `steps`번 시뮬레이션하며 URL이 doc에 나타나는지 본다.
 function reappearsWhileStepping(
   state: EditorState,
-  blockId: string,
+  url: string,
   steps: number,
   step: HistoryStep,
 ): boolean {
@@ -70,7 +89,7 @@ function reappearsWhileStepping(
     });
     if (!applied || next === null) break;
     current = next;
-    if (findBlockPosition(current.doc, blockId) !== null) return true;
+    if (hasLocalPreviewUrl(current.doc, url)) return true;
   }
   return false;
 }

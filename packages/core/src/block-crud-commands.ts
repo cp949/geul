@@ -18,7 +18,11 @@ import {
 } from "./block-tree-edit.js";
 import type { PartialBlock } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
-import { carryOverLocalPreviews } from "./media-local-preview-carry-over.js";
+import {
+  carryOverLocalPreviews,
+  carryOverLocalPreviewsFromNodes,
+  type ClearedLocalPreview,
+} from "./media-local-preview-carry-over.js";
 import {
   blockToTiptapJson,
   disabledBlockError,
@@ -341,16 +345,33 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       return commandNotApplicable("replaceBlocks");
     }
 
+    // 로컬 프리뷰(ADR 0015)는 저장 모델에 없는 PM 전용 attrs라 모델에서 만든
+    // JSON에는 없다. 제거 서브트리마다 blockId로 기존 프리뷰를 이어받는다
+    // (updateBlock과 같은 규칙, Issue #383). 콜백이 거절되면 통지하지 않는다.
+    const cleared: ClearedLocalPreview[] = [];
     const result = session.runDocumentCommand("replaceBlocks", "local", () => {
       const anchorPosition = findBlockPosition(
         session.editor.state.doc,
         anchorId,
       );
       if (anchorPosition === null) return false;
-      const fragment = Fragment.fromJSON(
-        session.editor.schema,
+      cleared.length = 0;
+      const removedNodes = blockIdsToRemove.flatMap((id) => {
+        const removedPosition = findBlockPosition(session.editor.state.doc, id);
+        const removedNode =
+          removedPosition === null
+            ? null
+            : session.editor.state.doc.nodeAt(removedPosition);
+        return removedNode === null ? [] : [removedNode];
+      });
+      const carried = carryOverLocalPreviewsFromNodes(
+        removedNodes,
         insertedBlocks.map(blockToTiptapJson),
+        true,
       );
+      cleared.push(...carried.cleared);
+      const insertedJson = carried.jsons;
+      const fragment = Fragment.fromJSON(session.editor.schema, insertedJson);
       let transaction = session.editor.state.tr.insert(
         anchorPosition,
         fragment,
@@ -384,6 +405,10 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       return true;
     });
     if (!result.ok) return result;
+    // 커밋이 반영된 뒤에만 정리 전 값으로 통지한다(updateBlock과 같은 순서).
+    for (const { blockId, attrs } of cleared) {
+      session.notifyLocalPreviewCleared(blockId, attrs);
+    }
     return { ok: true, value: { insertedBlocks, removedBlocks } };
   };
 

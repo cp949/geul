@@ -156,11 +156,12 @@ export type CreateEditorOptions = {
   // 시점마다 동일해 나눌 이유가 없다).
   //   1. 실제 url이 확정되는 두 지점(uploadMediaFile/replaceMediaBlockFile
   //      성공, setMediaBlockUrl) — core가 attrs를 null로 정리한 뒤 알린다.
-  //   2. 로컬 프리뷰가 있던 블록이 사라진 뒤 undo로도 redo로도 복구
-  //      불가능해지는 시점(RD-002 DELTA-02, Issue #380,
+  //   2. 로컬 프리뷰 URL이 문서에서 사라진 뒤 undo로도 redo로도 도달할 수
+  //      없게 되는 시점(RD-002 DELTA-02, Issue #380,
   //      `media-local-preview-reachability.ts`) — attrs는 이미 doc에서
   //      사라진 상태로 알린다. 삭제·삽입·복제 어느 쪽이든 블록이 사라지는
-  //      경우를 포함한다.
+  //      경우뿐 아니라 블록이 남은 채 URL만 빠지는 경우(같은 id 재삽입,
+  //      프리뷰 덮어쓰기, 프리뷰 적용 undo)도 포함한다(Issue #383).
   //   3. 세션이 `destroy()`로 영구히 끝날 때, 그때까지 위 두 시점 중
   //      어디에도 걸리지 않고 남아 있던 로컬 프리뷰 전부(RD-002 DELTA-03) —
   //      `unmount()`(재마운트 가능한 DOM 분리)에는 걸지 않는다, `destroy()`
@@ -172,6 +173,7 @@ export type CreateEditorOptions = {
   //      이어받지 않는다.
   //   5. 명령이 URL을 발급했으나 dispatch 거절·되돌림·예외로 문서에 들어가지
   //      못한 시점(Issue #379) — 문서에 한 번도 없었던 블록 id로 알린다.
+  // 통지는 URL당 1회다. 같은 URL을 두 번 알리지 않는다(Issue #383).
   // 실제 URL.revokeObjectURL DOM 호출은 이 옵션의 소비자(RD-002, react)
   // 몫이다 — core는 "언제 정리해도 안전한지"만 판단해 신호로 넘긴다.
   // onUploadStateChange와 동일하게 문서 변경이 아니라 push 알림이다(로컬

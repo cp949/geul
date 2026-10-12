@@ -39,25 +39,12 @@ const collectSubtreePreviews = (
   return found;
 };
 
-// 로컬 프리뷰(ADR 0015)는 저장 모델에 없는 PM 전용 attrs다. 모델에서 PM
-// 노드를 새로 만들면 null로 리셋된다(Issue #376). updateBlock처럼 모델에서
-// 만든 JSON으로 노드를 교체하는 명령이 이 함수로 기존 프리뷰를 이어받는다.
-//
-// oldNode(서브트리)에 있던 로컬 프리뷰를 blockId로 짝지어 json에 이어받는다.
-// clearWhenUrl이 true면 json의 url이 비어 있지 않은 미디어는 이어받지 않고
-// cleared에 담는다(url 확정 = 프리뷰 정리, setMediaBlockUrl과 같은 판정).
-// 입력 json은 바꾸지 않는다. json에 없는 노드(삭제된 자식)는 이어받지 않는다
-// — 그 정리는 MediaLocalPreviewLifecycleExtension이 소유한다. 한계: 같은
-// blockId가 미디어가 아닌 타입으로 바뀌어 남으면 Lifecycle이 블록이 아직
-// 있다고 보고 통지하지 않는다(Issue #376 이전부터 있던 동작이다).
-export const carryOverLocalPreviews = (
-  oldNode: ProseMirrorNode,
+const applyPreviews = (
+  previews: ReadonlyMap<string, LocalPreviewAttrs>,
   json: TiptapJsonNode,
   clearWhenUrl: boolean,
 ): { json: TiptapJsonNode; cleared: ClearedLocalPreview[] } => {
-  const previews = collectSubtreePreviews(oldNode);
   const cleared: ClearedLocalPreview[] = [];
-  if (previews.size === 0) return { json, cleared };
 
   const visit = (node: TiptapJsonNode): TiptapJsonNode => {
     let next = node;
@@ -88,4 +75,49 @@ export const carryOverLocalPreviews = (
   };
 
   return { json: visit(json), cleared };
+};
+
+// 로컬 프리뷰(ADR 0015)는 저장 모델에 없는 PM 전용 attrs다. 모델에서 PM
+// 노드를 새로 만들면 null로 리셋된다(Issue #376). updateBlock처럼 모델에서
+// 만든 JSON으로 노드를 교체하는 명령이 이 함수로 기존 프리뷰를 이어받는다.
+//
+// oldNode(서브트리)에 있던 로컬 프리뷰를 blockId로 짝지어 json에 이어받는다.
+// clearWhenUrl이 true면 json의 url이 비어 있지 않은 미디어는 이어받지 않고
+// cleared에 담는다(url 확정 = 프리뷰 정리, setMediaBlockUrl과 같은 판정).
+// 입력 json은 바꾸지 않는다. json에 없는 노드(삭제된 자식)는 이어받지 않는다
+// — 그 정리는 MediaLocalPreviewLifecycleExtension이 소유한다. 이어받지
+// 못한 URL(삭제된 자식, 같은 blockId가 미디어가 아닌 타입으로 바뀐 경우)은
+// Lifecycle이 URL 기준으로 통지한다(Issue #383).
+export const carryOverLocalPreviews = (
+  oldNode: ProseMirrorNode,
+  json: TiptapJsonNode,
+  clearWhenUrl: boolean,
+): { json: TiptapJsonNode; cleared: ClearedLocalPreview[] } => {
+  const previews = collectSubtreePreviews(oldNode);
+  if (previews.size === 0) return { json, cleared: [] };
+  return applyPreviews(previews, json, clearWhenUrl);
+};
+
+// 제거 노드가 여럿이고 삽입 JSON도 여럿인 명령(replaceBlocks)용이다. 제거
+// 서브트리의 프리뷰를 한 번만 모아 모든 JSON에 적용한다. 프리뷰가 하나도
+// 없으면 JSON을 그대로 돌려줘 비용이 제거 서브트리 순회 한 번이다(Issue #383).
+export const carryOverLocalPreviewsFromNodes = (
+  oldNodes: readonly ProseMirrorNode[],
+  jsons: readonly TiptapJsonNode[],
+  clearWhenUrl: boolean,
+): { jsons: TiptapJsonNode[]; cleared: ClearedLocalPreview[] } => {
+  const previews = new Map<string, LocalPreviewAttrs>();
+  for (const node of oldNodes) {
+    for (const [blockId, attrs] of collectSubtreePreviews(node)) {
+      previews.set(blockId, attrs);
+    }
+  }
+  if (previews.size === 0) return { jsons: [...jsons], cleared: [] };
+  const cleared: ClearedLocalPreview[] = [];
+  const applied = jsons.map((json) => {
+    const result = applyPreviews(previews, json, clearWhenUrl);
+    cleared.push(...result.cleared);
+    return result.json;
+  });
+  return { jsons: applied, cleared };
 };

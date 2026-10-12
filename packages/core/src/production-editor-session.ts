@@ -26,7 +26,10 @@ import type { EditorController } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
 import { historyReasonOf } from "./history-change-reason.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
-import { collectLocalPreviewBlocks } from "./media-local-preview-lifecycle-extension.js";
+import {
+  collectLocalPreviewBlocks,
+  type PendingLocalPreview,
+} from "./media-local-preview-lifecycle-extension.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import type { MediaUploadState, UploadFile } from "./media-upload.js";
 import {
@@ -144,13 +147,17 @@ export class ProductionEditorSession {
   private destroyed = false;
   private mountedElement: HTMLElement | null = null;
   // Issue #168 roadmap RD-002 DELTA-03 — MediaLocalPreviewLifecycleExtension의
-  // `pending`(사라졌지만 복구 불가 판정 전) 최신 스냅샷 미러. destroy()가
-  // doc 순회(collectLocalPreviewBlocks)만으로는 보지 못하는 이 블록들도
+  // `pending`(문서에서 빠졌지만 복구 불가 판정 전, 키 = URL) 최신 스냅샷
+  // 미러. destroy()가 doc 순회(collectLocalPreviewBlocks)만으로는 보지 못하는
+  // 이 항목들도
   // 함께 정리 신호를 내기 위해 읽는다 — 그 외 용도로 쓰지 않는다.
   private pendingUnreachableLocalPreviews: ReadonlyMap<
     string,
-    LocalPreviewAttrs
+    PendingLocalPreview
   > = new Map();
+  // Issue #383 — onLocalPreviewCleanup으로 이미 알린 blob URL. blob URL은
+  // createObjectURL마다 유일하므로 URL당 1회 통지를 이 집합이 보장한다.
+  private readonly clearedLocalPreviewUrls = new Set<string>();
   private activeReason: ChangeReason | null = null;
   private pendingDocument: BlockDocument | null = null;
   private blockSelection: BlockSelectionRange | null = null;
@@ -390,11 +397,15 @@ export class ProductionEditorSession {
     )) {
       this.notifyLocalPreviewCleared(blockId, attrs);
     }
-    // 위 doc 순회는 사라졌지만 복구 불가 판정 전이라 doc에 이미 없는
-    // 블록은 보지 못한다(구현 중 실측 — "삭제 직후 destroy()" 회귀) —
+    // 위 doc 순회는 문서에서 빠졌지만 복구 불가 판정 전이라 doc에 이미 없는
+    // 항목은 보지 못한다(구현 중 실측 — "삭제 직후 destroy()" 회귀) —
     // MediaLocalPreviewLifecycleExtension의 pending 미러를 함께 훑는다.
-    // 두 순회는 겹치지 않는다: pending은 doc에서 사라진 블록만 담는다.
-    for (const [blockId, attrs] of this.pendingUnreachableLocalPreviews) {
+    // 두 순회는 겹치지 않는다: pending은 URL이 doc에 없는 항목만 담는다.
+    // 겹쳐도 notifyLocalPreviewCleared가 URL당 1회로 막는다.
+    for (const {
+      blockId,
+      attrs,
+    } of this.pendingUnreachableLocalPreviews.values()) {
       this.notifyLocalPreviewCleared(blockId, attrs);
     }
     this.tiptapEditor.destroy();
@@ -488,7 +499,13 @@ export class ProductionEditorSession {
   // 공용 — url 확정 시 정리된 로컬 프리뷰를 알린다(Issue #168 roadmap
   // RD-001 DELTA-05). notifyUploadStateChange와 동일한 "options private라
   // 위임 메서드로 대신한다" 근거.
+  //
+  // 같은 URL은 한 번만 알린다(Issue #383). 즉시 통지 경로(url 확정,
+  // updateBlock, 거절 정리, 스윕)와 lifecycle 통지가 한 URL에서 겹쳐도
+  // 이 메서드 한 곳에서 막는다.
   notifyLocalPreviewCleared(blockId: string, cleared: LocalPreviewAttrs): void {
+    if (this.clearedLocalPreviewUrls.has(cleared.localPreviewUrl)) return;
+    this.clearedLocalPreviewUrls.add(cleared.localPreviewUrl);
     this.options.onLocalPreviewCleanup?.(blockId, cleared);
   }
 
@@ -538,12 +555,16 @@ export class ProductionEditorSession {
     )) {
       this.notifyLocalPreviewCleared(blockId, attrs);
     }
-    for (const [blockId, attrs] of this.pendingUnreachableLocalPreviews) {
+    for (const {
+      blockId,
+      attrs,
+    } of this.pendingUnreachableLocalPreviews.values()) {
       this.notifyLocalPreviewCleared(blockId, attrs);
     }
-    // 위 스윕이 통지한 blockId를 리셋한다 — 리셋하지 않으면 이 세션 필드가
-    // 구 Editor의 blockId를 그대로 가리킨 채 남아, 이후 destroy()가 같은
-    // blockId를 다시 순회해 중복 통지한다("정확히 1회" 위반).
+    // 위 스윕이 통지한 항목을 리셋한다 — 리셋하지 않으면 이 세션 필드가
+    // 구 Editor의 pending을 그대로 가리킨 채 남는다. 이후 destroy()가 같은
+    // 항목을 다시 순회한다. 중복 통지는 notifyLocalPreviewCleared가 막지만
+    // 필드는 새 Editor 기준으로 비워 둔다.
     this.pendingUnreachableLocalPreviews = new Map();
     this.tiptapEditor.destroy();
     this.tiptapEditor = replacement;
@@ -700,12 +721,16 @@ export class ProductionEditorSession {
         this.notifyLocalPreviewCleared(blockId, cleared);
       },
       // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03) — 그
-      // 확장의 `pending`(사라졌지만 복구 불가 판정 전) 스냅샷을 세션
+      // 확장의 `pending`(문서에서 빠졌지만 복구 불가 판정 전) 스냅샷을 세션
       // 필드로 미러링해 둔다. destroy()가 doc 순회만으로는 보지 못하는 이
-      // 블록들을 세션 종료 시 함께 정리하기 위해서다(아래 destroy() 참고).
+      // 항목들을 세션 종료 시 함께 정리하기 위해서다(아래 destroy() 참고).
       notifyLocalPreviewPendingChange: (pending) => {
         this.pendingUnreachableLocalPreviews = pending;
       },
+      // MediaLocalPreviewLifecycleExtension 전용(Issue #383) — 이미 알린
+      // URL은 그 확장이 다시 추적하지 않게 한다.
+      isLocalPreviewCleared: (url: string) =>
+        this.clearedLocalPreviewUrls.has(url),
     });
   }
 

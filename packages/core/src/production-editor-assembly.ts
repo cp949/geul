@@ -94,7 +94,10 @@ import { TableKeyboardNavigationExtension } from "./table-keyboard-extension.js"
 import { TablePasteExtension } from "./table-paste-extension.js";
 import { ClipboardPasteExtension } from "./clipboard-paste-extension.js";
 import { MediaDropPasteExtension } from "./media-drop-paste-extension.js";
-import { MediaLocalPreviewLifecycleExtension } from "./media-local-preview-lifecycle-extension.js";
+import {
+  MediaLocalPreviewLifecycleExtension,
+  type PendingLocalPreview,
+} from "./media-local-preview-lifecycle-extension.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import { NearestBlockClickExtension } from "./nearest-block-click-extension.js";
 import { ToggleCollapseArrowKeyExtension } from "./toggle-collapse-arrow-key-extension.js";
@@ -409,8 +412,9 @@ export const createProductionEditor = (options: {
   triggerMediaUpload?: (blockId: string, file: File) => void;
   // MediaLocalPreviewLifecycleExtension과 MediaDropPasteExtension 전용
   // (RD-002 DELTA-02, Issue #379) — triggerMediaUpload와 같은 모양의
-  // 클로저다. Lifecycle 확장은 로컬 프리뷰(ADR 0015)가 남은 미디어 블록이
-  // 사라진 뒤 undo로도 redo로도 복구 불가라고 판정되면 호출한다(`RD-002.md`
+  // 클로저다. Lifecycle 확장은 로컬 프리뷰(ADR 0015) URL이 문서에서 빠진 뒤
+  // (블록이 사라진 경우뿐 아니라 블록이 남은 채 URL만 빠진 경우 포함, Issue
+  // #383) undo로도 redo로도 복구 불가라고 판정되면 호출한다(`RD-002.md`
   // "결정" — url 확정 정리와 같은 `onLocalPreviewCleanup` 채널을 재사용,
   // 신규 공개 옵션 아님). MediaDropPasteExtension은 발급한 URL이 거절·되돌림·
   // 예외로 문서에 못 들어갔을 때 호출한다. 미지정이면 각 확장 자신의
@@ -419,16 +423,20 @@ export const createProductionEditor = (options: {
     blockId: string,
     cleared: LocalPreviewAttrs,
   ) => void;
-  // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03) — 사라졌지만
-  // 아직 복구 불가 판정 전이라 그 확장의 `pending`에만 남아 있는 로컬
-  // 프리뷰 스냅샷이 바뀔 때마다 호출한다. `production-editor-session.ts::
+  // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03) — 문서에서
+  // 빠졌지만 아직 복구 불가 판정 전이라 그 확장의 `pending`(키 = URL, Issue
+  // #383)에만 남아 있는 로컬 프리뷰 스냅샷이 바뀔 때마다 호출한다. `production-editor-session.ts::
   // destroy()`가 이 스냅샷을 세션 필드로 미러링해 뒀다가, doc 순회
-  // (`collectLocalPreviewBlocks`)로는 보이지 않는 이 블록들도 세션 종료
+  // (`collectLocalPreviewBlocks`)로는 보이지 않는 이 항목들도 세션 종료
   // 시 함께 정리 신호를 낸다. 미지정이면 그 확장 자신의 기본값(no-op)을
   // 쓴다.
   notifyLocalPreviewPendingChange?: (
-    pending: ReadonlyMap<string, LocalPreviewAttrs>,
+    pending: ReadonlyMap<string, PendingLocalPreview>,
   ) => void;
+  // MediaLocalPreviewLifecycleExtension 전용(Issue #383) — 이미 정리 신호를
+  // 낸 URL인지 묻는다. true인 URL은 그 확장이 다시 추적하지 않는다. 미지정이면
+  // 그 확장 자신의 기본값(항상 false)을 쓴다.
+  isLocalPreviewCleared?: (url: string) => boolean;
   // spec §5(EXT-005), RD-002-DELTA-01 — CustomKeyboardShortcutsExtension에
   // 그대로 전달한다(keyboardShortcutsEditor는 customBlockEditor와 동일한
   // 지연 바인딩 Proxy — editor-controller.ts::createEditor 배선 참고).
@@ -796,6 +804,9 @@ export const createProductionEditor = (options: {
           : {
               notifyPendingChange: options.notifyLocalPreviewPendingChange,
             }),
+        ...(options.isLocalPreviewCleared === undefined
+          ? {}
+          : { isCleared: options.isLocalPreviewCleared }),
       }),
       LinkPolicyExtension,
       RevisionGuardExtension.configure({
