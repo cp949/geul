@@ -9,6 +9,11 @@ import {
 } from "@cp949/geul-core";
 import { vi, type Mock } from "vitest";
 
+import {
+  fakeBlockTypeBlocker,
+  fakeBlockTypesBlocker,
+} from "./block-type-blocker-fake.js";
+
 type SelectionBlockType = {
   blockId: string;
   blockType: BlockTypeDescriptor;
@@ -159,11 +164,21 @@ export const fakeController = (
   isCellRangeSelected,
   selectionIntersectsCodeBlock,
   isAtomBlockSelected,
-  // 블록 타입 변환 거절 사유 질의(Issue #245). 기본값 null(막지 않음)이면
-  // 기존 변환 테스트 전부가 그대로 통과한다. 각 테스트가 mockImplementation으로
-  // 옵션별 사유를 정한다.
-  getBlockTypeBlocker: vi.fn((): string | null => null),
-  getBlockTypesBlocker: vi.fn((): string | null => null),
+  // 블록 타입 변환 거절 사유 질의(Issue #245). 기본값은 소스 타입 쌍 규칙만
+  // core와 같게 흉내 낸다(block-type-blocker-fake.ts, parity는
+  // block-type-options.test.ts). 자식·탭 같은 내용 사유는 각 테스트가
+  // mockImplementation으로 정한다.
+  getBlockTypeBlocker: vi.fn(
+    (_blockId: string, target: { type: string }): string | null =>
+      fakeBlockTypeBlocker(
+        getSelectionBlockType()?.blockType.type,
+        target.type,
+      ),
+  ),
+  getBlockTypesBlocker: vi.fn(
+    (_blockIds: readonly string[], target: { type: string }): string | null =>
+      fakeBlockTypesBlocker(target.type),
+  ),
   isBlockTypeEnabled,
   getBlockNestingActionState,
   getDictionary,

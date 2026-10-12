@@ -23,13 +23,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import {
-  blockTypeText,
-  blockTypeToOptionId,
-  getBlockTypeOptionsForMultiSelection,
-  getBlockTypeOptionsForSource,
-  withoutBlockedBlockTypeOptions,
-} from "./block-type-options.js";
+import { blockTypeText, blockTypeToOptionId } from "./block-type-options.js";
 import {
   type FixedPlacementAnchor,
   readAnchorBelowTrigger,
@@ -296,7 +290,7 @@ export const FormattingToolbar = ({
       multiBlockSelection: computedState.multiBlockSelection,
       nestingActions: computedState.nestingActions,
       selectionIntersectsCodeBlock: computedState.selectionIntersectsCodeBlock,
-      blockTypeBlockers: computedState.blockTypeBlockers,
+      blockTypeChoices: computedState.blockTypeChoices,
     });
   }, [editor, element, dismissSuppression]);
 
@@ -454,36 +448,23 @@ export const FormattingToolbar = ({
   const isCalloutSelection =
     toolbarState.blockSelection?.blockType.type === "callout";
 
-  // 블록 타입 select의 원천. 단일 블록이면 그 타입에서 갈 수 있는 목록,
-  // 여러 블록에 걸친 선택이면 공통 목록이다. 둘 다 아니면 select를 그리지 않는다.
-  const blockTypeSelectSource =
-    toolbarState.blockSelection !== null
-      ? {
-          blockType: toolbarState.blockSelection.blockType,
-          options: getBlockTypeOptionsForSource(
-            toolbarState.blockSelection.blockType,
-          ),
-        }
-      : toolbarState.multiBlockSelection !== null
-        ? {
-            blockType: toolbarState.multiBlockSelection.blockType,
-            options: getBlockTypeOptionsForMultiSelection(),
-          }
-        : null;
-  // core가 거절하는 옵션(자식 있는 블록의 Code, 탭이 든 codeBlock의 일반
-  // 블록 등)과 enabledBlockTypes(mode: "deny")로 끈 타입(Issue #190)을
-  // 목록에서 뺀다. 선례: slash-menu.tsx의 isSlashMenuItemEnabled.
+  // 블록 타입 select의 원천. 단일 블록이면 그 블록의, 여러 블록에 걸친
+  // 선택이면 공통의 현재 타입이다. 둘 다 아니면 select를 그리지 않는다.
+  // 목록은 core가 거절하지 않는 옵션(자식 있는 블록의 Code, 탭이 든
+  // codeBlock의 일반 블록 등)만 남긴다. enabledBlockTypes로 끈 타입(Issue
+  // #190)은 상태 계산이 이미 뺐다.
   const blockTypeSelect =
-    blockTypeSelectSource === null
+    toolbarState.blockSelection === null &&
+    toolbarState.multiBlockSelection === null
       ? null
       : {
-          blockType: blockTypeSelectSource.blockType,
-          options: withoutBlockedBlockTypeOptions(
-            blockTypeSelectSource.options,
-            toolbarState.blockTypeBlockers,
-          ).filter((option) =>
-            editor.isBlockTypeEnabled(option.blockType.type),
-          ),
+          blockType:
+            toolbarState.blockSelection?.blockType ??
+            toolbarState.multiBlockSelection?.blockType ??
+            null,
+          options: toolbarState.blockTypeChoices
+            .filter(({ blocker }) => blocker === null)
+            .map(({ option }) => option),
         };
   // 현재 타입 말고 고를 옵션이 없으면 select가 아무것도 바꾸지 못한다.
   // 눌러도 반응 없는 컨트롤을 그리지 않는다(Issue #245).

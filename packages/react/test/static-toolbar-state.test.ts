@@ -7,8 +7,21 @@
  */
 import { describe, expect, it } from "vitest";
 
+import {
+  BLOCK_TYPE_OPTIONS,
+  type BlockTypeChoice,
+} from "../src/block-type-options.js";
 import type { FormattingToolbarState } from "../src/formatting-toolbar-state.js";
 import { isSameStaticToolbarState } from "../src/static-toolbar-state.js";
+
+/** code·quote 옵션에 사유를 붙인 선택 목록을 만든다. */
+const choices = (
+  code: BlockTypeChoice["blocker"],
+  quote: BlockTypeChoice["blocker"],
+): BlockTypeChoice[] =>
+  BLOCK_TYPE_OPTIONS.filter(({ id }) => id === "code" || id === "quote").map(
+    (option) => ({ option, blocker: option.id === "code" ? code : quote }),
+  );
 
 /** 모든 필드가 채워진 기준 상태를 만든다. 호출마다 새 객체를 돌려준다. */
 const baseState = (): FormattingToolbarState => ({
@@ -19,7 +32,7 @@ const baseState = (): FormattingToolbarState => ({
   isAtomBlockSelected: false,
   isCellRangeSelected: false,
   selectionIntersectsCodeBlock: false,
-  blockTypeBlockers: { code: null, quote: null },
+  blockTypeChoices: choices(null, null),
 });
 
 describe("isSameStaticToolbarState", () => {
@@ -184,7 +197,7 @@ describe("isSameStaticToolbarState 여러 블록 선택", () => {
   it("블록 타입 변환 사유가 달라지면 다르다고 판정한다(Issue #245)", () => {
     const next = {
       ...baseState(),
-      blockTypeBlockers: { code: "HAS_CHILDREN" as const, quote: null },
+      blockTypeChoices: choices("HAS_CHILDREN", null),
     };
 
     expect(isSameStaticToolbarState(baseState(), next)).toBe(false);
@@ -193,11 +206,11 @@ describe("isSameStaticToolbarState 여러 블록 선택", () => {
   it("블록 타입 변환 사유가 같으면 같다고 판정한다(Issue #245)", () => {
     const left = {
       ...baseState(),
-      blockTypeBlockers: { code: "INVALID_TEXT" as const, quote: null },
+      blockTypeChoices: choices("INVALID_TEXT", null),
     };
     const right = {
       ...baseState(),
-      blockTypeBlockers: { code: "INVALID_TEXT" as const, quote: null },
+      blockTypeChoices: choices("INVALID_TEXT", null),
     };
 
     expect(isSameStaticToolbarState(left, right)).toBe(true);

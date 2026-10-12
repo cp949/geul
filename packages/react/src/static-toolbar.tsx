@@ -36,13 +36,9 @@ import { createPortal } from "react-dom";
 
 import {
   type BlockTypeOption,
-  BLOCK_TYPE_OPTIONS,
   blockTypeBlockerReason,
   blockTypeText,
   blockTypeToOptionId,
-  getBlockTypeOptionsForMultiSelection,
-  getBlockTypeOptionsForSource,
-  isBlockTypeOptionBlocked,
 } from "./block-type-options.js";
 import { isElementNode, isHtmlElement } from "./dom-node.js";
 import { readAnchorBelowTrigger } from "./fixed-placement.js";
@@ -148,10 +144,8 @@ const textColorIcon = <Baseline {...iconProps} />;
 const backgroundColorIcon = <PaintBucket {...iconProps} />;
 
 // 블록 타입 메뉴를 Text/Heading 1~6로만 줄인다(일반적인 에디터 관례 —
-// Quote·Code·목록 4종은 아래 BLOCK_TYPE_ICON_OPTIONS로 뺀다). paragraph와
-// heading은 getBlockTypeOptionsForSource의 어떤 source 필터에도 제외되지
-// 않으므로(block-type-options.ts 참고 — codeBlock source는 목록만, 목록
-// source는 code만 제외) source와 무관한 고정 목록으로 둬도 안전하다.
+// Quote·Code·목록 4종은 아이콘 버튼으로 뺀다). 어느 옵션이 눌리는지는
+// 선택한 블록에 core가 돌려준 사유(state.blockTypeChoices)가 정한다.
 const TEXT_STYLE_OPTION_IDS = new Set<string>([
   "paragraph",
   "heading-1",
@@ -162,17 +156,6 @@ const TEXT_STYLE_OPTION_IDS = new Set<string>([
   "heading-6",
 ]);
 
-const TEXT_STYLE_OPTIONS = BLOCK_TYPE_OPTIONS.filter((option) =>
-  TEXT_STYLE_OPTION_IDS.has(option.id),
-);
-
-// 블록 타입 메뉴 밖으로 뺀 나머지 7개 — BLOCK_TYPE_OPTIONS 선언 순서를 그대로
-// 유지해 "Turn into" 메뉴(block-side-menu-menu.tsx)와 순서가 어긋나지
-// 않는다.
-const BLOCK_TYPE_ICON_OPTIONS = BLOCK_TYPE_OPTIONS.filter(
-  (option) => !TEXT_STYLE_OPTION_IDS.has(option.id),
-);
-
 type BlockTypeIconId =
   | "quote"
   | "callout"
@@ -182,7 +165,7 @@ type BlockTypeIconId =
   | "check-list"
   | "toggle-list";
 
-// BLOCK_TYPE_ICON_OPTIONS는 위 필터로 항상 이 7개 id로만 구성됨이 보장된다
+// 아이콘 버튼은 TEXT_STYLE_OPTION_IDS 밖의 옵션이라 항상 이 7개 id다
 // — block-type-options.ts의 blockTypeText cast와 같은 근거의 단일 cast다.
 const BLOCK_TYPE_ICONS: Record<BlockTypeIconId, ReactElement> = {
   quote: <Quote {...iconProps} />,
@@ -506,31 +489,23 @@ export const StaticToolbar = ({
     });
   };
 
-  // 클릭 시점의 현재 블록을 다시 읽어 option을 적용한다. 허용되지 않는
-  // option이면 아무것도 하지 않는다. 단일 블록이면 setBlockType, 여러 블록에
-  // 걸친 선택이면 setBlockTypes로 한 번에 바꾼다.
+  // 클릭 시점의 현재 블록을 다시 읽어 option을 적용한다. core가 거절하는
+  // option이면 아무것도 하지 않는다(Issue #245). 단일 블록이면 setBlockType,
+  // 여러 블록에 걸친 선택이면 setBlockTypes로 한 번에 바꾼다.
   const applyBlockType = (option: BlockTypeOption) => {
-    const { blockSelection, multiBlockSelection, blockTypeBlockers } =
+    const { blockSelection, multiBlockSelection, blockTypeChoices } =
       computeFormattingToolbarState(editor);
-    // core 거절 사유도 클릭 시점의 값으로 다시 본다(Issue #245).
-    if (isBlockTypeOptionBlocked(blockTypeBlockers, option.id)) return;
+    const choice = blockTypeChoices.find(
+      (candidate) => candidate.option.id === option.id,
+    );
+    if (choice === undefined || choice.blocker !== null) return;
     if (blockSelection !== null) {
-      const allowed = getBlockTypeOptionsForSource(
-        blockSelection.blockType,
-      ).some((candidate) => candidate.id === option.id);
-      if (allowed) {
-        editor.commands.setBlockType(blockSelection.blockId, option.blockType);
-      }
+      editor.commands.setBlockType(blockSelection.blockId, option.blockType);
     } else if (multiBlockSelection !== null) {
-      const allowed = getBlockTypeOptionsForMultiSelection().some(
-        (candidate) => candidate.id === option.id,
+      editor.commands.setBlockTypes(
+        multiBlockSelection.blockIds,
+        option.blockType,
       );
-      if (allowed) {
-        editor.commands.setBlockTypes(
-          multiBlockSelection.blockIds,
-          option.blockType,
-        );
-      }
     }
   };
 
@@ -599,38 +574,30 @@ export const StaticToolbar = ({
     activeBlockType === undefined || activeBlockType === null
       ? null
       : blockTypeToOptionId(activeBlockType);
-  const allowedBlockTypeOptions =
-    state.blockSelection !== null
-      ? getBlockTypeOptionsForSource(state.blockSelection.blockType)
-      : state.multiBlockSelection !== null
-        ? getBlockTypeOptionsForMultiSelection()
-        : null;
-  // source 타입 목록에 있고 core가 거절하지 않는 옵션만 허용한다(Issue #245).
-  const allowedBlockTypeIds =
-    allowedBlockTypeOptions === null
-      ? null
-      : new Set(
-          allowedBlockTypeOptions
-            .filter(
-              (option) =>
-                !isBlockTypeOptionBlocked(state.blockTypeBlockers, option.id),
-            )
-            .map((option) => option.id),
-        );
-  // 허용되지 않은 옵션의 사유 title. core 사유가 있으면 그 문구를 쓰고
-  // 없으면(source 타입 목록 밖) 일반 문구다.
+  // core가 거절하지 않는 옵션만 허용한다(Issue #245). 끈 타입
+  // (enabledBlockTypes mode: "deny", Issue #190)은 choices에 없어 그려지지
+  // 않는다.
+  const isBlockTypeAllowed = (optionId: string): boolean =>
+    state.blockTypeChoices.some(
+      ({ option, blocker }) => option.id === optionId && blocker === null,
+    );
+  // 허용되지 않은 옵션의 사유 title. 원인이 눈에 보이지 않는 core 사유는
+  // 전용 문구를 쓴다.
   const blockTypeDisabledTitle = (optionId: string): string => {
-    const blocker = state.blockTypeBlockers[optionId] ?? null;
+    const blocker =
+      state.blockTypeChoices.find(({ option }) => option.id === optionId)
+        ?.blocker ?? null;
     return blocker === null
       ? dictionary.toolbar.static.blockTypeDisabledReason
       : blockTypeBlockerReason(dictionary, blocker);
   };
 
-  // enabledBlockTypes(mode: "deny")로 끈 타입은 목록에서 뺀다(Issue #190,
-  // 선례: formatting-toolbar.tsx).
-  const blockTypeMenuOptions = TEXT_STYLE_OPTIONS.filter((option) =>
-    editor.isBlockTypeEnabled(option.blockType.type),
-  );
+  const blockTypeMenuOptions = state.blockTypeChoices
+    .map(({ option }) => option)
+    .filter(({ id }) => TEXT_STYLE_OPTION_IDS.has(id));
+  const blockTypeIconOptions = state.blockTypeChoices
+    .map(({ option }) => option)
+    .filter(({ id }) => !TEXT_STYLE_OPTION_IDS.has(id));
 
   const blockControlsDisabledReason = isBlockControlsDisabled
     ? dictionary.toolbar.static.blockControlsDisabledReason
@@ -683,13 +650,10 @@ export const StaticToolbar = ({
           </span>
           <ChevronDown {...iconProps} />
         </button>
-        {BLOCK_TYPE_ICON_OPTIONS.filter((option) =>
-          editor.isBlockTypeEnabled(option.blockType.type),
-        ).map((option) => (
+        {blockTypeIconOptions.map((option) => (
           <IconButton
             aria-disabled={
-              !isBlockControlsDisabled &&
-              allowedBlockTypeIds?.has(option.id) === true
+              !isBlockControlsDisabled && isBlockTypeAllowed(option.id)
                 ? "false"
                 : "true"
             }
@@ -699,14 +663,14 @@ export const StaticToolbar = ({
             key={option.id}
             label={blockTypeText(dictionary, option.id).label}
             onClick={() => {
-              if (allowedBlockTypeIds?.has(option.id) !== true) return;
+              if (!isBlockTypeAllowed(option.id)) return;
               applyBlockType(option);
             }}
             tabIndex={rovingTabIndex()}
             title={
               isBlockControlsDisabled
                 ? blockControlsDisabledReason
-                : allowedBlockTypeIds?.has(option.id) !== true
+                : !isBlockTypeAllowed(option.id)
                   ? blockTypeDisabledTitle(option.id)
                   : undefined
             }
@@ -831,9 +795,9 @@ export const StaticToolbar = ({
           onTabDismiss={closeBlockTypeMenuToTrigger}
           optionLabel={(option) => blockTypeText(dictionary, option.id).label}
           optionDisabledReason={(option) =>
-            allowedBlockTypeIds !== null && !allowedBlockTypeIds.has(option.id)
-              ? blockTypeDisabledTitle(option.id)
-              : undefined
+            isBlockTypeAllowed(option.id)
+              ? undefined
+              : blockTypeDisabledTitle(option.id)
           }
           options={blockTypeMenuOptions}
           readAnchor={() => readAnchorBelowTrigger(blockTypeMenuState.trigger)}

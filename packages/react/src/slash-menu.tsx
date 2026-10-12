@@ -1,5 +1,4 @@
 import type {
-  BlockTypeDescriptor,
   Dictionary,
   EditorController,
   EditorLifecycle,
@@ -21,7 +20,7 @@ import { BlockSideMenu } from "./block-side-menu.js";
 import {
   BLOCK_TYPE_OPTIONS,
   blockTypeText,
-  getBlockTypeOptionsForSource,
+  getBlockTypeChoices,
 } from "./block-type-options.js";
 import { CalloutIconPicker } from "./callout-icon-picker.js";
 import { CodeBlockCaptions } from "./code-block-captions.js";
@@ -199,23 +198,17 @@ const isSlashMenuItemEnabled = (
 
 const getSlashMenuItems = (
   blockId: string,
-  source: BlockTypeDescriptor,
   customItems: readonly SlashMenuCustomItem[],
   editor: EditorLifecycle & SelectionQuery,
 ): readonly SlashMenuItem[] =>
   (
     [
-      ...getBlockTypeOptionsForSource(source)
-        // core가 거절하는 변환(자식 있는 블록의 Code 등)은 항목에서 뺀다
-        // (Issue #245). 선택은 clearContent로 변환하므로 같은 옵션으로
-        // 질의한다.
-        .filter(
-          (option) =>
-            editor.getBlockTypeBlocker(blockId, option.blockType, {
-              clearContent: true,
-            }) === null,
-        )
-        .map((option) => ({
+      // core가 거절하는 변환(자식 있는 블록의 Code 등)은 항목에서 뺀다
+      // (Issue #245). 선택은 clearContent로 변환하므로 같은 옵션으로
+      // 질의한다.
+      ...getBlockTypeChoices(editor, { blockId }, { clearContent: true })
+        .filter(({ blocker }) => blocker === null)
+        .map(({ option }) => ({
           kind: "blockType" as const,
           ...option,
         })),
@@ -249,12 +242,11 @@ const matchesQuery = (item: SlashMenuItem, query: string): boolean => {
 
 const filterItems = (
   blockId: string,
-  source: BlockTypeDescriptor,
   query: string,
   customItems: readonly SlashMenuCustomItem[],
   editor: EditorLifecycle & SelectionQuery,
 ): SlashMenuItem[] =>
-  getSlashMenuItems(blockId, source, customItems, editor).filter((item) =>
+  getSlashMenuItems(blockId, customItems, editor).filter((item) =>
     matchesQuery(item, query),
   );
 
@@ -283,7 +275,6 @@ type MenuPosition = { left: number; top: number };
 
 type MenuState = {
   blockId: string;
-  sourceBlockType: BlockTypeDescriptor;
   query: string;
   highlightedIndex: number;
 };
@@ -393,14 +384,10 @@ export const SlashMenu = ({
     focusEditor();
   }, [dismissMenu, focusEditor]);
 
-  const openMenuAt = (
-    blockId: string,
-    sourceBlockType: BlockTypeDescriptor,
-    query: string,
-  ) => {
+  const openMenuAt = (blockId: string, query: string) => {
     explicitOpenBlockIdRef.current = query.length === 0 ? blockId : null;
     dismissedQueryRef.current = null;
-    setMenuState({ blockId, sourceBlockType, query, highlightedIndex: 0 });
+    setMenuState({ blockId, query, highlightedIndex: 0 });
   };
 
   useEffect(() => {
@@ -447,7 +434,6 @@ export const SlashMenu = ({
 
       setMenuState((current) => ({
         blockId: context.blockId,
-        sourceBlockType: context.blockType,
         query: resolvedQuery,
         highlightedIndex:
           current !== null && current.blockId === context.blockId
@@ -456,7 +442,6 @@ export const SlashMenu = ({
                 Math.max(
                   filterItems(
                     context.blockId,
-                    context.blockType,
                     resolvedQuery,
                     customItems,
                     editor,
@@ -503,13 +488,7 @@ export const SlashMenu = ({
   const items =
     menuState === null
       ? []
-      : filterItems(
-          menuState.blockId,
-          menuState.sourceBlockType,
-          menuState.query,
-          customItems,
-          editor,
-        );
+      : filterItems(menuState.blockId, menuState.query, customItems, editor);
 
   // 강조된 옵션의 id. code-block-language-combobox.tsx와 동일 패턴
   // (menuId + 옵션 고유 id) — 아래 aria-activedescendant effect와 옵션
@@ -602,7 +581,6 @@ export const SlashMenu = ({
             const count = Math.max(
               filterItems(
                 currentState.blockId,
-                currentState.sourceBlockType,
                 currentState.query,
                 customItems,
                 editor,
@@ -629,7 +607,6 @@ export const SlashMenu = ({
           }
           const item = filterItems(
             current.blockId,
-            current.sourceBlockType,
             current.query,
             customItems,
             editor,
@@ -685,22 +662,12 @@ export const SlashMenu = ({
 
   return (
     <>
-      <BlockSideMenu
-        onBlockAdded={(blockId) =>
-          openMenuAt(blockId, { type: "paragraph" }, "")
-        }
-      />
+      <BlockSideMenu onBlockAdded={(blockId) => openMenuAt(blockId, "")} />
       <CodeBlockLanguageCombobox />
       <CodeBlockCaptions />
-      <TableHandles
-        onBlockAdded={(blockId) =>
-          openMenuAt(blockId, { type: "paragraph" }, "")
-        }
-      />
+      <TableHandles onBlockAdded={(blockId) => openMenuAt(blockId, "")} />
       <MediaHandleOverlays
-        onBlockAdded={(blockId) =>
-          openMenuAt(blockId, { type: "paragraph" }, "")
-        }
+        onBlockAdded={(blockId) => openMenuAt(blockId, "")}
       />
       <IframeLoadStatus />
       <CalloutIconPicker />

@@ -1,9 +1,10 @@
-import {
-  isListEntryBlockType,
-  type BlockCommands,
-  type BlockTypeBlocker,
-  type BlockTypeDescriptor,
-  type Dictionary,
+import type {
+  BlockCommands,
+  BlockTypeBlocker,
+  BlockTypeDescriptor,
+  Dictionary,
+  EditorLifecycle,
+  SelectionQuery,
 } from "@cp949/geul-core";
 
 type SetBlockTypeInput = Parameters<
@@ -120,50 +121,54 @@ export const BLOCK_TYPE_OPTIONS: readonly BlockTypeOption[] = [
   },
 ];
 
-export const getBlockTypeOptionsForSource = (
-  source: BlockTypeDescriptor,
-): readonly BlockTypeOption[] => {
-  if (source.type === "codeBlock") {
-    // codeBlock↔heading 전환은 항상 허용된다(DELTA-02
-    // changesCodeBlockBoundary). codeBlock↔목록류만 command
-    // guard(isListEntryBlockType, generic-block-commands.ts의
-    // currentIsList/targetIsList)가 거절한다.
-    return BLOCK_TYPE_OPTIONS.filter(
-      ({ id }) =>
-        id !== "bullet-list" &&
-        id !== "numbered-list" &&
-        id !== "check-list" &&
-        id !== "toggle-list",
-    );
-  }
-  // toggleListItem source에서도 Code 옵션을 제외해야 command guard와 UI가
-  // 어긋나지 않는다(RD-004 DELTA-02가 codeBlock↔toggleListItem을 양방향
-  // 거절로 이미 확정) — isListItemBlockType(io 직렬화 축)이 아니라
-  // isListEntryBlockType(편집 UX 축, RD-003 F2)으로 판정한다.
-  if (isListEntryBlockType(source.type)) {
-    return BLOCK_TYPE_OPTIONS.filter(({ id }) => id !== "code");
-  }
-  return BLOCK_TYPE_OPTIONS;
+export type BlockTypeChoice = {
+  option: BlockTypeOption;
+  // core 변환 거절 사유다. null이면 변환할 수 있다(Issue #245).
+  blocker: BlockTypeBlocker | null;
 };
 
-// 여러 블록 선택의 변환 대상. 여러 블록을 한 codeBlock으로 합치는 것은
-// 지원하지 않아 Code만 뺀다(core setBlockTypes가 codeBlock 대상을 거절).
-// 선택 안의 codeBlock은 command가 건너뛰므로 source 쪽 제한은 없다.
-export const getBlockTypeOptionsForMultiSelection =
-  (): readonly BlockTypeOption[] =>
-    BLOCK_TYPE_OPTIONS.filter(({ id }) => id !== "code");
+// 변환 대상. 한 블록이면 `getBlockTypeBlocker`, 여러 블록 선택이면
+// `getBlockTypesBlocker`로 질의한다. null이면 대상이 없다.
+export type BlockTypeTarget =
+  { blockId: string } | { blockIds: readonly string[] };
 
-// 옵션 id별 core 거절 사유다(Issue #245). 값이 null이거나 키가 없으면 막지
-// 않는다. 선택 종류에 맞는 core 질의(getBlockTypeBlocker·getBlockTypesBlocker)
-// 결과를 `computeFormattingToolbarState`가 채운다.
-export type BlockTypeBlockers = Readonly<
-  Record<string, BlockTypeBlocker | null>
->;
+type BlockTypeChoiceEditor = Pick<
+  SelectionQuery,
+  "getBlockTypeBlocker" | "getBlockTypesBlocker"
+> &
+  Pick<EditorLifecycle, "isBlockTypeEnabled">;
 
-export const isBlockTypeOptionBlocked = (
-  blockers: BlockTypeBlockers,
-  optionId: string,
-): boolean => (blockers[optionId] ?? null) !== null;
+// 변환 옵션과 core 거절 사유를 한 곳에서 짝짓는다. 어떤 옵션이 어떤 블록에서
+// 막히는지는 core 질의가 정한다. react는 그 조건을 다시 유도하지 않는다.
+// 표면은 `blocker !== null`인 옵션을 숨길지 비활성(사유 title)으로 둘지만
+// 고른다.
+// - enabledBlockTypes(mode: "deny")로 끈 타입은 목록에서 뺀다(Issue #189).
+// - target이 null이면 켜진 옵션 전부를 NOT_FOUND로 돌려준다. 대상이 없는
+//   상시 툴바가 버튼 목록을 그리는 데 쓴다.
+// - clearContent는 단일 블록 질의에만 적용한다. 내용을 비우는 변환(슬래시
+//   메뉴)은 탭이 든 codeBlock도 일반 블록으로 바꿀 수 있다.
+export const getBlockTypeChoices = (
+  editor: BlockTypeChoiceEditor,
+  target: BlockTypeTarget | null,
+  options?: { clearContent?: boolean },
+): readonly BlockTypeChoice[] =>
+  BLOCK_TYPE_OPTIONS.filter((option) =>
+    editor.isBlockTypeEnabled(option.blockType.type),
+  ).map((option) => ({
+    option,
+    blocker:
+      target === null
+        ? "NOT_FOUND"
+        : "blockId" in target
+          ? options === undefined
+            ? editor.getBlockTypeBlocker(target.blockId, option.blockType)
+            : editor.getBlockTypeBlocker(
+                target.blockId,
+                option.blockType,
+                options,
+              )
+          : editor.getBlockTypesBlocker(target.blockIds, option.blockType),
+  }));
 
 // 비활성 변환 버튼의 사유 title. 원인이 눈에 보이지 않는 두 사유만 전용
 // 문구를 쓰고 나머지는 일반 문구 하나를 공유한다(Issue #245, G-UI-004).
@@ -180,14 +185,6 @@ export const blockTypeBlockerReason = (
       return dictionary.toolbar.static.blockTypeDisabledReason;
   }
 };
-
-// 막힌 옵션을 목록에서 뺀다. 목록에 사유 title을 달 수 없는 진입점(select,
-// Turn into, 슬래시)이 쓴다. 현재 타입은 같은 타입 변환이라 막히지 않는다.
-export const withoutBlockedBlockTypeOptions = (
-  options: readonly BlockTypeOption[],
-  blockers: BlockTypeBlockers,
-): readonly BlockTypeOption[] =>
-  options.filter((option) => !isBlockTypeOptionBlocked(blockers, option.id));
 
 // spec §8(EXT-009), RD-002-DELTA-02 — `dictionary.blockType`에서 표시용
 // label·description을 읽는다. `id`는 항상 위 `BLOCK_TYPE_OPTIONS`의 14개

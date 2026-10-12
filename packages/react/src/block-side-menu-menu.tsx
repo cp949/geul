@@ -7,7 +7,7 @@ import {
   blockTypeText,
   blockTypeToOptionId,
   type BlockTypeOption,
-  getBlockTypeOptionsForSource,
+  getBlockTypeChoices,
 } from "./block-type-options.js";
 import { iconProps } from "./icon-props.js";
 import { MenuItemButton } from "./menu-item-button.js";
@@ -100,22 +100,12 @@ export const BlockSideMenuMenu = ({
     editor.getDocument().blocks,
     blockId,
   );
-  // enabledBlockTypes(mode: "deny")로 끈 타입을 목록에서 숨긴다(Issue
-  // #190) — 선례: formatting-toolbar.tsx/static-toolbar.tsx(RD-001
-  // DELTA-01·02). handleTurnInto의 클릭 시점 재검증(아래, Issue #141)에는
-  // 같은 필터를 넣지 않는다 — enabledBlockTypes는 construction-time
-  // 상수라 메뉴가 열려 있는 동안 바뀌지 않고, 이미 숨겨진 옵션은 렌더에
-  // 없어 클릭 자체가 불가능하다.
-  const blockTypeOptions =
-    blockMenuSource === null
-      ? []
-      : getBlockTypeOptionsForSource(blockMenuSource).filter(
-          (option) =>
-            editor.isBlockTypeEnabled(option.blockType.type) &&
-            // core가 거절하는 변환(자식 있는 블록의 Code, 탭이 든 codeBlock의
-            // 일반 블록 등)은 목록에서 뺀다(Issue #245).
-            editor.getBlockTypeBlocker(blockId, option.blockType) === null,
-        );
+  // core가 거절하는 변환(자식 있는 블록의 Code, 탭이 든 codeBlock의 일반
+  // 블록 등)은 목록에서 뺀다(Issue #245). enabledBlockTypes(mode: "deny")로 끈
+  // 타입(Issue #190)은 getBlockTypeChoices가 이미 뺀다.
+  const blockTypeOptions = getBlockTypeChoices(editor, { blockId })
+    .filter(({ blocker }) => blocker === null)
+    .map(({ option }) => option);
   // 현재 타입 말고 고를 항목이 없으면 Turn into 섹션을 그리지 않는다. 눌러도
   // 반응 없는 항목만 남기지 않는다(Issue #245).
   const currentBlockTypeOptionId =
@@ -182,17 +172,12 @@ export const BlockSideMenuMenu = ({
     });
   };
 
+  // 클릭 시점의 현재 블록을 core에 다시 질의한다(Issue #141). 메뉴가 열려
+  // 있는 동안 문서가 바뀌었을 수 있다.
   const handleTurnInto = (item: BlockTypeOption) => {
-    const source = findBlockTypeDescriptor(
-      editor.getDocument().blocks,
-      blockId,
+    const isAllowed = getBlockTypeChoices(editor, { blockId }).some(
+      ({ option, blocker }) => option.id === item.id && blocker === null,
     );
-    const isAllowed =
-      source !== null &&
-      getBlockTypeOptionsForSource(source).some(
-        (option) => option.id === item.id,
-      ) &&
-      editor.getBlockTypeBlocker(blockId, item.blockType) === null;
     if (isAllowed) {
       editor.commands.setBlockType(blockId, item.blockType);
     }
