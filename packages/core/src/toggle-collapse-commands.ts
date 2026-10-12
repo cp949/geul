@@ -3,17 +3,8 @@ import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 
 import { findEditableBlockContent } from "./block-position.js";
+import { blockNotFound, commandNotApplicable } from "./command-results.js";
 import type { EditorError } from "./errors.js";
-
-const blockNotFound = (blockId: string): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "BLOCK_NOT_FOUND", blockId },
-});
-
-const commandNotApplicable = (command: string): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "COMMAND_NOT_APPLICABLE", command },
-});
 
 /**
  * toggleListItem의 `collapsed`를 반전한다(RD-004 DELTA-01). heading의

@@ -8,6 +8,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { findBlockPosition, hasSameModelMarkup } from "./block-position.js";
+import { commandNotApplicable } from "./command-results.js";
 import type { EditorError } from "./errors.js";
 import { createLocalPreviewIssuer } from "./media-local-preview-discard.js";
 import {
@@ -19,15 +20,6 @@ import type {
   UploadFile,
   UploadResult,
 } from "./media-upload.js";
-
-// production-editor-session.ts의 export본을 import하면 그 파일이 이 신규
-// 파일을 import하는 것과 맞물려 순환 의존이 생긴다. toggle-collapse-commands.ts/
-// check-list-item-commands.ts/indent-commands.ts/block-type-commands.ts가
-// 이미 같은 이유로 각자 로컬 사본을 두는 선례를 따른다.
-const commandNotApplicable = (command: string): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "COMMAND_NOT_APPLICABLE", command },
-});
 
 // media-block-extension.ts의 nonEmptyString과 동일 판정(스키마 기본값
 // null, 빈 문자열도 "url 없음"으로 취급)이다. 그 파일은 renderHTML 전용

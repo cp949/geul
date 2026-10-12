@@ -3,21 +3,12 @@ import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 
 import { findEditableBlockContent } from "./block-position.js";
+import { blockNotFound, commandNotApplicable } from "./command-results.js";
 import type { EditorError } from "./errors.js";
 
 // D2: 신규 EditorError 코드를 만들지 않는다 — 이 파일의 실패는 BLOCK_NOT_FOUND
 // 또는 COMMAND_NOT_APPLICABLE로만 수렴한다(indent-commands.ts·
 // check-list-item-commands.ts와 동일 원칙).
-const blockNotFound = (blockId: string): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "BLOCK_NOT_FOUND", blockId },
-});
-
-const commandNotApplicable = (command: string): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "COMMAND_NOT_APPLICABLE", command },
-});
-
 // RD-001 대상 8타입만 표현한다 — EditorController.commands.setBlockType의
 // SetBlockTypeDescriptor 부분집합이다(codeBlock 제외 — isNestableBlockType
 // 가드가 애초에 codeBlock을 이 command 대상에서 걸러낸다).

@@ -10,21 +10,12 @@ import { TextSelection, type Transaction } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
 import { deleteBlockRange } from "./delete-block-range.js";
+import { blockNotFound, commandNotApplicable } from "./command-results.js";
 import type { EditorError } from "./errors.js";
 import { nearestBlockContainerId } from "./selection-query-helpers.js";
 
 // D2: 신규 EditorError 코드를 만들지 않는다 — 이 파일의 모든 실패는
 // BLOCK_NOT_FOUND 또는 COMMAND_NOT_APPLICABLE로만 수렴한다.
-const blockNotFound = (blockId: string): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "BLOCK_NOT_FOUND", blockId },
-});
-
-const commandNotApplicable = (command: string): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "COMMAND_NOT_APPLICABLE", command },
-});
-
 // $pos(대상 노드 바로 앞 경계)를 담은 조상 체인에서 blockContainer 개수를
 // 세어 모델 깊이(top-level=1, model/schema.ts의 정의와 동일)를 구한다.
 // PM depth가 레벨마다 2씩(컨테이너+blockGroup) 증가하는 패턴에 기대는 대신

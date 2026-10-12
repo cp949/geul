@@ -3,20 +3,11 @@ import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 
 import { findEditableBlockContent } from "./block-position.js";
+import { blockNotFound, commandNotApplicable } from "./command-results.js";
 import type { EditorError } from "./errors.js";
 
 // D2: 신규 EditorError 코드를 만들지 않는다 — 이 파일의 실패는 BLOCK_NOT_FOUND
 // 또는 COMMAND_NOT_APPLICABLE로만 수렴한다(indent-commands.ts와 동일 원칙).
-const blockNotFound = (blockId: string): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "BLOCK_NOT_FOUND", blockId },
-});
-
-const commandNotApplicable = (command: string): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "COMMAND_NOT_APPLICABLE", command },
-});
-
 // checkListItem의 checked를 반전한다. no-op 분기가 없다 — 토글은 정의상
 // 항상 상태를 바꾼다(setText의 "동일 값 재적용" 가드와 다른 지점). checked는
 // checkListItem PM 노드의 유일한 attrs라 부분 attrs 전달로 다른 필드가

@@ -23,6 +23,7 @@ import type {
 } from "./custom-extension-definitions.js";
 import { DEFAULT_DICTIONARY, type Dictionary } from "./dictionary.js";
 import type { EditorController } from "./editor-controller-types.js";
+import { commandNotApplicable } from "./command-results.js";
 import type { EditorError } from "./errors.js";
 import { historyReasonOf } from "./history-change-reason.js";
 import type { IframeEmbedConfig } from "./iframe-embed-config.js";
@@ -52,12 +53,7 @@ type ChangeReason = "local" | "replace" | "undo" | "redo";
 // 복제한다(순환 의존 회피 관례).
 type BlockSelectionRange = { fromBlockId: string; toBlockId: string };
 
-export const commandNotApplicable = (
-  command: string,
-): Result<never, EditorError> => ({
-  ok: false,
-  error: { code: "COMMAND_NOT_APPLICABLE", command },
-});
+export { commandNotApplicable };
 
 const cloneDocument = (document: BlockDocument): BlockDocument =>
   JSON.parse(JSON.stringify(document)) as BlockDocument;
