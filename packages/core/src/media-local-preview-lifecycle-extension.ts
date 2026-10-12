@@ -37,23 +37,28 @@ export type MediaLocalPreviewLifecycleOptions = {
     pending: ReadonlyMap<string, PendingLocalPreview>,
   ) => void;
   // Issue #383 — 이미 정리 신호를 낸 URL인지 묻는다. 즉시 통지 경로(url 확정,
-  // updateBlock, #379 거절 정리, 스윕)는 문서에서 URL을 지우므로 이 확장의
-  // 추적에도 걸린다. true인 URL은 pending에 넣지 않아 같은 URL을 두 번 알리지
-  // 않는다. 미지정이면 항상 false.
+  // updateBlock, replaceBlocks)는 문서에서 URL을 지우고 통지는 dispatch 뒤에
+  // 나간다. 그래서 그 변경에서는 URL이 pending에 한 번 들어간다.
+  // true인 URL은 다음 문서 변경에서 pending을 비우고 새로 넣지 않는다.
+  // 그 사이 스윕의 중복 통지는 세션의 URL당 1회 차단이 막는다.
+  // 미지정이면 항상 false.
   isCleared?: (url: string) => boolean;
 };
 
-// doc에서 로컬 프리뷰(ADR 0015) attrs가 남은 미디어 블록을 전부 찾는다.
-// editor-controller.ts::getPendingLocalPreviews()와 같은 판정 기준(4종
-// media kind + blockId + localPreviewUrl 문자열)이지만, 이 파일은 "삭제
-// 감지" 전용이라 그 공개 API의 반환 shape({blockId, file})과는 독립적으로
-// 유지한다(호출부가 attrs 전체 — url까지 — 필요하다). appendTransaction은
-// Issue #383부터 URL 키인 아래 collectLocalPreviewsByUrl을 쓰고, 이 함수는
-// 세션 스윕 전용이다. Issue #168 roadmap RD-002 DELTA-03부터 두 번째 호출부가 생겼다 —
-// production-editor-session.ts::destroy()가 세션 영구 종료 시 남은 로컬
-// 프리뷰를 같은 기준으로 훑어 잔여 정리 신호를 낸다(RD-002.md "결정" —
-// getPendingLocalPreviews() shape 확장도 react DOM 직접 읽기도 아니라 이
-// 함수를 재사용).
+// doc에서 로컬 프리뷰(ADR 0015) attrs가 남은 미디어 블록을 blockId 키로
+// 전부 찾는다.
+// editor-controller.ts::getPendingLocalPreviews()와 같은 판정 기준이다
+// (4종 media kind + blockId + localPreviewUrl 문자열).
+// 호출부가 url까지 든 attrs 전체를 쓰므로 그 공개 API의 반환 shape
+// ({blockId, file})과 독립적으로 둔다.
+// appendTransaction은 Issue #383부터 URL 키인 아래 collectLocalPreviewsByUrl을
+// 쓴다.
+// 이 함수의 호출부는 둘이다.
+// - production-editor-session.ts: destroy()·replaceDocument 스윕이 남은
+//   프리뷰를 같은 기준으로 훑어 잔여 정리 신호를 낸다
+//   (Issue #168 roadmap RD-002 DELTA-03).
+// - media-local-preview-discard.ts: beforeTransaction마다 다음 문서에 든
+//   URL을 모아 문서에 들어간 적 있는 URL을 판정한다(Issue #379).
 export const collectLocalPreviewBlocks = (
   doc: ProseMirrorNode,
 ): Map<string, LocalPreviewAttrs> => {

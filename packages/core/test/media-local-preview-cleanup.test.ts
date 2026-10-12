@@ -12,7 +12,7 @@
  * `replaceDocument()`가 구 Editor를 폐기하기 직전 남은 로컬 프리뷰도 같은
  * 채널로 통지한다 — `destroy()`(세션 영구 종료)와 동일한 패턴을 네 번째
  * 트리거로 확장한다. Issue #380부터 판정은 undo뿐 아니라 redo 도달
- * 가능성도 본다 — 마지막 describe가 고정한다.
+ * 가능성도 본다 — redo 도달 describe가 고정한다.
  */
 import type { Block, Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
@@ -787,6 +787,19 @@ describe("블록은 남고 로컬 프리뷰 URL만 빠지는 경로(Issue #383)"
     expect(countOf(localPreviewCleared, url1)).toBe(1);
 
     growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+    editor.destroy();
+
+    expect(countOf(localPreviewCleared, url1)).toBe(1);
+  });
+
+  it("url 확정 직후 history를 밀어내지 않고 destroy()해도 같은 URL을 다시 통지하지 않는다", async () => {
+    // 확정 직후에는 lifecycle pending에 URL이 한 번 남는다(통지가 dispatch 뒤라
+    // isCleared가 아직 false다). 이때 destroy() 스윕의 중복은 세션 dedupe만 막는다.
+    const { editor, url1, localPreviewCleared } = await mountedWithPreview();
+
+    expect(
+      editor.commands.setMediaBlockUrl("m-1", "https://example.com/a.png").ok,
+    ).toBe(true);
     editor.destroy();
 
     expect(countOf(localPreviewCleared, url1)).toBe(1);
