@@ -156,9 +156,11 @@ export type CreateEditorOptions = {
   // 세 시점 전부 동일해 나눌 이유가 없다).
   //   1. 실제 url이 확정되는 두 지점(uploadMediaFile/replaceMediaBlockFile
   //      성공, setMediaBlockUrl) — core가 attrs를 null로 정리한 뒤 알린다.
-  //   2. 로컬 프리뷰가 있던 블록이 삭제된 뒤 undo로도 복구 불가능해지는
-  //      시점(RD-002 DELTA-02, `media-local-preview-reachability.ts`) —
-  //      attrs는 이미 doc에서 사라진 상태로 알린다.
+  //   2. 로컬 프리뷰가 있던 블록이 사라진 뒤 undo로도 redo로도 복구
+  //      불가능해지는 시점(RD-002 DELTA-02, Issue #380,
+  //      `media-local-preview-reachability.ts`) — attrs는 이미 doc에서
+  //      사라진 상태로 알린다. 삭제·삽입·복제 어느 쪽이든 블록이 사라지는
+  //      경우를 포함한다.
   //   3. 세션이 `destroy()`로 영구히 끝날 때, 그때까지 위 두 시점 중
   //      어디에도 걸리지 않고 남아 있던 로컬 프리뷰 전부(RD-002 DELTA-03) —
   //      `unmount()`(재마운트 가능한 DOM 분리)에는 걸지 않는다, `destroy()`

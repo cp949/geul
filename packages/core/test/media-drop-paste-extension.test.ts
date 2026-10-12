@@ -672,6 +672,42 @@ describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-
     // 만든 서로 다른 Blob URL이라 값이 같으면 안 된다.
     expect(firstUrl).not.toBe(secondUrl);
   });
+
+  it("파일 1개 paste로 삽입한 블록을 undo해도 정리 신호가 없고 redo로 돌아온 블록은 같은 URL을 가진다(Issue #380)", () => {
+    const localPreviewCleared: string[] = [];
+    const editor = createEditor({
+      initialDocument: documentOf(
+        paragraphBlock("p-1", "hello"),
+        tailParagraphBlock,
+      ),
+      createId: sequentialIds("id"),
+      onLocalPreviewCleanup: (blockId) => localPreviewCleared.push(blockId),
+    });
+    const { editable, tiptap } = mountTiptapEditor(editor);
+    editable.focus();
+    placeCaretInBlock(tiptap, "p-1");
+    const previewUrlOf = (blockId: string) => {
+      const pos = findBlockPosition(tiptap.state.doc, blockId);
+      return pos === null
+        ? null
+        : (tiptap.state.doc.nodeAt(pos)?.attrs.localPreviewUrl as string);
+    };
+
+    withUnhandledErrorTracking((errors) => {
+      pasteFiles(editable, [fileOf("photo.png", "image/png")]);
+      expect(errors).toEqual([]);
+    });
+    const pastedUrl = previewUrlOf("id-1");
+    expect(pastedUrl).toEqual(expect.stringMatching(/^blob:/));
+
+    expect(editor.commands.undo().ok).toBe(true);
+    expect(findBlockPosition(tiptap.state.doc, "id-1")).toBeNull();
+    expect(localPreviewCleared).toEqual([]);
+
+    expect(editor.commands.redo().ok).toBe(true);
+    expect(previewUrlOf("id-1")).toBe(pastedUrl);
+    expect(localPreviewCleared).toEqual([]);
+  });
 });
 
 /** mountedWithUploadEnabled에 enabledBlockTypes deny를 얹은 변형. */

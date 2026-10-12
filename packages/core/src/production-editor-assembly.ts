@@ -418,7 +418,7 @@ export const createProductionEditor = (options: {
     cleared: LocalPreviewAttrs,
   ) => void;
   // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03) — 삭제됐지만
-  // 아직 undo-불가 판정 전이라 그 확장의 `pending`에만 남아 있는 로컬
+  // 아직 복구 불가 판정 전이라 그 확장의 `pending`에만 남아 있는 로컬
   // 프리뷰 스냅샷이 바뀔 때마다 호출한다. `production-editor-session.ts::
   // destroy()`가 이 스냅샷을 세션 필드로 미러링해 뒀다가, doc 순회
   // (`collectLocalPreviewBlocks`)로는 보이지 않는 이 블록들도 세션 종료

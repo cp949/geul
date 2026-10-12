@@ -5,24 +5,24 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
-import { isLocalPreviewReachableViaUndo } from "./media-local-preview-reachability.js";
+import { isLocalPreviewReachableViaHistory } from "./media-local-preview-reachability.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 
 export type MediaLocalPreviewLifecycleOptions = {
   // Issue #168 roadmap RD-002 DELTA-02 — 삭제된 로컬 프리뷰(ADR 0015)
-  // 블록이 더 이상 undo로 복구 불가라고 판정되면 호출한다.
+  // 블록이 더 이상 undo로도 redo로도 복구 불가라고 판정되면 호출한다.
   // production-editor-session.ts가 기존 `notifyLocalPreviewCleared`(url
   // 확정 시 정리와 같은 채널, RD-002.md "결정" — 신호 채널 재사용)로
   // 연결한다. 미지정이면 no-op(MediaDropPasteExtension의 기본값과 동일
   // 근거 — production-editor-assembly.ts가 항상 실제 콜백을 넘긴다).
   notifyUnreachable: (blockId: string, cleared: LocalPreviewAttrs) => void;
-  // Issue #168 roadmap RD-002 DELTA-03 — 삭제됐지만 아직 undo-불가 판정을
+  // Issue #168 roadmap RD-002 DELTA-03 — 사라졌지만 아직 복구 불가 판정을
   // 받지 못해 `pending`에만 남아 있는 로컬 프리뷰 목록이 바뀔 때마다(추가·
   // 재등장으로 제거·판정 확정으로 제거) 그 시점의 전체 스냅샷을 알린다.
   // `production-editor-session.ts::destroy()`가 세션 종료 시 이 스냅샷을
   // 함께 훑어야 한다 — `pending`은 doc에서 이미 사라진 블록만 담으므로
   // `collectLocalPreviewBlocks(doc)`(현재 doc 순회)만으로는 이 블록들을
-  // 볼 수 없다(구현 중 실측 — "삭제 직후·undo-불가 판정 전 destroy()"
+  // 볼 수 없다(구현 중 실측 — "삭제 직후·복구 불가 판정 전 destroy()"
   // 시나리오에서 정리 신호가 전혀 나가지 않는 회귀를 이 옵션으로 막는다).
   // 미지정이면 no-op.
   notifyPendingChange?: (
@@ -62,7 +62,7 @@ export const collectLocalPreviewBlocks = (
 };
 
 // Issue #168 roadmap RD-002 DELTA-02 — 로컬 프리뷰가 남은 미디어 블록이
-// 삭제된 뒤 undo로도 복구 불가능해지는 시점을 판정해 정리 신호를 낸다.
+// 삭제된 뒤 undo로도 redo로도 복구 불가능해지는 시점을 판정해 정리 신호를 낸다.
 // `media-local-preview-reachability.ts`(공개 API 시뮬레이션, 비공개
 // prosemirror-history 상수에 의존하지 않음 — `_works/roadmap/progress.md`
 // "DELTA-02 착수 전 기술 조사" 근거)를 소비하는 유일한 호출부다.
@@ -81,7 +81,7 @@ export const MediaLocalPreviewLifecycleExtension =
     addProseMirrorPlugins() {
       const notifyUnreachable = this.options.notifyUnreachable;
       const notifyPendingChange = this.options.notifyPendingChange;
-      // 삭제됐지만 아직 undo로 복구 가능한지 재판정 대기 중인 블록 —
+      // 사라졌지만 아직 undo·redo로 복구 가능한지 재판정 대기 중인 블록 —
       // 확장 인스턴스(= Tiptap Editor 인스턴스, 세션 재구성마다 새로
       // 만들어짐)당 하나. BlockIdExtension의 createId 클로저와 동일한
       // 생애주기(session-scoped, 재구성 시 자동으로 빈 상태에서 시작).
@@ -90,7 +90,7 @@ export const MediaLocalPreviewLifecycleExtension =
       // `applyTransaction(tr)`의 별칭이라(prosemirror-state 실측,
       // `apply(tr) { return this.applyTransaction(tr).state }`) 이
       // 플러그인 자신을 포함한 모든 플러그인의 `appendTransaction`을 다시
-      // 태운다. `isLocalPreviewReachableViaUndo`의 시뮬레이션이
+      // 태운다. `isLocalPreviewReachableViaHistory`의 시뮬레이션이
       // `current.apply(tr)`로 undo를 반복 재현하는 동안 이 플러그인의
       // `appendTransaction`이 재귀적으로 재호출돼 같은 `pending` Map을
       // 시뮬레이션 중간 상태 기준으로 잘못 변형시키는 것을 막는다(착수
@@ -122,7 +122,7 @@ export const MediaLocalPreviewLifecycleExtension =
               }
             }
 
-            // 실제 undo로 복구된 블록은 대기열에서 뺀다 — 이후 아무리 새
+            // 실제 undo·redo로 복구된 블록은 대기열에서 뺀다 — 이후 아무리 새
             // undo 이벤트가 쌓여도 이 blockId를 다시 정리 대상으로 보지
             // 않는다(같은 blockId 재사용 시 오탐 방지).
             for (const blockId of pending.keys()) {
@@ -139,7 +139,10 @@ export const MediaLocalPreviewLifecycleExtension =
             // 않기 위한 근사 게이트다 — 놓치지 않는 것(과소 재판정 없음)만
             // 보장하면 되고, 과도하게 자주 통과해도(병합 편집이 아니라
             // 매번 새 그룹인 경우 등) 정확성에는 영향이 없다(성능
-            // 손실뿐).
+            // 손실뿐). redo 스택이 비는 시점은 undo/redo 직후의 새
+            // 편집이라 `undoDepth`가 +1이다(`prosemirror-history`
+            // `histTransaction`·`applyTransaction`) — 그래서 이 비교만으로
+            // redo 도달 가능성 변화도 놓치지 않는다(Issue #380).
             if (
               pending.size > 0 &&
               undoDepth(newState) !== undoDepth(oldState)
@@ -147,7 +150,7 @@ export const MediaLocalPreviewLifecycleExtension =
               simulating = true;
               try {
                 for (const [blockId, attrs] of pending) {
-                  if (!isLocalPreviewReachableViaUndo(newState, blockId)) {
+                  if (!isLocalPreviewReachableViaHistory(newState, blockId)) {
                     pending.delete(blockId);
                     notifyUnreachable(blockId, attrs);
                     changed = true;

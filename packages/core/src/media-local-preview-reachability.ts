@@ -1,10 +1,11 @@
-import { undo, undoDepth } from "@tiptap/pm/history";
-import type { EditorState } from "@tiptap/pm/state";
+import { redo, redoDepth, undo, undoDepth } from "@tiptap/pm/history";
+import type { EditorState, Transaction } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
 
 // Issue #168 roadmap RD-002 DELTA-02 — "삭제된 로컬 프리뷰(ADR 0015) 블록이
-// 아직 undo로 복구 가능한가"를 판정한다. `prosemirror-history`(vendored
+// 아직 undo로 복구 가능한가"를 판정한다. Issue #380부터 redo 방향도 본다
+// (아래 "redo 시뮬레이션" 문단). `prosemirror-history`(vendored
 // 1.5.0) 공개 API(`closeHistory`/`history`/`isHistoryTransaction`/`redo`/
 // `redoDepth`/`redoNoScroll`/`undo`/`undoDepth`/`undoNoScroll`, `dist/
 // index.d.ts` 확인)에는 "이 이벤트가 아직 done 브랜치에 남아있는가"를 직접
@@ -18,6 +19,14 @@ import { findBlockPosition } from "./block-position.js";
 // doc에 재등장하는지 그대로 재현한다. prosemirror-history의 실제 popEvent
 // 로직을 그대로 태우므로 근사가 아니라 정확하다.
 //
+// redo 시뮬레이션(Issue #380): 복제·삽입한 블록을 undo하면 블록이 doc에서
+// 사라지고 그 삽입 이벤트는 undone 브랜치로 옮겨간다. undo 스택만 보면
+// 복구 불가로 오판하고, 이어지는 redo가 정리된 URL을 가진 블록을
+// 되살린다. 그래서 `redo(state, cb)`를 `redoDepth(state)`번 반복해
+// 같은 방식으로 재현한다. 히스토리가 선형이라 두 방향은 서로 다른
+// 상태를 지난다 — 둘 다 시작 상태 `state`에서 독립적으로 돈다.
+// 이름이 `ViaHistory`인 이유다.
+//
 // `cb`는 실제 view에 dispatch하지 않고 `current.apply(tr)`로 로컬
 // 변수에만 다음 state를 누적한다 — 세션·DOM에 부작용을 주지 않는다.
 // **주의**: `EditorState.apply(tr)`는 순수해 보이지만 내부적으로
@@ -27,19 +36,36 @@ import { findBlockPosition } from "./block-position.js";
 // `media-local-preview-lifecycle-extension.ts`가 유일한 호출부)은 자기
 // 자신의 재진입으로부터 스스로를 지켜야 한다(그 파일의 `simulating` 가드
 // 참고, 착수 중 실측 — 가드 없이는 재귀 호출이 시뮬레이션 중간 상태를
-// "실제 재등장"으로 오판해 바깥 호출의 상태를 오염시킴). 비용은
-// O(undoDepth) `state.apply` 호출(각각 전체 plugin fixpoint 포함) —
-// 호출부가 이 비용을 감당할 시점을 스스로 게이트한다,
-// media-local-preview-lifecycle-extension.ts 참고.
-export function isLocalPreviewReachableViaUndo(
+// "실제 재등장"으로 오판해 바깥 호출의 상태를 오염시킴). redo 시뮬레이션에도
+// 똑같이 적용된다. 비용은 O(undoDepth + redoDepth) `state.apply` 호출(각각
+// 전체 plugin fixpoint 포함) — 호출부가 이 비용을 감당할 시점을 스스로
+// 게이트한다, media-local-preview-lifecycle-extension.ts 참고.
+export function isLocalPreviewReachableViaHistory(
   state: EditorState,
   blockId: string,
 ): boolean {
+  return (
+    reappearsWhileStepping(state, blockId, undoDepth(state), undo) ||
+    reappearsWhileStepping(state, blockId, redoDepth(state), redo)
+  );
+}
+
+type HistoryStep = (
+  state: EditorState,
+  dispatch: (transaction: Transaction) => void,
+) => boolean;
+
+// `step`(undo 또는 redo)을 `steps`번 시뮬레이션하며 블록이 doc에 나타나는지 본다.
+function reappearsWhileStepping(
+  state: EditorState,
+  blockId: string,
+  steps: number,
+  step: HistoryStep,
+): boolean {
   let current = state;
-  const steps = undoDepth(current);
   for (let i = 0; i < steps; i += 1) {
     let next: EditorState | null = null;
-    const applied = undo(current, (transaction) => {
+    const applied = step(current, (transaction) => {
       next = current.apply(transaction);
     });
     if (!applied || next === null) break;

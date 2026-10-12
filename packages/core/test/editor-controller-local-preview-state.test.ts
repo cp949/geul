@@ -20,6 +20,7 @@ import {
 } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
+import { contentTextStart } from "./block-test-support.js";
 import {
   documentOf,
   editorState,
@@ -241,6 +242,12 @@ describe("duplicateBlock — 로컬 프리뷰", () => {
     expect(editor.commands.duplicateBlock("m-1").ok).toBe(true);
     const duplicateUrl = previewAttrsOf(tiptap, "id-1").localPreviewUrl;
     expect(editor.commands.undo()).toEqual(okResult);
+    // redo로 되살릴 수 있는 동안은 통지하지 않는다(Issue #380). 새 편집이
+    // redo 스택을 비운 뒤에야 복제본 자신의 URL로만 통지한다.
+    expect(localPreviewCleared).toEqual([]);
+    tiptap.view.dispatch(
+      tiptap.state.tr.insertText("x", contentTextStart(tiptap, "tail")),
+    );
 
     expect(localPreviewCleared).toHaveLength(1);
     expect(localPreviewCleared[0]?.blockId).toBe("id-1");

@@ -1,15 +1,16 @@
 /**
- * 로컬 프리뷰(ADR 0015)가 남은 미디어 블록이 삭제된 뒤 undo로 복구
- * 불가능해지는 시점 판정과 정리 신호(Issue #168 roadmap RD-002 DELTA-02,
- * 상세 계획 `_works/roadmap/result/RD-002-DELTA-02.md`)를 고정한다. 판정
- * 방식은 `prosemirror-history` 공개 API(`undo`/`undoDepth`)만으로 실제
- * undo 스택을 시뮬레이션한다(비공개 상수 `DEPTH_OVERFLOW`에 의존하지
- * 않음). 정리 신호는 기존 `onLocalPreviewCleanup` 채널을 재사용한다(url
+ * 로컬 프리뷰(ADR 0015)가 남은 미디어 블록이 사라진 뒤 undo로도 redo로도
+ * 복구 불가능해지는 시점 판정과 정리 신호(Issue #168 roadmap RD-002
+ * DELTA-02, 상세 계획 `_works/roadmap/result/RD-002-DELTA-02.md`)를
+ * 고정한다. 판정 방식은 `prosemirror-history` 공개 API(`undo`/`redo`/
+ * `undoDepth`/`redoDepth`)만으로 실제 히스토리를 시뮬레이션한다(비공개
+ * 상수 `DEPTH_OVERFLOW`에 의존하지 않음). 정리 신호는 기존 `onLocalPreviewCleanup` 채널을 재사용한다(url
  * 확정 시 정리와 동일 채널 — RD-002.md "결정"). Issue #169(roadmap RD-001
  * DELTA-01, 상세 계획 `_works/roadmap/result/RD-001-DELTA-01.md`)부터
  * `replaceDocument()`가 구 Editor를 폐기하기 직전 남은 로컬 프리뷰도 같은
  * 채널로 통지한다 — `destroy()`(세션 영구 종료)와 동일한 패턴을 네 번째
- * 트리거로 확장한다.
+ * 트리거로 확장한다. Issue #380부터 판정은 undo뿐 아니라 redo 도달
+ * 가능성도 본다 — 마지막 describe가 고정한다.
  */
 import type { Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
@@ -18,12 +19,14 @@ import { describe, expect, it } from "vitest";
 import { contentTextStart } from "./block-test-support.js";
 import { findBlockPosition } from "../src/block-position.js";
 import { createEditor, type CreateEditorOptions } from "../src/index.js";
+import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
   documentOf,
   mediaBlock,
   mountTiptapEditor,
   okResult,
   paragraphBlock,
+  seedLocalPreview,
   sequentialIds,
   tailParagraphBlock,
 } from "./editor-controller-support.js";
@@ -80,7 +83,7 @@ const BEYOND_DEPTH_AND_OVERFLOW = 130;
 // depth(100)에 못 미치는 중간 지점 — 아직 evict되지 않았어야 한다.
 const WELL_UNDER_DEPTH = 50;
 
-describe("로컬 프리뷰 undo-불가 정리 신호(Issue #168 roadmap RD-002 DELTA-02)", () => {
+describe("로컬 프리뷰 복구 불가 정리 신호(Issue #168 roadmap RD-002 DELTA-02)", () => {
   it("로컬 프리뷰가 있는 블록을 삭제한 직후 undo하면 정리 신호가 발생하지 않고 attrs가 복구된다", async () => {
     const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
       documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
@@ -195,7 +198,7 @@ describe("로컬 프리뷰 undo-불가 정리 신호(Issue #168 roadmap RD-002 D
 });
 
 describe("로컬 프리뷰 세션 종료 시 잔여 정리(Issue #168 roadmap RD-002 DELTA-03)", () => {
-  it("url 확정도 undo-불가 판정도 받지 않은 채 남은 로컬 프리뷰는 destroy() 시 정리 신호가 1회 발생한다", async () => {
+  it("url 확정도 복구 불가 판정도 받지 않은 채 남은 로컬 프리뷰는 destroy() 시 정리 신호가 1회 발생한다", async () => {
     const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
       documentOf(
         mediaBlock("image", "m-1"),
@@ -229,10 +232,10 @@ describe("로컬 프리뷰 세션 종료 시 잔여 정리(Issue #168 roadmap RD
   });
 
   // 구현 중 발견 — doc 순회(collectLocalPreviewBlocks)만으로는 이 경우를
-  // 놓친다: 삭제된 로컬 프리뷰는 doc에서 이미 사라져 있고, undo-불가
+  // 놓친다: 삭제된 로컬 프리뷰는 doc에서 이미 사라져 있고, 복구 불가
   // 판정은 아직 나지 않아 MediaLocalPreviewLifecycleExtension의 pending
   // Map에만 남아 있다. destroy()가 그 pending도 함께 훑어야 한다.
-  it("로컬 프리뷰가 있는 블록을 삭제한 직후(undo-불가 판정 전) destroy()해도 정리 신호가 발생한다", async () => {
+  it("로컬 프리뷰가 있는 블록을 삭제한 직후(복구 불가 판정 전) destroy()해도 정리 신호가 발생한다", async () => {
     const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
       documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
     );
@@ -246,7 +249,7 @@ describe("로컬 프리뷰 세션 종료 시 잔여 정리(Issue #168 roadmap RD
     };
 
     expect(editor.commands.deleteBlock("m-1")).toEqual(okResult);
-    // depth(100)를 넘는 새 undo 이벤트를 쌓지 않는다 — undo-불가 판정이
+    // depth(100)를 넘는 새 undo 이벤트를 쌓지 않는다 — 복구 불가 판정이
     // 아직 나지 않은 채로(WELL_UNDER_DEPTH만큼도 쌓지 않음) 즉시 destroy().
     editor.destroy();
 
@@ -282,11 +285,11 @@ describe("로컬 프리뷰 replaceDocument() 교체 시 정리(Issue #169 roadma
     expect(localPreviewCleared).toEqual([{ blockId: "m-1", ...seededAttrs }]);
   });
 
-  // doc 순회(collectLocalPreviewBlocks)만으로는 삭제된 뒤 undo-불가 판정
+  // doc 순회(collectLocalPreviewBlocks)만으로는 삭제된 뒤 복구 불가 판정
   // 전이라 pending에만 남은 블록을 못 본다(DELTA-03과 동일 실측 근거) —
   // replaceDocument()도 destroy()와 같은 두 번째 순회(pendingUnreachable
   // LocalPreviews)가 필요하다는 것을 고정한다.
-  it("로컬 프리뷰가 있는 블록을 삭제한 직후(undo-불가 판정 전) replaceDocument()를 호출해도 정리 신호가 발생한다", async () => {
+  it("로컬 프리뷰가 있는 블록을 삭제한 직후(복구 불가 판정 전) replaceDocument()를 호출해도 정리 신호가 발생한다", async () => {
     const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
       documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
     );
@@ -377,5 +380,155 @@ describe("로컬 프리뷰 replaceDocument() 교체 시 정리(Issue #169 roadma
     editor.destroy();
 
     expect(localPreviewCleared).toHaveLength(1);
+  });
+});
+
+describe("로컬 프리뷰 redo 도달 가능성(Issue #380)", () => {
+  /** blockId 노드의 로컬 프리뷰 URL을 읽는다. 블록이 없으면 null이다. */
+  const previewUrlOf = (tiptap: TiptapEditor, blockId: string) => {
+    const position = findBlockPosition(tiptap.state.doc, blockId);
+    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+    return node === null ? null : (node.attrs.localPreviewUrl as string);
+  };
+
+  /**
+   * m-1에 프리뷰를 심고 복제해 id-1을 만든다. 복제본의 URL을 함께 돌려준다.
+   * `priorEdits`는 복제 앞에 쌓을 독립 undo 이벤트 수다.
+   */
+  const mountedWithDuplicate = (priorEdits = 0) => {
+    const mounted = mountedWithCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    seedLocalPreview(mounted.tiptap, "m-1", testFile());
+    growUndoHistory(mounted.tiptap, priorEdits);
+    expect(mounted.editor.commands.duplicateBlock("m-1").ok).toBe(true);
+    const duplicateUrl = previewUrlOf(mounted.tiptap, "id-1");
+    if (duplicateUrl === null) throw new Error("id-1 복제 실패");
+    return { ...mounted, duplicateUrl };
+  };
+
+  it("복제한 프리뷰 블록을 undo해도 정리 신호가 없고 redo로 돌아온 블록은 같은 URL을 가진다", () => {
+    const { editor, localPreviewCleared, tiptap, duplicateUrl } =
+      mountedWithDuplicate();
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(localPreviewCleared).toEqual([]);
+    expect(findBlockPosition(tiptap.state.doc, "id-1")).toBeNull();
+
+    expect(editor.commands.redo()).toEqual(okResult);
+    expect(localPreviewCleared).toEqual([]);
+    expect(previewUrlOf(tiptap, "id-1")).toBe(duplicateUrl);
+  });
+
+  it("undo 뒤 새 편집으로 redo 스택이 비면 복제본의 정리 신호가 정확히 1회 발생한다", () => {
+    const { editor, localPreviewCleared, tiptap, duplicateUrl } =
+      mountedWithDuplicate();
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(localPreviewCleared).toEqual([]);
+
+    growUndoHistory(tiptap, 1);
+
+    expect(localPreviewCleared).toEqual([
+      {
+        blockId: "id-1",
+        localPreviewUrl: duplicateUrl,
+        localPreviewFile: expect.any(File),
+      },
+    ]);
+  });
+
+  it("redo로 되살아난 복제본은 이후 깊은 새 undo 이벤트가 쌓여도 정리 신호가 발생하지 않는다", () => {
+    const { editor, localPreviewCleared, tiptap } = mountedWithDuplicate();
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editor.commands.redo()).toEqual(okResult);
+    expect(findBlockPosition(tiptap.state.doc, "id-1")).not.toBeNull();
+
+    growUndoHistory(tiptap, BEYOND_DEPTH_AND_OVERFLOW);
+
+    expect(localPreviewCleared).toEqual([]);
+  });
+
+  it("redo가 여러 단계 남아 있어도 복제본이 돌아오는 단계까지 정리 신호가 발생하지 않는다", () => {
+    // 복제 앞에 독립 편집 1건을 둔다. undo 2회 뒤 redo 첫 칸은 그 편집이라
+    // 복제본은 redo 둘째 칸에서 돌아온다.
+    const { editor, localPreviewCleared, tiptap, duplicateUrl } =
+      mountedWithDuplicate(1);
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(findBlockPosition(tiptap.state.doc, "id-1")).toBeNull();
+    expect(localPreviewCleared).toEqual([]);
+
+    expect(editor.commands.redo()).toEqual(okResult);
+    expect(findBlockPosition(tiptap.state.doc, "id-1")).toBeNull();
+    expect(localPreviewCleared).toEqual([]);
+
+    expect(editor.commands.redo()).toEqual(okResult);
+    expect(previewUrlOf(tiptap, "id-1")).toBe(duplicateUrl);
+    expect(localPreviewCleared).toEqual([]);
+  });
+
+  it("복제본을 undo한 상태에서 destroy()하면 복제본의 정리 신호가 정확히 1회 발생한다", () => {
+    const { editor, localPreviewCleared, duplicateUrl } =
+      mountedWithDuplicate();
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(localPreviewCleared).toEqual([]);
+
+    editor.destroy();
+
+    // doc에 남은 m-1도 destroy 스윕 대상이다 — 복제본(id-1)만 골라 센다.
+    expect(
+      localPreviewCleared.filter((cleared) => cleared.blockId === "id-1"),
+    ).toEqual([
+      {
+        blockId: "id-1",
+        localPreviewUrl: duplicateUrl,
+        localPreviewFile: expect.any(File),
+      },
+    ]);
+  });
+
+  it("블록이 redo 스택이 아니라 어느 히스토리에도 없으면 redo 스택이 남아 있어도 정리 신호가 발생한다", () => {
+    const { editor, localPreviewCleared, tiptap } = mountedWithCleanup(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    // 프리뷰 심기와 삭제를 히스토리 밖으로 보낸다 — 블록은 undo·redo 어느
+    // 쪽으로도 돌아오지 않는다.
+    const seedPosition = findBlockPosition(tiptap.state.doc, "m-1");
+    const seedNode =
+      seedPosition === null ? null : tiptap.state.doc.nodeAt(seedPosition);
+    if (seedPosition === null || seedNode === null)
+      throw new Error("m-1 조회 실패");
+    tiptap.view.dispatch(
+      tiptap.state.tr
+        .setNodeMarkup(seedPosition, undefined, {
+          ...seedNode.attrs,
+          ...createLocalPreviewAttrs(testFile()),
+        })
+        .setMeta("addToHistory", false),
+    );
+    growUndoHistory(tiptap, 1);
+    const deletePosition = findBlockPosition(tiptap.state.doc, "m-1");
+    const deleteNode =
+      deletePosition === null ? null : tiptap.state.doc.nodeAt(deletePosition);
+    if (deletePosition === null || deleteNode === null)
+      throw new Error("m-1 조회 실패");
+    tiptap.view.dispatch(
+      tiptap.state.tr
+        .delete(deletePosition, deletePosition + deleteNode.nodeSize)
+        .setMeta("addToHistory", false),
+    );
+    expect(localPreviewCleared).toEqual([]);
+
+    // undo 1회 뒤 undoDepth는 0, redoDepth는 1이다. redo 스택이 있어도 m-1은
+    // 거기 없다.
+    expect(editor.commands.undo()).toEqual(okResult);
+
+    expect(localPreviewCleared.map((cleared) => cleared.blockId)).toEqual([
+      "m-1",
+    ]);
   });
 });
