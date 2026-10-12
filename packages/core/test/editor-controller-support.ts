@@ -36,6 +36,7 @@ import {
   type EditorError,
   type MediaBlockKind,
 } from "../src/index.js";
+import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
   documentOf,
   editorState,
@@ -557,4 +558,59 @@ export const expectSameValueReapplyIsNoop = (
 
   expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
   expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+};
+
+/**
+ * `mounted()`와 같은 모양이되 `onLocalPreviewCleanup`을 추가로 배선한다
+ * (editor-controller-media-upload.test.ts::mountedWithUpload과 동일
+ * "로컬 override" 전례) — 로컬 프리뷰 정리 신호(setMediaBlockUrl·updateBlock)를
+ * 검증할 때만 쓴다(Issue #168 roadmap RD-001 DELTA-05, Issue #376).
+ */
+export const mountedWithLocalPreviewCleanup = (initialDocument: Document) => {
+  const changes: {
+    revision: number;
+    changedBlockIds: readonly string[];
+    reason: string;
+  }[] = [];
+  const localPreviewCleared: {
+    blockId: string;
+    localPreviewUrl: string;
+    localPreviewFile: File;
+  }[] = [];
+  const editor = createEditor({
+    initialDocument,
+    createId: sequentialIds("id"),
+    onChange: (event) => changes.push(event),
+    onLocalPreviewCleanup: (blockId, cleared) =>
+      localPreviewCleared.push({ blockId, ...cleared }),
+  });
+  return {
+    editor,
+    changes,
+    localPreviewCleared,
+    ...mountTiptapEditor(editor),
+  };
+};
+
+/**
+ * blockId 노드에 로컬 프리뷰(ADR 0015) attrs를 직접 채운다 — 공개 명령
+ * 표면에는 "url도 있고 로컬 프리뷰도 있는 블록"을 만드는 경로가 없어
+ * `setBoldStoredMark`(list-item-block-type-support.ts)와 같은 방식으로 PM
+ * 트랜잭션을 직접 dispatch한다(정리 신호 fixture 준비 전용).
+ */
+export const seedLocalPreview = (
+  tiptap: TiptapEditor,
+  blockId: string,
+  file: File,
+): void => {
+  const position = findBlockPosition(tiptap.state.doc, blockId);
+  const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+  if (position === null || node === null) {
+    throw new Error(`블록 ${blockId} 조회 실패`);
+  }
+  const transaction = tiptap.state.tr.setNodeMarkup(position, undefined, {
+    ...node.attrs,
+    ...createLocalPreviewAttrs(file),
+  });
+  tiptap.view.dispatch(transaction);
 };

@@ -7,7 +7,7 @@ import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
-import { findBlockPosition, hasSameMarkup } from "./block-position.js";
+import { findBlockPosition, hasSameModelMarkup } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import {
   createLocalPreviewAttrs,
@@ -153,9 +153,10 @@ export class MediaUploadTracker {
         : { localPreviewUrl: null, localPreviewFile: null }),
     };
     // Issue #375 — 결과가 현재 attrs와 같으면 dispatch하지 않는다. 빈 history
-    // 단위가 남아 다음 undo를 삼킨다. 로컬 프리뷰가 남은 블록은 attrs가
-    // 달라 이 검사를 지나친다.
-    if (hasSameMarkup(node, nextAttrs)) {
+    // 단위가 남아 다음 undo를 삼킨다. 로컬 프리뷰는 저장 모델에 없는 PM 전용
+    // attrs라 현재 값으로 고정해 비교한다(Issue #376). 모델이 같고 프리뷰만
+    // 정리하는 결과는 거절한다.
+    if (hasSameModelMarkup(node, nextAttrs)) {
       return false;
     }
     const committed = this.host.runDocumentCommand(command, "local", () => {

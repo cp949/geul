@@ -60,6 +60,25 @@ export const hasSameMarkup = (
   attrs: Record<string, unknown>,
 ): boolean => node.hasMarkup(node.type, attrs);
 
+// 로컬 프리뷰(ADR 0015)는 저장 모델에 없는 PM 전용 attrs다. 명령이 이 attrs만
+// 바꾸면 commitDocument가 변경 0건으로 거절하는데도 PM 상태는 이미 바뀌어
+// 있다(Issue #376). "모델이 같은가"를 판정할 때는 두 attr를 현재 값으로
+// 고정해 비교한다. 로컬 프리뷰 attrs가 없는 노드 타입은 hasSameMarkup과 같다.
+export const hasSameModelMarkup = (
+  node: ProseMirrorNode,
+  attrs: Record<string, unknown>,
+): boolean =>
+  node.hasMarkup(
+    node.type,
+    "localPreviewUrl" in node.attrs
+      ? {
+          ...attrs,
+          localPreviewUrl: node.attrs.localPreviewUrl,
+          localPreviewFile: node.attrs.localPreviewFile,
+        }
+      : attrs,
+  );
+
 // 캐럿(state.selection.$from)에서 가장 가까운 blockContainer 조상의
 // blockId를 찾는다. depth 역순으로 올라가며 첫 blockContainer를 찾으면 그
 // attrs.blockId를 반환한다 — 스키마상 blockContainer는 항상 유효한

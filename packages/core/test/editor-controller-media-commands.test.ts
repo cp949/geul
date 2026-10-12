@@ -22,7 +22,6 @@
  * DELTA-02가 소관이다.
  */
 import type { Document } from "@cp949/geul-model";
-import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
 import {
@@ -30,7 +29,6 @@ import {
   type EditorController,
   type MediaBlockKind,
 } from "../src/index.js";
-import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
   childParagraphBlock,
   documentOf,
@@ -39,6 +37,7 @@ import {
   expectSameValueReapplyIsNoop,
   firstParagraphBlock,
   mediaBlock,
+  mountedWithLocalPreviewCleanup,
   mounted,
   mountTiptapEditor,
   notApplicable,
@@ -46,6 +45,7 @@ import {
   paragraphBlock,
   restored,
   secondParagraphBlock,
+  seedLocalPreview,
   sequentialIds,
   tailParagraphBlock,
 } from "./editor-controller-support.js";
@@ -60,61 +60,6 @@ const mediaKinds: readonly Exclude<MediaBlockKind, "iframe">[] = [
 ];
 
 const twoBlocks = documentOf(firstParagraphBlock, secondParagraphBlock);
-
-/**
- * `mounted()`와 같은 모양이되 `onLocalPreviewCleanup`을 추가로 배선한다
- * (editor-controller-media-upload.test.ts::mountedWithUpload과 동일
- * "로컬 override" 전례) — setMediaBlockUrl이 로컬 프리뷰를 정리하며 신호를
- * 발생시키는지 검증할 때만 쓴다(Issue #168 roadmap RD-001 DELTA-05).
- */
-const mountedWithLocalPreviewCleanup = (initialDocument: Document) => {
-  const changes: {
-    revision: number;
-    changedBlockIds: readonly string[];
-    reason: string;
-  }[] = [];
-  const localPreviewCleared: {
-    blockId: string;
-    localPreviewUrl: string;
-    localPreviewFile: File;
-  }[] = [];
-  const editor = createEditor({
-    initialDocument,
-    createId: sequentialIds("id"),
-    onChange: (event) => changes.push(event),
-    onLocalPreviewCleanup: (blockId, cleared) =>
-      localPreviewCleared.push({ blockId, ...cleared }),
-  });
-  return {
-    editor,
-    changes,
-    localPreviewCleared,
-    ...mountTiptapEditor(editor),
-  };
-};
-
-/**
- * blockId 노드에 로컬 프리뷰(ADR 0015) attrs를 직접 채운다 —
- * editor-controller-media-upload.test.ts::seedLocalPreview와 동일 근거
- * (공개 명령 표면에는 "url도 있고 로컬 프리뷰도 있는 블록"을 만드는
- * 경로가 없다).
- */
-const seedLocalPreview = (
-  tiptap: TiptapEditor,
-  blockId: string,
-  file: File,
-): void => {
-  const position = findBlockPosition(tiptap.state.doc, blockId);
-  const node = position === null ? null : tiptap.state.doc.nodeAt(position);
-  if (position === null || node === null) {
-    throw new Error(`블록 ${blockId} 조회 실패`);
-  }
-  const transaction = tiptap.state.tr.setNodeMarkup(position, undefined, {
-    ...node.attrs,
-    ...createLocalPreviewAttrs(file),
-  });
-  tiptap.view.dispatch(transaction);
-};
 
 const testFile = (name = "stale.png") =>
   new File(["binary"], name, { type: "image/png" });

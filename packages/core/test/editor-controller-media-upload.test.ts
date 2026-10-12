@@ -13,10 +13,8 @@
  * 한다. react Upload UI(RD-003)는 이 DELTA 범위가 아니다.
  */
 import type { Document } from "@cp949/geul-model";
-import type { Editor as TiptapEditor } from "@tiptap/core";
 import { describe, expect, it } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
-import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import type { UploadFile, UploadResult } from "../src/index.js";
 import {
   createEditor,
@@ -32,6 +30,7 @@ import {
   okResult,
   paragraphBlock,
   restored,
+  seedLocalPreview,
   sequentialIds,
   tailParagraphBlock,
 } from "./editor-controller-support.js";
@@ -59,31 +58,6 @@ const controllableUploadFile = (): {
 
 const testFile = (name = "photo.png") =>
   new File(["binary"], name, { type: "image/png" });
-
-/**
- * blockId 노드에 로컬 프리뷰(ADR 0015) attrs를 직접 채운다 — 공개 명령
- * 표면에는 "이미 로컬 프리뷰가 있는 블록"을 만드는 경로가 없어(로컬
- * 프리뷰는 콜백 부재를 전제하는데, 이 파일의 대상 블록은 콜백을 등록해
- * 업로드 성공/정리를 검증해야 한다) `setBoldStoredMark`(list-item-
- * block-type-support.ts)와 같은 방식으로 PM 트랜잭션을 직접 dispatch한다
- * (RD-001 DELTA-05, 정리 신호 fixture 준비 전용).
- */
-const seedLocalPreview = (
-  tiptap: TiptapEditor,
-  blockId: string,
-  file: File,
-): void => {
-  const position = findBlockPosition(tiptap.state.doc, blockId);
-  const node = position === null ? null : tiptap.state.doc.nodeAt(position);
-  if (position === null || node === null) {
-    throw new Error(`블록 ${blockId} 조회 실패`);
-  }
-  const transaction = tiptap.state.tr.setNodeMarkup(position, undefined, {
-    ...node.attrs,
-    ...createLocalPreviewAttrs(file),
-  });
-  tiptap.view.dispatch(transaction);
-};
 
 /**
  * `mounted()`(list-item-block-type-support.ts)와 같은 모양이되 `uploadFile`/
@@ -764,6 +738,40 @@ describe("replaceMediaBlockFile — 성공", () => {
       expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
     },
   );
+
+  // Issue #376 — url·name이 현재와 같고 로컬 프리뷰만 남은 블록은 모델이 같다.
+  // 프리뷰 정리만 하는 dispatch는 거절돼야 PM 상태가 바뀌지 않는다.
+  it("결과가 모델과 같고 로컬 프리뷰만 남아 있으면 dispatch하지 않아 PM 문서와 정리 통지가 그대로다", async () => {
+    const { uploadFile, pending } = controllableUploadFile();
+    const { editor, tiptap, changes, localPreviewCleared } = mountedWithUpload(
+      documentOf(
+        mediaBlock("file", "m-1", {
+          url: "https://example.com/a.bin",
+          name: "a.bin",
+        }),
+        tailParagraphBlock,
+      ),
+      { uploadFile },
+    );
+    seedLocalPreview(tiptap, "m-1", testFile());
+    const docBefore = tiptap.state.doc;
+    const appliedChanges = [...changes];
+
+    const replacePromise = editor.commands.replaceMediaBlockFile(
+      "m-1",
+      testFile("a.bin"),
+    );
+    pending[0]!.resolve({
+      status: "success",
+      url: "https://example.com/a.bin",
+      name: "a.bin",
+    });
+    expect(await replacePromise).toEqual(okResult);
+
+    expect(tiptap.state.doc).toBe(docBefore);
+    expect(localPreviewCleared).toEqual([]);
+    expect(changes).toEqual(appliedChanges);
+  });
 });
 
 describe("replaceMediaBlockFile — 실패·취소", () => {

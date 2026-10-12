@@ -18,6 +18,7 @@ import {
 } from "./block-tree-edit.js";
 import type { PartialBlock } from "./editor-controller-types.js";
 import type { EditorError } from "./errors.js";
+import { carryOverLocalPreviews } from "./media-local-preview-carry-over.js";
 import {
   blockToTiptapJson,
   disabledBlockError,
@@ -239,15 +240,26 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
     if (position === null || node === null) {
       return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
     }
-    const fragment = Fragment.fromJSON(session.editor.schema, [
-      blockToTiptapJson(updatedBlock),
-    ]);
+    // 로컬 프리뷰(ADR 0015)는 저장 모델에 없는 PM 전용 attrs라 모델에서 만든
+    // JSON에는 없다. blockId로 기존 프리뷰를 이어받아 지워지지 않게 한다
+    // (Issue #376).
+    const baseJson = blockToTiptapJson(updatedBlock);
     // 같은 내용 재적용은 dispatch 전에 거절한다(Issue #377). 그대로 보내면
     // 빈 history 단위가 남아 다음 undo를 삼킨다. node.hasMarkup은 자식을
     // 비교하지 않아 쓰지 않는다 — 노드 전체(attrs·marks·자식)를 비교한다.
-    if (fragment.eq(Fragment.from(node))) {
+    // 비교용 fragment는 프리뷰를 전부 이어받은 것이다 — url과 프리뷰가 함께
+    // 심긴 상태도 같은 내용으로 판정해 거절한다(정리 판정을 먼저 하면 프리뷰가
+    // 사라진 fragment가 되어 eq가 false가 된다).
+    const comparable = Fragment.fromJSON(session.editor.schema, [
+      carryOverLocalPreviews(node, baseJson, false).json,
+    ]);
+    if (comparable.eq(Fragment.from(node))) {
       return commandNotApplicable("updateBlock");
     }
+    // dispatch용 fragment. url이 생긴 미디어는 프리뷰를 이어받지 않고
+    // 정리한다(setMediaBlockUrl과 같은 판정).
+    const { json, cleared } = carryOverLocalPreviews(node, baseJson, true);
+    const fragment = Fragment.fromJSON(session.editor.schema, [json]);
 
     const result = session.runDocumentCommand("updateBlock", "local", () => {
       const transaction = session.editor.state.tr.replaceWith(
@@ -259,6 +271,10 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       return true;
     });
     if (!result.ok) return result;
+    // 커밋이 반영된 뒤에만 정리 전 값으로 통지한다(setMediaBlockUrl과 같은 순서).
+    for (const { blockId: clearedId, attrs } of cleared) {
+      session.notifyLocalPreviewCleared(clearedId, attrs);
+    }
     return { ok: true, value: updatedBlock };
   };
 

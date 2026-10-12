@@ -13,6 +13,7 @@ import {
   findBlockPosition,
   findEditableBlockContent,
   hasSameMarkup,
+  hasSameModelMarkup,
 } from "./block-position.js";
 import type { EditorError } from "./errors.js";
 import { type MediaBlockKind } from "./media-block-kind.js";
@@ -128,6 +129,9 @@ export const createBlockAttributeCommands = (
   // 이 감지가 자동으로 no-op이다. command 문자열 분기 대신 attrs 상태로
   // 판정하므로 앞으로 url을 세팅하는 새 명령이 추가돼도 같은 정리가
   // 자동으로 적용된다.
+  //
+  // 모델이 같고 프리뷰 attrs만 달라지는 호출은 dispatch 전에 거절한다
+  // (hasSameModelMarkup, Issue #376) — 거절 Result인데 PM만 바뀌는 것을 막는다.
   const runSetMediaBlockAttrCommand = (
     command: string,
     blockId: string,
@@ -154,7 +158,8 @@ export const createBlockAttributeCommands = (
       if (error !== null) return { ok: false, error };
     }
     const updatedAttrs = nextAttrs(node.attrs, value);
-    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
+    if (hasSameModelMarkup(node, updatedAttrs))
+      return commandNotApplicable(command);
     const clearedLocalPreview =
       typeof node.attrs.localPreviewUrl === "string" &&
       updatedAttrs.localPreviewUrl === null
