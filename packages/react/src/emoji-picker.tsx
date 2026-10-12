@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 
-import { readDomCaretBlockId } from "./dom-caret-block.js";
+import { type MenuPosition, readCaretBounds } from "./caret-bounds.js";
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { useFixedPlacement } from "./fixed-placement.js";
-import { handleMenuKeyDown } from "./menu-keyboard.js";
-import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
+import { useCaretTriggerPopup } from "./use-caret-trigger-popup.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
@@ -24,11 +23,8 @@ const EMOJI_GRID_COLUMNS = 8;
 
 /**
  * `:query` 캐럿-텍스트 트리거 감지. `slash-menu.tsx`의 `parseSlashQuery`와
- * 동일한 방식(블록 텍스트 전체가 트리거와 정확히 일치할 때만 연다)을 독자
- * 구현한다 — 두 파일이 서로 다른 트리거 문자(`/` vs `:`)와 필터링 대상을
- * 다뤄 공유 훅으로 추출하지 않는다(저장소 관례, `media-toolbar.tsx`/
- * `file-panel.tsx`의 "사용처 2곳뿐이라 훅 추출 이득이 적다" 전례와 동일 근거,
- * RD-004.md "포함 범위" 참고).
+ * 같은 방식(블록 텍스트 전체가 트리거와 정확히 일치할 때만 연다)이다. 열림
+ * 판정과 닫기는 `useCaretTriggerPopup`이 맡고, 이 함수는 트리거 규칙만 소유한다.
  *
  * 블록 텍스트 전체 매치로 제한하는 이유는 필터링뿐 아니라 선택 시 삽입
  * 방식과도 맞물린다 — core에는 캐럿 앞 트리거 부분 문자열만 골라 치환하는
@@ -67,55 +63,9 @@ export const filterEmojiOptions = (
 ): EmojiOption[] =>
   options.filter((option) => matchesEmojiQuery(option, query));
 
-type MenuPosition = { left: number; top: number };
-
-type MenuState = {
-  blockId: string;
-  query: string;
-  highlightedIndex: number;
-};
-
 // 캐럿 rect를 읽을 수 없는 채 열릴 때(편집기 밖 DOM 선택)의 첫 좌표.
 // `slash-menu.tsx`의 같은 이름 상수와 값이 같다.
 const FALLBACK_MENU_POSITION: MenuPosition = { left: 96, top: 48 };
-
-/** `slash-menu.tsx`의 동명 함수와 바이트 단위로 같다 — 캐럿 뒤 팝업 배치를
- * 위해 같은 방식으로 캐럿 rect를 읽는다. 두 파일이 서로 다른 트리거를 다뤄
- * 공유 훅으로 추출하지 않는다(파일 상단 주석과 같은 근거). */
-const readCaretBounds = (element: HTMLElement): MenuPosition | null => {
-  const selection = element.ownerDocument.getSelection();
-  if (
-    selection === null ||
-    selection.rangeCount === 0 ||
-    selection.anchorNode === null ||
-    !element.contains(selection.anchorNode)
-  ) {
-    return null;
-  }
-  const bounds = selection.getRangeAt(0).getBoundingClientRect?.() ?? {
-    left: 0,
-    top: 0,
-    height: 0,
-  };
-  // 캐럿이 빈 블록(자식이 <br class="ProseMirror-trailingBreak"> 하나뿐인
-  // 문단) 안에 있으면 Range의 경계가 텍스트 노드가 아니라 엘리먼트+offset이라
-  // Chromium이 getBoundingClientRect()로 (0,0,0,0)을 돌려준다 — 실측 확인,
-  // QA-086(slash-menu.tsx의 동명 함수와 같은 수정, 이 파일은 `:` 트리거가
-  // 항상 실제 텍스트를 전제해 현재 도달 경로는 없지만 바이트 단위 동일성을
-  // 유지한다). 이때는 캐럿을 담은 엘리먼트 자신의 rect(항상 레이아웃된 실제
-  // 위치)로 대체한다.
-  if (bounds.height === 0) {
-    const anchorElement =
-      selection.anchorNode.nodeType === Node.ELEMENT_NODE
-        ? (selection.anchorNode as Element)
-        : selection.anchorNode.parentElement;
-    const elementRect = anchorElement?.getBoundingClientRect();
-    if (elementRect !== undefined && elementRect.height > 0) {
-      return { left: elementRect.left, top: elementRect.bottom };
-    }
-  }
-  return { left: bounds.left, top: bounds.top + bounds.height };
-};
 
 /**
  * 방향키 이동. 8열 grid라 `SlashMenu`의 1차원 modulo wrap을 쓰면 좌우 개념이
@@ -138,15 +88,52 @@ export type EmojiPickerProps = {
 };
 
 /**
- * `:` 트리거 grid emoji suggestion(RD-004, `UI-012`/`UI-013`). `SlashMenu`의
- * 캐럿-폴링·클램프 위치·바깥클릭/Escape dismiss 골격을 재사용하지만, `SlashMenu`가
+ * `:` 트리거 grid emoji suggestion(RD-004, `UI-012`/`UI-013`). `SlashMenu`와
+ * 같은 `useCaretTriggerPopup` 훅 위에 서지만, `SlashMenu`가
  * 내부 자동 마운트하는 `BlockSideMenu`/`TableHandles` 같은 것이 없다 — 이
  * 팝업 하나만 렌더하는 독립 컴포넌트다.
  */
 export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
-  const [menuState, setMenuState] = useState<MenuState | null>(null);
+  const focusEditor = useFocusEditor(element);
+  // 열림 판정·재오픈 억제·keydown 배선·닫기는 useCaretTriggerPopup이 소유한다.
+  const popup = useCaretTriggerPopup({
+    parseQuery: parseEmojiQuery,
+    getItemCount: ({ query }) =>
+      filterEmojiOptions(EMOJI_OPTIONS, query).length,
+    navigate: (key, current) => {
+      if (
+        key !== "ArrowRight" &&
+        key !== "ArrowLeft" &&
+        key !== "ArrowDown" &&
+        key !== "ArrowUp"
+      ) {
+        return null;
+      }
+      const delta =
+        key === "ArrowRight"
+          ? 1
+          : key === "ArrowLeft"
+            ? -1
+            : key === "ArrowDown"
+              ? EMOJI_GRID_COLUMNS
+              : -EMOJI_GRID_COLUMNS;
+      return moveHighlight(
+        current.highlightedIndex,
+        delta,
+        filterEmojiOptions(EMOJI_OPTIONS, current.query).length,
+      );
+    },
+    onActivate: (current) => {
+      const item = filterEmojiOptions(EMOJI_OPTIONS, current.query)[
+        current.highlightedIndex
+      ];
+      if (item !== undefined) selectItem(item, current);
+    },
+    allowSelectors: EMOJI_PICKER_DISMISS_ALLOW_SELECTORS,
+  });
+  const { state: menuState } = popup;
   // 배치는 열림 판정과 분리한다(Issue #234). 열림 상태는 좌표를 보관하지 않고
   // 이 훅이 렌더마다 캐럿 rect를 다시 읽는다. 캐럿이 편집기 밖이면 마지막 좌표를 유지한다.
   const { menuRef, style } = useFixedPlacement({
@@ -155,108 +142,6 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
     readAnchor: () => (element === null ? null : readCaretBounds(element)),
     fallbackAnchor: FALLBACK_MENU_POSITION,
   });
-  const menuStateRef = useRef<MenuState | null>(null);
-  menuStateRef.current = menuState;
-  const focusEditor = useFocusEditor(element);
-  // Escape로 닫힌 직후 지연된 selectionchange가 같은 텍스트로 재발생해
-  // 방금 닫은 메뉴를 곧바로 재오픈하는 레이스 방지(SlashMenu와 동일 이유).
-  const dismissedQueryRef = useRef<{ blockId: string; text: string } | null>(
-    null,
-  );
-
-  const dismissMenu = useCallback(() => {
-    const context = editor.getCaretBlockContext();
-    dismissedQueryRef.current =
-      context === null
-        ? null
-        : { blockId: context.blockId, text: context.text };
-    setMenuState(null);
-  }, [editor]);
-  const dismissMenuAndFocusEditor = useCallback(() => {
-    dismissMenu();
-    focusEditor();
-  }, [dismissMenu, focusEditor]);
-
-  useEffect(() => {
-    const updateFromCaret = () => {
-      const context = editor.getCaretBlockContext();
-      if (context === null) {
-        dismissedQueryRef.current = null;
-        setMenuState(null);
-        return;
-      }
-
-      // CodeBlock 안의 `:foo`는 트리거가 아니라 보존할 코드다(SlashMenu와
-      // 동일한 discriminator 우선 확인 이유).
-      if (context.blockType.type === "codeBlock") {
-        dismissedQueryRef.current = null;
-        setMenuState(null);
-        return;
-      }
-
-      const dismissed = dismissedQueryRef.current;
-      if (
-        dismissed !== null &&
-        dismissed.blockId === context.blockId &&
-        dismissed.text === context.text
-      ) {
-        return;
-      }
-      if (dismissed !== null) dismissedQueryRef.current = null;
-
-      const query = parseEmojiQuery(context.text);
-      if (query === null) {
-        setMenuState(null);
-        return;
-      }
-
-      setMenuState((current) => ({
-        blockId: context.blockId,
-        query,
-        highlightedIndex:
-          current !== null && current.blockId === context.blockId
-            ? Math.min(
-                current.highlightedIndex,
-                Math.max(
-                  filterEmojiOptions(EMOJI_OPTIONS, query).length - 1,
-                  0,
-                ),
-              )
-            : 0,
-      }));
-    };
-
-    const ownerDocument = element?.ownerDocument;
-    const ownerWindow = ownerDocument?.defaultView;
-    // selectionchange는 즉시 한 번, 매크로태스크 뒤 한 번 더 읽는다(Issue #229).
-    // ProseMirror의 DOMObserver는 state 갱신마다 자기 selectionchange 리스너를
-    // 떼었다 다시 붙여 항상 이 리스너보다 뒤에 호출된다. 즉시 읽기는 이동 직전
-    // 낡은 state.selection을 본다. 캐럿이 이 블록을 벗어난 이동은 즉시 읽기에서
-    // 열린 채 남고 재통지가 없다. 뒤늦은 읽기는 PM flush가 끝난 최신 state를 본다.
-    // 즉시 읽기는 남긴다. 기존 동기 반응을 바꾸지 않는다.
-    let deferredUpdateTimeout: number | null = null;
-    const onSelectionChange = () => {
-      updateFromCaret();
-      if (ownerWindow === undefined || ownerWindow === null) return;
-      if (deferredUpdateTimeout !== null) {
-        ownerWindow.clearTimeout(deferredUpdateTimeout);
-      }
-      deferredUpdateTimeout = ownerWindow.setTimeout(() => {
-        deferredUpdateTimeout = null;
-        updateFromCaret();
-      }, 0);
-    };
-    ownerDocument?.addEventListener("selectionchange", onSelectionChange);
-    ownerDocument?.addEventListener("input", updateFromCaret);
-    updateFromCaret();
-    return () => {
-      ownerDocument?.removeEventListener("selectionchange", onSelectionChange);
-      if (deferredUpdateTimeout !== null) {
-        ownerWindow?.clearTimeout(deferredUpdateTimeout);
-      }
-      ownerDocument?.removeEventListener("input", updateFromCaret);
-    };
-  }, [editor, element]);
 
   // scroll마다 이 컴포넌트가 다시 렌더된다(useFixedPlacement). query가 같으면 같은
   // 배열을 돌려줘 EmojiGrid가 565개 버튼 목록을 건너뛰게 한다.
@@ -266,100 +151,14 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
     [query],
   );
 
-  const selectItem = useCallback(
-    (item: EmojiOption) => {
-      const current = menuStateRef.current;
-      if (current === null) return;
-      // 트리거가 블록 텍스트 전체와 일치할 때만 메뉴가 열리므로(parseEmojiQuery)
-      // "블록 재작성"이 곧 "트리거 치환"이다(DELTA-01이 확정한 방식).
-      editor.commands.setText(current.blockId, item.char);
-      editor.setTextCursorPosition(current.blockId, "end");
-      dismissedQueryRef.current = null;
-      setMenuState(null);
-      focusEditor();
-    },
-    [editor, focusEditor],
-  );
-
-  // 바깥 pointerdown과 Escape LIFO는 useDismissibleOverlay가 소유한다(Issue
-  // #233 RD-004 DELTA-02). Escape의 1차 소비자는 effect 등록 race가 없는 상시
-  // element keydown listener(handleMenuKeyDown)다. module은 편집기 안에서
-  // 막힌 Escape도 닫으므로 같은 닫힘을 한 번 더 부른다. dismissMenu는
-  // 멱등이다.
-  useDismissibleOverlay({
-    open: menuState !== null,
-    element,
-    allowSelectors: EMOJI_PICKER_DISMISS_ALLOW_SELECTORS,
-    onClose: dismissMenu,
-  });
-
-  useEffect(() => {
-    if (element === null) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const current = menuStateRef.current;
-      if (current === null) return;
-
-      // IME → Escape → Enter 반복 → 수식 키 → 이동·확정 순서와 `preventDefault`는
-      // handleMenuKeyDown이 소유한다(Issue #211, #227, #230). 후보가 0건인
-      // Enter도 module이 막고 확정만 건너뛴다.
-      handleMenuKeyDown(event, {
-        escape: dismissMenuAndFocusEditor,
-        navigate: (key) => {
-          if (
-            key !== "ArrowRight" &&
-            key !== "ArrowLeft" &&
-            key !== "ArrowDown" &&
-            key !== "ArrowUp"
-          ) {
-            return false;
-          }
-          const delta =
-            key === "ArrowRight"
-              ? 1
-              : key === "ArrowLeft"
-                ? -1
-                : key === "ArrowDown"
-                  ? EMOJI_GRID_COLUMNS
-                  : -EMOJI_GRID_COLUMNS;
-          setMenuState((currentState) => {
-            if (currentState === null) return null;
-            const count = filterEmojiOptions(
-              EMOJI_OPTIONS,
-              currentState.query,
-            ).length;
-            return {
-              ...currentState,
-              highlightedIndex: moveHighlight(
-                currentState.highlightedIndex,
-                delta,
-                count,
-              ),
-            };
-          });
-          return true;
-        },
-        activate: () => {
-          // 키보드로 `:query` 블록을 떠난 직후의 Enter는 확정하지 않는다
-          // (Issue #258). 이동 직후 PM state가 낡아 selectionchange 재읽기도
-          // 이 keydown보다 늦을 수 있다. DOM selection이 같은 블록의 접힌
-          // 캐럿이 아니면(다른 블록, 범위 선택, 블록 밖) picker만 닫는다.
-          // handleMenuKeyDown이 이미 막았으므로 이 Enter는 문서를 바꾸지 않는다.
-          if (readDomCaretBlockId(element) !== current.blockId) {
-            setMenuState(null);
-            return;
-          }
-          const item = filterEmojiOptions(EMOJI_OPTIONS, current.query)[
-            current.highlightedIndex
-          ];
-          if (item !== undefined) selectItem(item);
-        },
-      });
-    };
-
-    element.addEventListener("keydown", handleKeyDown, true);
-    return () => element.removeEventListener("keydown", handleKeyDown, true);
-  }, [dismissMenuAndFocusEditor, element, selectItem]);
+  const selectItem = (item: EmojiOption, current: { blockId: string }) => {
+    // 트리거가 블록 텍스트 전체와 일치할 때만 메뉴가 열리므로(parseEmojiQuery)
+    // "블록 재작성"이 곧 "트리거 치환"이다(DELTA-01이 확정한 방식).
+    editor.commands.setText(current.blockId, item.char);
+    editor.setTextCursorPosition(current.blockId, "end");
+    popup.close();
+    focusEditor();
+  };
 
   const menuContent =
     menuState === null ? null : (
@@ -369,7 +168,7 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
         highlightedIndex={menuState.highlightedIndex}
         items={items}
         menuRef={menuRef}
-        onSelect={selectItem}
+        onSelect={(item) => selectItem(item, menuState)}
         style={style}
       />
     );

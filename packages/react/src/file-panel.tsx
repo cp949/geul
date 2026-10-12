@@ -106,11 +106,11 @@ export const FilePanel = ({
   // 자체가 안 바뀌므로(핵심 core state가 아니라 이 컴포넌트의 로컬
   // "닫힘" 결정일 뿐이다) editingRef의 setTimeout 창이 끝난 뒤 뒤늦게
   // 도착하는 selectionchange/mouseup(Playwright 병렬 실행처럼 CPU 경합이
-  // 큰 환경에서 흔하다, slash-menu.tsx dismissedQueryRef와 같은 문제)이
+  // 큰 환경에서 흔하다, use-caret-trigger-popup.ts의 재오픈 억제 기록과 같은 문제)이
   // 여전히 "같은 빈 블록"을 봐서 패널을 곧바로 재오픈시킨다(e2e 실측:
   // "바깥 클릭은 패널을 닫되..." 병렬 반복에서 재현). 이 ref로 "같은
   // blockId면 재오픈하지 않는다"를 시간이 아니라 상태로 고정한다 —
-  // slash-menu.tsx의 dismissedQueryRef와 같은 해법이다(media-toolbar.tsx도
+  // use-caret-trigger-popup.ts의 재오픈 억제 기록과 같은 해법이다(media-toolbar.tsx도
   // 같은 훅을 쓴다).
   const dismissSuppression = useDismissSuppression<string>();
   // dismissSuppression 하나만으로는 "같은 이벤트의 지연된 잔여물"과 "사용자의

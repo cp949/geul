@@ -6,8 +6,9 @@ import { useCallback, useLayoutEffect, useRef } from "react";
  * 쓴다 — 콜백 참조가 매 렌더 바뀌면 memo가 항상 깨진다.
  *
  * ref는 layout effect에서 갱신한다. 렌더 중에는 쓰지 않는다. 이 함수는
- * 이벤트 핸들러로만 부른다. 렌더 본문이나 effect 안에서 부르면 이전 렌더의
- * 클로저를 볼 수 있다.
+ * 이벤트 핸들러와 `useEffect` 본문에서 부른다. 커밋에서 모든 layout effect가
+ * passive effect보다 먼저 돌아 최신 클로저를 본다. 렌더 본문이나
+ * layout effect 안에서 부르면 이전 렌더의 클로저를 볼 수 있다.
  */
 export const useStableCallback = <Args extends unknown[], Result>(
   callback: (...args: Args) => Result,

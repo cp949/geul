@@ -162,7 +162,7 @@ describe("SlashMenu 블록 추가 버튼", () => {
 describe("SlashMenu 표 Plus 버튼", () => {
   // TableHandles 단독 배선(문서 결과 + onBlockAdded 호출)은
   // table-handles.test.tsx "표 Plus 버튼"이 검증한다. 여기서는 실제
-  // SlashMenu 마운트에서 표 Plus 클릭이 openMenuAt까지 이어지는지만
+  // SlashMenu 마운트에서 표 Plus 클릭이 `popup.open`까지 이어지는지만
   // 본다 — 표가 섞이면 TableHandles가 함께 살아나(slash-menu-test-support.tsx
   // renderRealBlocks 주석과 같은 이유) mountTableEditor를 따로 쓴다.
   const renderRealTable = () => mountTableEditor({ children: <SlashMenu /> });

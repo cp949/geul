@@ -5,14 +5,7 @@ import type {
   SelectionQuery,
   MediaBlockKind,
 } from "@cp949/geul-core";
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 
 import { BlockSelectionToolbar } from "./block-selection-toolbar.js";
@@ -23,24 +16,21 @@ import {
   getBlockTypeChoices,
 } from "./block-type-options.js";
 import { CalloutIconPicker } from "./callout-icon-picker.js";
+import { type MenuPosition, readCaretBounds } from "./caret-bounds.js";
 import { CodeBlockCaptions } from "./code-block-captions.js";
 import { CodeBlockLanguageCombobox } from "./code-block-language-combobox.js";
-import { readDomCaretBlockId } from "./dom-caret-block.js";
 import { useFixedPlacement } from "./fixed-placement.js";
 import { IframeLoadStatus } from "./iframe-load-status.js";
 import { MediaCaptions } from "./media-captions.js";
 import { MediaHandleOverlays } from "./media-handle-overlays.js";
-import { handleMenuKeyDown } from "./menu-keyboard.js";
 import { TableHandles } from "./table-handles.js";
 import { TableSelectionToolbar } from "./table-selection-toolbar.js";
-import { useDismissibleOverlay } from "./use-dismissible-overlay.js";
+import { useCaretTriggerPopup } from "./use-caret-trigger-popup.js";
 import { useDictionary, useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
 
 const SLASH_MENU_DISMISS_ALLOW_SELECTORS = [".geul-slash-menu"] as const;
-// `items` prop 기본값. 매 렌더 새 배열 리터럴이면 그 배열을 참조하는 effect
-// 의존성 배열이 매 렌더 바뀐 걸로 보여 selectionchange 등 리스너를 매번
-// 떼었다 다시 붙인다(SLASH_MENU_DISMISS_ALLOW_SELECTORS와 같은 이유) — 모듈
+// `items` prop 기본값. 매 렌더 새 배열 리터럴이면 참조가 매번 바뀐다 — 모듈
 // 스코프 상수로 참조 안정성을 보장한다.
 const NO_CUSTOM_ITEMS: readonly SlashMenuCustomItem[] = [];
 
@@ -272,49 +262,8 @@ const slashMenuItemText = (
   }
 };
 
-type MenuPosition = { left: number; top: number };
-
-type MenuState = {
-  blockId: string;
-  query: string;
-  highlightedIndex: number;
-};
-
 // 캐럿 rect를 읽을 수 없는 채 열릴 때(편집기 밖 DOM 선택)의 첫 좌표.
 const FALLBACK_MENU_POSITION: MenuPosition = { left: 96, top: 48 };
-
-const readCaretBounds = (element: HTMLElement): MenuPosition | null => {
-  const selection = element.ownerDocument.getSelection();
-  if (
-    selection === null ||
-    selection.rangeCount === 0 ||
-    selection.anchorNode === null ||
-    !element.contains(selection.anchorNode)
-  ) {
-    return null;
-  }
-  const bounds = selection.getRangeAt(0).getBoundingClientRect?.() ?? {
-    left: 0,
-    top: 0,
-    height: 0,
-  };
-  // 캐럿이 빈 블록(자식이 <br class="ProseMirror-trailingBreak"> 하나뿐인
-  // 문단) 안에 있으면 Range의 경계가 텍스트 노드가 아니라 엘리먼트+offset이라
-  // Chromium이 getBoundingClientRect()로 (0,0,0,0)을 돌려준다 — 실측 확인,
-  // QA-086. 이때는 캐럿을 담은 엘리먼트 자신의 rect(항상 레이아웃된 실제
-  // 위치)로 대체한다.
-  if (bounds.height === 0) {
-    const anchorElement =
-      selection.anchorNode.nodeType === Node.ELEMENT_NODE
-        ? (selection.anchorNode as Element)
-        : selection.anchorNode.parentElement;
-    const elementRect = anchorElement?.getBoundingClientRect();
-    if (elementRect !== undefined && elementRect.height > 0) {
-      return { left: elementRect.left, top: elementRect.bottom };
-    }
-  }
-  return { left: bounds.left, top: bounds.top + bounds.height };
-};
 
 /**
  * DELTA-01(`formatting-toolbar.tsx`)과 동일 계약 — `portalTarget` 참고.
@@ -340,7 +289,34 @@ export const SlashMenu = ({
   const dictionary = useDictionary();
   const { element } = useEditorMount();
   const menuId = useId();
-  const [menuState, setMenuState] = useState<MenuState | null>(null);
+  const focusEditor = useFocusEditor(element);
+  // 열림 판정·재오픈 억제·keydown 배선·닫기는 useCaretTriggerPopup이 소유한다.
+  // "+" 버튼 열기는 popup.open(blockId, "")로 빈 텍스트에서도 열림을 유지한다.
+  const popup = useCaretTriggerPopup({
+    parseQuery: parseSlashQuery,
+    getItemCount: ({ blockId, query }) =>
+      filterItems(blockId, query, customItems, editor).length,
+    navigate: (key, current) => {
+      if (key !== "ArrowDown" && key !== "ArrowUp") return null;
+      const step = key === "ArrowDown" ? 1 : -1;
+      const count = Math.max(
+        filterItems(current.blockId, current.query, customItems, editor).length,
+        1,
+      );
+      return (current.highlightedIndex + step + count) % count;
+    },
+    onActivate: (current) => {
+      const item = filterItems(
+        current.blockId,
+        current.query,
+        customItems,
+        editor,
+      )[current.highlightedIndex];
+      if (item !== undefined) selectItem(item, current);
+    },
+    allowSelectors: SLASH_MENU_DISMISS_ALLOW_SELECTORS,
+  });
+  const { state: menuState } = popup;
   // 배치는 열림 판정과 분리한다(Issue #234). 열림 상태는 좌표를 보관하지 않고
   // 이 훅이 렌더마다 캐럿 rect를 다시 읽는다. 캐럿이 편집기 밖이면 마지막 좌표를 유지한다.
   const { menuRef, style } = useFixedPlacement({
@@ -349,142 +325,6 @@ export const SlashMenu = ({
     readAnchor: () => (element === null ? null : readCaretBounds(element)),
     fallbackAnchor: FALLBACK_MENU_POSITION,
   });
-  // 메뉴가 열릴 때(menuState: null → non-null)만 keydown 리스너를 붙이면,
-  // "/head" 마지막 글자 입력으로 setMenuState가 실행된 뒤 이 effect가
-  // 커밋되기 전에 Escape가 도착하는 레이스가 있었다(React 18+의 useEffect는
-  // paint 이후 비동기로 실행되고, CPU가 몰리는 Playwright 병렬 실행에서
-  // 지연이 커진다). 리스너를 element가 존재하는 동안 항상 붙여두고, 매
-  // keydown마다 ref로 최신 menuState를 읽어 열려 있을 때만 처리한다.
-  const menuStateRef = useRef<MenuState | null>(null);
-  menuStateRef.current = menuState;
-  const focusEditor = useFocusEditor(element);
-  // hover-open("+" 버튼)은 실제 slash 문자 없이도 메뉴를 열어야 하므로,
-  // 어느 blockId가 그렇게 명시적으로 열렸는지 추적해 빈 텍스트에서도
-  // selectionchange 폴링이 메뉴를 즉시 닫지 않게 한다.
-  const explicitOpenBlockIdRef = useRef<string | null>(null);
-  // Escape는 메뉴 UI만 닫을 뿐 입력된 "/query" 텍스트는 지우지 않는다.
-  // selectionchange는 브라우저가 지연·재발생시킬 수 있어(특히 빠른 연속
-  // 입력 직후), Escape로 닫힌 직후 같은 텍스트로 재발생한 selectionchange가
-  // 방금 닫은 메뉴를 곧바로 재오픈하는 레이스가 있었다(Playwright 병렬
-  // 실행에서만 간헐 재현). 닫을 때의 blockId+텍스트를 기억해두고, 텍스트가
-  // 실제로 바뀌기 전까지는 같은 쿼리로 재오픈하지 않는다.
-  const dismissedQueryRef = useRef<{ blockId: string; text: string } | null>(
-    null,
-  );
-  const dismissMenu = useCallback(() => {
-    const context = editor.getCaretBlockContext();
-    dismissedQueryRef.current =
-      context === null
-        ? null
-        : { blockId: context.blockId, text: context.text };
-    explicitOpenBlockIdRef.current = null;
-    setMenuState(null);
-  }, [editor]);
-  const dismissMenuAndFocusEditor = useCallback(() => {
-    dismissMenu();
-    focusEditor();
-  }, [dismissMenu, focusEditor]);
-
-  const openMenuAt = (blockId: string, query: string) => {
-    explicitOpenBlockIdRef.current = query.length === 0 ? blockId : null;
-    dismissedQueryRef.current = null;
-    setMenuState({ blockId, query, highlightedIndex: 0 });
-  };
-
-  useEffect(() => {
-    const updateFromCaret = () => {
-      const context = editor.getCaretBlockContext();
-      if (context === null) {
-        explicitOpenBlockIdRef.current = null;
-        dismissedQueryRef.current = null;
-        setMenuState(null);
-        return;
-      }
-
-      // CodeBlock source는 슬래시 명령 입력이 아니라 그대로 보존할 코드다.
-      // 텍스트 shape만 보면 paragraph의 "/query"와 구분할 수 없으므로 core가
-      // 제공하는 blockType discriminator를 먼저 확인한다.
-      if (context.blockType.type === "codeBlock") {
-        explicitOpenBlockIdRef.current = null;
-        dismissedQueryRef.current = null;
-        setMenuState(null);
-        return;
-      }
-
-      const dismissed = dismissedQueryRef.current;
-      if (
-        dismissed !== null &&
-        dismissed.blockId === context.blockId &&
-        dismissed.text === context.text
-      ) {
-        return;
-      }
-      if (dismissed !== null) dismissedQueryRef.current = null;
-
-      const query = parseSlashQuery(context.text);
-      const isExplicitEmptyOpen =
-        context.text.length === 0 &&
-        explicitOpenBlockIdRef.current === context.blockId;
-      const resolvedQuery = query ?? (isExplicitEmptyOpen ? "" : null);
-
-      if (resolvedQuery === null) {
-        explicitOpenBlockIdRef.current = null;
-        setMenuState(null);
-        return;
-      }
-
-      setMenuState((current) => ({
-        blockId: context.blockId,
-        query: resolvedQuery,
-        highlightedIndex:
-          current !== null && current.blockId === context.blockId
-            ? Math.min(
-                current.highlightedIndex,
-                Math.max(
-                  filterItems(
-                    context.blockId,
-                    resolvedQuery,
-                    customItems,
-                    editor,
-                  ).length - 1,
-                  0,
-                ),
-              )
-            : 0,
-      }));
-    };
-
-    const ownerDocument = element?.ownerDocument;
-    const ownerWindow = ownerDocument?.defaultView;
-    // selectionchange는 즉시 한 번, 매크로태스크 뒤 한 번 더 읽는다(Issue #229).
-    // ProseMirror의 DOMObserver는 state 갱신마다 자기 selectionchange 리스너를
-    // 떼었다 다시 붙여 항상 이 리스너보다 뒤에 호출된다. 즉시 읽기는 이동 직전
-    // 낡은 state.selection을 본다. 캐럿이 이 블록을 벗어난 이동은 즉시 읽기에서
-    // 열린 채 남고 재통지가 없다. 뒤늦은 읽기는 PM flush가 끝난 최신 state를 본다.
-    // 즉시 읽기는 남긴다. 기존 동기 반응을 바꾸지 않는다.
-    let deferredUpdateTimeout: number | null = null;
-    const onSelectionChange = () => {
-      updateFromCaret();
-      if (ownerWindow === undefined || ownerWindow === null) return;
-      if (deferredUpdateTimeout !== null) {
-        ownerWindow.clearTimeout(deferredUpdateTimeout);
-      }
-      deferredUpdateTimeout = ownerWindow.setTimeout(() => {
-        deferredUpdateTimeout = null;
-        updateFromCaret();
-      }, 0);
-    };
-    ownerDocument?.addEventListener("selectionchange", onSelectionChange);
-    ownerDocument?.addEventListener("input", updateFromCaret);
-    updateFromCaret();
-    return () => {
-      ownerDocument?.removeEventListener("selectionchange", onSelectionChange);
-      if (deferredUpdateTimeout !== null) {
-        ownerWindow?.clearTimeout(deferredUpdateTimeout);
-      }
-      ownerDocument?.removeEventListener("input", updateFromCaret);
-    };
-  }, [customItems, editor, element]);
 
   const items =
     menuState === null
@@ -517,109 +357,31 @@ export const SlashMenu = ({
     };
   }, [activeOptionId, element]);
 
-  const selectItem = useCallback(
-    (item: SlashMenuItem) => {
-      const current = menuStateRef.current;
-      if (current === null) return;
-      if (item.kind === "blockType") {
-        editor.commands.setBlockType(current.blockId, item.blockType, {
-          clearContent: true,
-        });
-      } else if (item.kind === "insertTable") {
-        editor.commands.insertTable(
-          current.blockId,
-          { rows: 3, columns: 3 },
-          { clearAfterBlockText: true },
-        );
-      } else if (item.kind === "insertMedia") {
-        editor.commands.insertMediaBlock(current.blockId, item.mediaKind, {
-          clearAfterBlockText: true,
-        });
-      } else if (item.kind === "custom") {
-        item.custom.onSelect(editor);
-      } else {
-        editor.commands.insertDivider(current.blockId, {
-          clearAfterBlockText: true,
-        });
-      }
-      explicitOpenBlockIdRef.current = null;
-      dismissedQueryRef.current = null;
-      setMenuState(null);
-      focusEditor();
-    },
-    [editor, focusEditor],
-  );
-
-  // 바깥 pointerdown과 Escape LIFO는 useDismissibleOverlay가 소유한다(Issue
-  // #233 RD-004 DELTA-02). Escape의 1차 소비자는 effect 등록 race가 없는 상시
-  // element keydown listener(handleMenuKeyDown)다. module은 편집기 안에서
-  // 막힌 Escape도 닫으므로 같은 닫힘을 한 번 더 부른다. dismissMenu는
-  // 멱등이다.
-  useDismissibleOverlay({
-    open: menuState !== null,
-    element,
-    allowSelectors: SLASH_MENU_DISMISS_ALLOW_SELECTORS,
-    onClose: dismissMenu,
-  });
-
-  useEffect(() => {
-    if (element === null) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const current = menuStateRef.current;
-      if (current === null) return;
-
-      // IME → Escape → Enter 반복 → 수식 키 → 이동·확정 순서와 `preventDefault`는
-      // handleMenuKeyDown이 소유한다(Issue #211, #227, #230). 후보가 0건인
-      // Enter도 module이 막고 확정만 건너뛴다.
-      handleMenuKeyDown(event, {
-        escape: dismissMenuAndFocusEditor,
-        navigate: (key) => {
-          if (key !== "ArrowDown" && key !== "ArrowUp") return false;
-          const step = key === "ArrowDown" ? 1 : -1;
-          setMenuState((currentState) => {
-            if (currentState === null) return null;
-            const count = Math.max(
-              filterItems(
-                currentState.blockId,
-                currentState.query,
-                customItems,
-                editor,
-              ).length,
-              1,
-            );
-            return {
-              ...currentState,
-              highlightedIndex:
-                (currentState.highlightedIndex + step + count) % count,
-            };
-          });
-          return true;
-        },
-        activate: () => {
-          // 키보드로 `/query` 블록을 떠난 직후의 Enter는 확정하지 않는다
-          // (Issue #258). 이동 직후 PM state가 낡아 selectionchange 재읽기도
-          // 이 keydown보다 늦을 수 있다. DOM selection이 같은 블록의 접힌
-          // 캐럿이 아니면(다른 블록, 범위 선택, 블록 밖) 메뉴만 닫는다.
-          // handleMenuKeyDown이 이미 막았으므로 이 Enter는 문서를 바꾸지 않는다.
-          if (readDomCaretBlockId(element) !== current.blockId) {
-            setMenuState(null);
-            return;
-          }
-          const item = filterItems(
-            current.blockId,
-            current.query,
-            customItems,
-            editor,
-          )[current.highlightedIndex];
-          if (item !== undefined) selectItem(item);
-        },
+  const selectItem = (item: SlashMenuItem, current: { blockId: string }) => {
+    if (item.kind === "blockType") {
+      editor.commands.setBlockType(current.blockId, item.blockType, {
+        clearContent: true,
       });
-    };
-
-    element.addEventListener("keydown", handleKeyDown, true);
-    return () => element.removeEventListener("keydown", handleKeyDown, true);
-  }, [customItems, dismissMenuAndFocusEditor, editor, element, selectItem]);
+    } else if (item.kind === "insertTable") {
+      editor.commands.insertTable(
+        current.blockId,
+        { rows: 3, columns: 3 },
+        { clearAfterBlockText: true },
+      );
+    } else if (item.kind === "insertMedia") {
+      editor.commands.insertMediaBlock(current.blockId, item.mediaKind, {
+        clearAfterBlockText: true,
+      });
+    } else if (item.kind === "custom") {
+      item.custom.onSelect(editor);
+    } else {
+      editor.commands.insertDivider(current.blockId, {
+        clearAfterBlockText: true,
+      });
+    }
+    popup.close();
+    focusEditor();
+  };
 
   const menuContent =
     menuState === null ? null : (
@@ -643,7 +405,7 @@ export const SlashMenu = ({
               className="geul-slash-menu__item"
               id={`${menuId}-${item.id}`}
               key={item.id}
-              onClick={() => selectItem(item)}
+              onClick={() => selectItem(item, menuState)}
               onPointerDown={(event) => event.preventDefault()}
               role="option"
               type="button"
@@ -663,12 +425,12 @@ export const SlashMenu = ({
 
   return (
     <>
-      <BlockSideMenu onBlockAdded={(blockId) => openMenuAt(blockId, "")} />
+      <BlockSideMenu onBlockAdded={(blockId) => popup.open(blockId, "")} />
       <CodeBlockLanguageCombobox />
       <CodeBlockCaptions />
-      <TableHandles onBlockAdded={(blockId) => openMenuAt(blockId, "")} />
+      <TableHandles onBlockAdded={(blockId) => popup.open(blockId, "")} />
       <MediaHandleOverlays
-        onBlockAdded={(blockId) => openMenuAt(blockId, "")}
+        onBlockAdded={(blockId) => popup.open(blockId, "")}
       />
       <IframeLoadStatus />
       <CalloutIconPicker />
