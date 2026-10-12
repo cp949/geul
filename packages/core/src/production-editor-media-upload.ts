@@ -307,9 +307,10 @@ export class MediaUploadTracker {
     }
     // 반환값(boolean)을 무시한다 — stillExists 재확인과 이 호출 사이에
     // await이 없어(동기 연속) 대상이 사라지거나 media가 아니게 될 수
-    // 없다. revision overflow만 이론상 false를 만들 수 있지만 기존
-    // undo/redo도 그 경계에서 같은 방식(commandNotApplicable)으로 조용히
-    // 흡수한다 — 이 명령만 다르게 취급할 계약상 근거가 없다.
+    // 없다. false는 두 경우뿐이다. 결과가 현재 attrs와 같은 no-op(Issue
+    // #375)은 정상이고, revision overflow는 이론상만 가능하다. 기존
+    // undo/redo도 overflow 경계에서 같은 방식(commandNotApplicable)으로
+    // 조용히 흡수한다 — 이 명령만 다르게 취급할 계약상 근거가 없다.
     this.applyUploadedMediaAttrs(command, blockId, result.url, result.name);
     this.endMediaUpload(blockId, null);
     return { ok: true, value: undefined };
