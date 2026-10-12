@@ -11,7 +11,7 @@
 - DOM에서 직접 들어오는 transaction에도 command와 같은 guard를 적용한다.
 - position이 무효화되는 구조 변경(서브트리 교체 등)은 결과 document의 안정 ID로 selection을 명시 복원한다. table 서브트리 교체의 구체 규칙은 [`G-TBL-001`](./G-TBL-001-use-logical-table-grid.md)이 소유한다.
 - no-op 연산은 입력 참조를 그대로 반환해 transaction을 만들지 않는다.
-- 속성 setter와 `updateBlock`은 새 attrs·내용이 현재와 같으면 dispatch 전에 거절한다. 같은 값 재적용이 빈 history 단위를 남기면 다음 undo를 삼킨다.
+- 속성 setter와 `updateBlock`은 새 attrs·내용이 현재와 같으면 dispatch 전에 거절한다. 같은 값 재적용이 빈 history 단위를 남기면 다음 undo를 삼킨다. `setText`는 hardBreak를 `\n`으로 읽은 텍스트로 비교하고, 텍스트·hardBreak 밖의 인라인 원소가 있으면 항상 다름으로 본다. 마크는 보지 않는다.
 - 명령이 모델에서 노드를 다시 만들어 교체할 때 저장 모델에 없는 PM 전용 attrs(로컬 프리뷰, ADR-0015)를 blockId로 이어받는다. 같은 내용 판정은 그 attrs를 현재 값으로 고정해 비교하고, 거절한 command는 PM 상태를 바꾸지 않는다.
 - 노드를 복제하는 명령은 PM 전용 attrs(로컬 프리뷰, ADR-0015)의 blob URL을 옮기지 않고 같은 `File`로 새로 발급한다. 두 블록이 URL을 공유하면 한쪽 정리가 다른 쪽 프리뷰를 깨뜨린다.
 - 로컬 프리뷰(ADR-0015) blob URL을 발급한 뒤 dispatch하는 명령은 문서에 못 들어간 URL을 `onLocalPreviewCleanup`으로 통지한다. 거절·되돌림·예외가 해당한다.

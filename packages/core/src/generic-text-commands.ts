@@ -1,6 +1,7 @@
 import { isNestableBlockType, isValidInlineText } from "@cp949/geul-model";
 import type { Result } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 
 import {
@@ -13,6 +14,22 @@ import {
   type ProductionEditorSession,
 } from "./production-editor-session.js";
 import { findBlockEntryInTree } from "./generic-block-tree-lookup.js";
+
+// setText의 같은 값 판정이다(Issue #381). textContent는 hardBreak와 인라인
+// custom 원소를 빈 문자열로 세어 줄바꿈 든 텍스트를 잘못 판정한다.
+// - 자식이 text와 hardBreak뿐이면 hardBreak를 "\n"으로 읽어 text와 비교한다.
+// - 그 밖의 인라인 원소가 하나라도 있으면 setText가 지울 내용이라 항상 다름이다.
+// - 마크는 보지 않는다. 굵은 "hello"에 "hello"를 적용해도 거절한다.
+const isSameText = (node: ProseMirrorNode, text: string): boolean => {
+  let current = "";
+  for (let index = 0; index < node.childCount; index += 1) {
+    const child = node.child(index);
+    if (child.isText) current += child.text ?? "";
+    else if (child.type.name === "hardBreak") current += "\n";
+    else return false;
+  }
+  return current === text;
+};
 
 export const createGenericTextCommands = (session: ProductionEditorSession) => {
   const setText = (
@@ -29,7 +46,7 @@ export const createGenericTextCommands = (session: ProductionEditorSession) => {
     if (
       !isNestableBlockType(target.node.type.name) ||
       !isValidInlineText(text) ||
-      target.node.textContent === text
+      isSameText(target.node, text)
     ) {
       return commandNotApplicable("setText");
     }
