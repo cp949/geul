@@ -8,6 +8,7 @@ import {
   isMediaBlock,
   type ListItemBlock,
   parseDocument,
+  type QuoteBlock,
   type TableBlock,
   type TextMark,
   type ToggleListItemBlock,
@@ -22,12 +23,11 @@ import { groupListItemRuns } from "../list-item-run-grouping.js";
 import type { Result } from "../result.js";
 import { computeColumnAlignments } from "./column-align.js";
 import {
-  analyzeMarkdownLoss,
-  hasAmbiguousLeadingListParagraph,
+  hasAmbiguousLeadingParagraph,
   isGfmContainerLikeBlockType,
   isGfmListLikeBlockType,
-  type MarkdownLoss,
-} from "./loss-analysis.js";
+} from "./gfm-container-shape.js";
+import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 
 // rule: "-"는 mdast-util-to-markdown(remark-stringify 내부 직렬화기) 기존
 // 옵션이다 — thematicBreak를 기본값 "***" 대신 "---"로 쓰게 한다(spec §7.2,
@@ -229,12 +229,12 @@ const flattenBlocks = (
       const { children, ...ownBlock } = block;
       const flattenedChildren = flattenBlocks(children);
       const firstChild = flattenedChildren[0];
-      // hasAmbiguousLeadingListParagraph(block)가 승격 여부를 결정한다.
+      // hasAmbiguousLeadingParagraph(block)가 승격 여부를 결정한다.
       // firstChild?.type==="paragraph"는 순수 TS 좁히기용이다 — block.children[0]과
-      // flattenedChildren[0]은 다른 값이라 TS가 둘의 동치를 모른다(hasAmbiguousLeadingListParagraph
+      // flattenedChildren[0]은 다른 값이라 TS가 둘의 동치를 모른다(hasAmbiguousLeadingParagraph
       // 문서 참고, 두 값은 항상 같은 판정으로 일치하도록 증명됨).
       if (
-        hasAmbiguousLeadingListParagraph(block) &&
+        hasAmbiguousLeadingParagraph(block) &&
         firstChild?.type === "paragraph"
       ) {
         const remainingChildren = flattenedChildren.slice(1);
@@ -260,6 +260,32 @@ const flattenBlocks = (
 const codeBlockLanguage = (language: string): string =>
   language.replace(/&/g, "&amp;");
 
+// 목록 항목과 quote가 mdast children을 만드는 공통 규칙이다.
+// 빈 own paragraph는 Markdown에 materialize되지 않는다. 첫 자식이
+// non-paragraph면 자식 노드를 그대로 첫 mdast child로 두어 `- > quote` 같은
+// 표현 가능한 빈-content 구조를 보존한다. hasAmbiguousLeadingParagraph는
+// flattenBlocks가 이미 한 번 승격을 시도한 뒤에도 남는 잔여 모호함
+// (예: 승격된 첫 child 자체가 빈 paragraph라 다음 child가 다시 첫
+// 자리에 오는 경우)까지 같은 판정으로 잡는다. 모호하면 own paragraph를
+// 만들어 앞에 둔다 — flattenBlocks의 승격과 동일한 판정이다.
+const containerChildNodes = (
+  block: ListItemBlock | ToggleListItemBlock | QuoteBlock,
+): MarkdownOutputNode[] => {
+  const childNodes = blockNodes(block.children ?? []);
+  if (
+    block.content.length === 0 &&
+    childNodes.length > 0 &&
+    !hasAmbiguousLeadingParagraph(block)
+  ) {
+    return childNodes;
+  }
+  const ownParagraph: MarkdownOutputNode = {
+    type: "paragraph",
+    children: inlineNodes(block.content, false),
+  };
+  return [ownParagraph, ...childNodes];
+};
+
 const listNode = (
   blocks: Array<ListItemBlock | ToggleListItemBlock>,
 ): MarkdownOutputNode => {
@@ -276,11 +302,6 @@ const listNode = (
       ? { start: first.startNumber }
       : {}),
     children: blocks.map((block) => {
-      const childNodes = blockNodes(block.children ?? []);
-      const ownParagraph: MarkdownOutputNode = {
-        type: "paragraph",
-        children: inlineNodes(block.content, false),
-      };
       return {
         type: "listItem",
         spread: block.children !== undefined && block.children.length > 0,
@@ -295,18 +316,7 @@ const listNode = (
         // loss-analysis.ts의 CHECKED_STATE_LOST로 명시 보고해 조용한 손실을
         // 막는다 — checked는 그 케이스에서만 값이 있어도 stringify가 무시한다.
         ...(block.type === "checkListItem" ? { checked: block.checked } : {}),
-        // 빈 own paragraph는 Markdown에 materialize되지 않는다. 첫 자식이
-        // non-paragraph면 이를 첫 mdast child로 직접 두어 `- > quote` 같은
-        // 표현 가능한 빈-content 목록 구조를 보존한다. hasAmbiguousLeadingListParagraph는
-        // flattenBlocks가 이미 한 번 승격을 시도한 뒤에도 남는 잔여 모호함
-        // (예: 승격된 첫 child 자체가 빈 paragraph라 다음 child가 다시 첫
-        // 자리에 오는 경우)까지 같은 판정으로 잡는다.
-        children:
-          block.content.length === 0 &&
-          childNodes.length > 0 &&
-          !hasAmbiguousLeadingListParagraph(block)
-            ? childNodes
-            : [ownParagraph, ...childNodes],
+        children: containerChildNodes(block),
       };
     }),
   };
@@ -391,24 +401,12 @@ const blockNode = (block: Block): MarkdownOutputNode => {
   }
   if (block.type === "quote") {
     // BLK-005 재평가(Issue #151) — GFM blockquote의 content model이 root와
-    // 같은 flow content라 children을 listNode의 own-paragraph 규칙과 동일하게
-    // 재귀 변환한다(loss-analysis.ts의 hasAmbiguousLeadingListParagraph 문서
-    // 참고, 세 곳이 같은 판정을 공유해야 함). own content가 비고 첫 child가
-    // paragraph면 GFM이 그 둘의 경계를 구분하지 못해 own paragraph를
-    // materialize하지 않는다 — flattenBlocks의 승격과 동일한 판정.
-    const childNodes = blockNodes(block.children ?? []);
-    const ownParagraph: MarkdownOutputNode = {
-      type: "paragraph",
-      children: inlineNodes(block.content, false),
-    };
+    // 같은 flow content라 children을 목록 항목과 같은 규칙으로 재귀 변환한다
+    // (containerChildNodes, gfm-container-shape.ts의
+    // hasAmbiguousLeadingParagraph 문서 참고).
     return {
       type: "blockquote",
-      children:
-        block.content.length === 0 &&
-        childNodes.length > 0 &&
-        !hasAmbiguousLeadingListParagraph(block)
-          ? childNodes
-          : [ownParagraph, ...childNodes],
+      children: containerChildNodes(block),
     };
   }
   if (block.type === "heading") {

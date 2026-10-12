@@ -189,7 +189,7 @@ function listBlocksFromNode(
 // 변환해 children에 둔다 — export-markdown.ts의 blockNode quote 분기(own
 // paragraph materialize 여부 판정)와 대칭이라 재import가 quote 구조를 그대로
 // 복원한다. 첫 자식이 paragraph가 아니면 own content는 빈 배열이고 첫
-// 자식부터 children이다(목록 항목의 hasAmbiguousLeadingListParagraph와 동일
+// 자식부터 children이다(목록 항목의 hasAmbiguousLeadingParagraph와 동일
 // 비대칭 없음 규칙).
 function blockquoteToBlocks(
   node: MarkdownNode,

@@ -6,7 +6,7 @@
  * 표현한다 — strict export가 성공하고 lossy export도 경고 없이 같은 구조를
  * 낸다. 유일한 예외는 목록 항목과 같은 모호성이다: own content가 비고 첫
  * child가 paragraph면 GFM이 둘의 경계를 구분하지 못해 NESTED_CHILDREN을
- * 그대로 보고한다(loss-analysis.ts의 hasAmbiguousLeadingListParagraph).
+ * 그대로 보고한다(gfm-container-shape.ts의 hasAmbiguousLeadingParagraph).
  * 앞부분(export만)은 DELTA-02 범위, 마지막 "export→import round-trip" describe는
  * DELTA-03이 추가했다 — `blockquoteToBlocks`(import-markdown-blocks.ts)가
  * 이 파일이 만드는 markdown을 다시 quote children 구조로 복원하는지
@@ -100,7 +100,7 @@ describe("quote children의 GFM round-trip(BLK-005)", () => {
 
   it("heading이 quote 안에서도 손실 없이 구조를 보존하고, own content가 진짜 빈 배열이면 own paragraph를 materialize하지 않는다", () => {
     // quoteBlock 헬퍼는 항상 content: [{ text }] 한 원소를 만든다 — own
-    // content가 "진짜 빈 배열"(hasAmbiguousLeadingListParagraph의 전제)인
+    // content가 "진짜 빈 배열"(hasAmbiguousLeadingParagraph의 전제)인
     // 조합은 리터럴로 직접 구성해야 한다.
     const document = buildDocument([
       {
@@ -115,7 +115,7 @@ describe("quote children의 GFM round-trip(BLK-005)", () => {
     expect(exportMarkdown(document, { mode: "strict" })).toEqual({
       ok: true,
       // own content가 비고 첫 child가 heading(non-paragraph)이라 own
-      // paragraph를 materialize하지 않는다 — hasAmbiguousLeadingListParagraph가
+      // paragraph를 materialize하지 않는다 — hasAmbiguousLeadingParagraph가
       // 목록 항목에 적용하는 것과 동일한 판정.
       value: "> ## 중첩 제목\n",
     });
@@ -123,7 +123,7 @@ describe("quote children의 GFM round-trip(BLK-005)", () => {
 
   // own content가 "진짜 빈 배열"이고 첫 child가 paragraph인 조합만 GFM이
   // 재파싱 때 둘의 경계를 구분하지 못한다(목록 항목의
-  // hasAmbiguousLeadingListParagraph와 동일 모호성) — 이 한 조합만
+  // hasAmbiguousLeadingParagraph와 동일 모호성) — 이 한 조합만
   // NESTED_CHILDREN을 그대로 보고한다.
   it("own content가 빈 배열이고 첫 child가 paragraph면 여전히 NESTED_CHILDREN을 보고한다(모호성)", () => {
     const document = buildDocument([
