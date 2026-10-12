@@ -6,7 +6,7 @@
  * (2) 내용이 빈 목록 항목·quote의 첫 자식이 mdast paragraph로 나가는 블록
  *     (image 등): GFM이 own content와 첫 자식 경계를 구분하지 못해 재가져오기
  *     때 자식이 own content로 뭉친다 -> NESTED_CHILDREN.
- * lossy 출력은 바뀌지 않고 경고만 더해진다.
+ * lossy 출력은 바뀌지 않고 경고만 더해진다. 예외는 mark 없는 빈 글자 런 입력이다.
  */
 import type { Block, Document, InlineContent } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -325,5 +325,98 @@ describe('빈 글자 런([{ text: "" }])만 가진 own content는 빈 content와
     ]);
 
     expect(parentKinds(document)).toEqual([]);
+  });
+
+  it("mark가 붙은 빈 런은 빈 content가 아니다(링크 문단이 체크박스를 받는다)", () => {
+    const document = buildDocument([
+      emptyContainer(
+        "checkListItem",
+        [],
+        [{ text: "", marks: [{ type: "link", href: "https://e.com" }] }],
+      ),
+    ]);
+
+    expect(parentKinds(document)).toEqual([]);
+    expect(exportMarkdown(document, { mode: "strict" })).toEqual({
+      ok: true,
+      value: "* [x] [](https://e.com)\n",
+    });
+  });
+
+  // lossy 출력이 빈 content `[]`와 같아야 한다. 판정 둘(승격과 own 단락 판단)이
+  // 모두 isEmptyContent를 읽는다. 하나라도 `length === 0`으로 돌아가면 빈 단락이
+  // 끼어 `>\n>\n> x` 모양이 된다.
+  const childCases: ReadonlyArray<readonly [string, Block[]]> = [
+    ["본문 하나", [paragraphBlock("paragraph-child", "본문")]],
+    [
+      "빈 문단 뒤 문단",
+      [
+        paragraphBlock("empty-child", ""),
+        paragraphBlock("paragraph-child", "둘째"),
+      ],
+    ],
+  ];
+
+  it.each(
+    (["bulletListItem", "numberedListItem", "quote"] as const).flatMap((type) =>
+      childCases.map(([label, children]) => [type, label, children] as const),
+    ),
+  )(
+    "빈 글자 런만 가진 %s(자식: %s)의 lossy 출력은 빈 content와 같다",
+    (type, _label, children) => {
+      const withRun = buildDocument([
+        emptyContainer(type, children, [{ text: "" }]),
+      ]);
+      const withEmpty = buildDocument([emptyContainer(type, children, [])]);
+
+      const lossyMarkdown = (document: Document): unknown => {
+        const result = exportMarkdown(document, { mode: "lossy" });
+        return result.ok ? result.value.markdown : result;
+      };
+
+      expect(lossyMarkdown(withRun)).toBe(lossyMarkdown(withEmpty));
+    },
+  );
+
+  it("빈 글자 런만 가진 quote의 non-paragraph 첫 자식은 own 빈 단락 없이 나간다", () => {
+    const document = buildDocument([
+      emptyContainer(
+        "quote",
+        [headingBlock("heading-child", 2, "제목")],
+        [{ text: "" }],
+      ),
+    ]);
+
+    expect(exportMarkdown(document, { mode: "lossy" })).toMatchObject({
+      ok: true,
+      value: { markdown: expect.stringMatching(/^> #+ 제목\n$/) },
+    });
+  });
+});
+
+describe("NESTED_CHILDREN 메시지", () => {
+  const messageOf = (document: Document): string =>
+    analyzeMarkdownLoss(document).find((loss) => loss.blockId === "parent")
+      ?.message ?? "";
+
+  it("컨테이너 모양 손실은 평탄화한다고 쓰지 않는다", () => {
+    const document = buildDocument([
+      emptyContainer("bulletListItem", [imageChild("image-child")]),
+    ]);
+
+    expect(messageOf(document)).not.toContain("flattens");
+  });
+
+  it("컨테이너가 아닌 블록의 children은 평탄화한다고 쓴다", () => {
+    const document = buildDocument([
+      {
+        id: "parent",
+        type: "paragraph",
+        content: [{ text: "본문" }],
+        children: [paragraphBlock("paragraph-child", "자식")],
+      },
+    ]);
+
+    expect(messageOf(document)).toContain("flattens");
   });
 });

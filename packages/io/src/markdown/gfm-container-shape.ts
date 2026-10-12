@@ -15,12 +15,18 @@ import {
 // 판단은 좁은 판정(hasAmbiguousLeadingParagraph)을 읽는다. 둘은 의도된 분리다.
 // 한쪽만 조정되면 손실 보고와 실제 출력이 조용히 어긋난다.
 
-// own content가 비었는지 본다. 빈 배열뿐 아니라 글자가 없는 런만 있는 content도
-// 비었다. parseDocument는 `[{ text: "" }]`를 정규화하지 않고, 이 content는 빈
-// 배열과 똑같이 빈 문단으로 나가기 때문이다. 글자 런이 아닌 원소(커스텀 inline)는
-// 비지 않은 것으로 본다.
+// own content가 비었는지 본다. 빈 배열뿐 아니라 mark 없는 빈 글자 런만 있는
+// content도 비었다. parseDocument는 `[{ text: "" }]`를 정규화하지 않고, 이
+// content는 빈 배열과 똑같이 빈 문단으로 나가기 때문이다. mark가 붙은 빈 런은
+// `****`, `[](url)` 같은 마커로 나가 빈 문단이 아니므로 비지 않은 것으로 본다.
+// 글자 런이 아닌 원소(커스텀 inline)도 비지 않은 것으로 본다.
 export const isEmptyContent = (content: InlineContent): boolean =>
-  content.every((item) => isTextRunItem(item) && item.text === "");
+  content.every(
+    (item) =>
+      isTextRunItem(item) &&
+      item.text === "" &&
+      (item.marks === undefined || item.marks.length === 0),
+  );
 
 // toggleListItem은 model isListItemBlockType(로드맵 D2, <ul>/<li> HTML 직렬화
 // 축)에 없어 GFM export가 기본적으로 이를 목록으로 인식하지 못하고 default
@@ -58,9 +64,10 @@ export const isGfmContainerLikeBlockType = (
 // 직접 표현하므로 손실 없이 재귀 순회한다. 단, GFM은 컨테이너의 own content와
 // 첫 child paragraph 경계를 구분하지 못한다 — "own content가 비어 있고 첫
 // child가 paragraph"인 모양은 재파싱 때 항상 같은 트리로 뭉친다. 이 판정을
-// 여기서 소유하고 export-markdown.ts의 flattenBlocks(승격 여부)·listNode·
-// quote 분기(둘 다 own paragraph materialize 여부)가 같은 함수를 호출한다
-// (아키텍처 리뷰 6차 후보 L5) — 여러 곳이 독립된 조건을 유지하면 한쪽만
+// 여기서 소유하고 export-markdown.ts의 flattenBlocks(승격 여부)와
+// containerChildNodes(목록·quote의 own paragraph materialize 여부)가 같은
+// 함수를 호출한다(아키텍처 리뷰 6차 후보 L5).
+// 여러 곳이 독립된 조건을 유지하면 한쪽만
 // 조정될 때 손실 보고와 실제 출력이 조용히 어긋난다. 목록 항목과 quote를
 // 모두 판정한다(isGfmContainerLikeBlockType과 같은 편입 이력).
 export const hasAmbiguousLeadingParagraph = (block: Block): boolean => {
