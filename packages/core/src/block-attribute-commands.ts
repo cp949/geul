@@ -7,14 +7,8 @@ import {
   resolveIframeEmbedDecision,
   type Result,
 } from "@cp949/geul-model";
-import { closeHistory } from "@tiptap/pm/history";
 
-import {
-  findBlockPosition,
-  findEditableBlockContent,
-  hasSameMarkup,
-  hasSameModelMarkup,
-} from "./block-position.js";
+import { runBlockAttrCommand } from "./block-attr-command.js";
 import type { EditorError } from "./errors.js";
 import { type MediaBlockKind } from "./media-block-kind.js";
 import {
@@ -41,15 +35,12 @@ export const createBlockAttributeCommands = (
 ) => {
   // setBlockTextColor/setBlockBackgroundColor/setBlockTextAlignment(RD-002
   // DELTA-02)가 공유하는 본체. TextBlockProps 3필드 모두 blockContainer
-  // attrs에 있다(RD-001 DELTA-02, block-container-extension.ts) — blockId로
-  // 그 컨테이너를 찾고(BLOCK_NOT_FOUND), 콘텐츠 타입이 isNestableBlockType
-  // 7종(paragraph/heading/quote/목록 4종)이 아니면 COMMAND_NOT_APPLICABLE로
-  // 거절한다. table·divider는 blockContainer로 감싸이지 않아 첫 조건에서,
-  // codeBlock은 leafBlockContent라 isNestableBlockType에서 걸린다(spec
-  // §3.3). 값 검증(validate)과 attrs 병합(nextAttrs)만 property별로 주입받고,
-  // nextAttrs는 항상 기존 attrs를 스프레드한 뒤 대상 필드만 바꾼다 —
-  // setNodeMarkup에 부분 attrs를 넘기면 나머지가 schema default(null)로
-  // 리셋되는 함정을 피한다(check-list-item-commands.ts와 동일 경계).
+  // attrs에 있다(RD-001 DELTA-02, block-container-extension.ts) — 콘텐츠
+  // 타입이 isNestableBlockType 7종(paragraph/heading/quote/목록 4종)이
+  // 아니면 COMMAND_NOT_APPLICABLE로 거절한다. table·divider는
+  // blockContainer로 감싸이지 않아 첫 조건에서, codeBlock은
+  // leafBlockContent라 isNestableBlockType에서 걸린다(spec §3.3). 값
+  // 검증(validate)과 attrs 병합(nextAttrs)만 property별로 주입받는다.
   const runSetBlockTextPropCommand = (
     command: string,
     blockId: string,
@@ -59,38 +50,17 @@ export const createBlockAttributeCommands = (
       attrs: Record<string, unknown>,
       value: string | null,
     ) => Record<string, unknown>,
-  ): Result<void, EditorError> => {
-    if (session.isDestroyed) return commandNotApplicable(command);
-    const { doc } = session.editor.state;
-    const position = findBlockPosition(doc, blockId);
-    const node = position === null ? null : doc.nodeAt(position);
-    if (position === null || node === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (
-      node.type.name !== "blockContainer" ||
-      !isNestableBlockType(node.child(0).type.name)
-    ) {
-      return commandNotApplicable(command);
-    }
-    if (value !== null) {
-      const error = validate(value);
-      if (error !== null) return { ok: false, error };
-    }
-    const updatedAttrs = nextAttrs(node.attrs, value);
-    // 같은 값 재적용은 빈 history 단위를 남기지 않게 dispatch 전에 거절한다
-    // (Issue #375).
-    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
-    return session.runDocumentCommand(command, "local", () => {
-      const transaction = session.editor.state.tr.setNodeMarkup(
-        position,
-        undefined,
-        updatedAttrs,
-      );
-      session.editor.view.dispatch(closeHistory(transaction));
-      return true;
+  ): Result<void, EditorError> =>
+    runBlockAttrCommand(session, {
+      command,
+      blockId,
+      target: "block",
+      appliesTo: (node) =>
+        node.type.name === "blockContainer" &&
+        isNestableBlockType(node.child(0).type.name),
+      validate: () => (value === null ? null : validate(value)),
+      nextAttrs: (attrs) => nextAttrs(attrs, value),
     });
-  };
 
   const isMediaBlockNodeName = (name: string): name is MediaBlockKind =>
     name === "file" || name === "image" || name === "video" || name === "audio";
@@ -112,22 +82,15 @@ export const createBlockAttributeCommands = (
   const isMediaOrIframeBlockNodeName = (name: string): name is MediaBlockKind =>
     isMediaBlockNodeName(name) || name === "iframe";
 
-  // setMediaBlockUrl/Name/Caption/BackgroundColor가 공유하는 본체.
-  // runSetBlockTextPropCommand와 같은 모양(찾기→가드→검증→setNodeMarkup 1회)
-  // 이지만 가드가 다르다 — media 4종은 divider·table처럼 blockContainer로
-  // 감싸이지 않는 atom이라(media-block-extension.ts) 그 helper의
-  // `blockContainer && isNestableBlockType` 가드를 그대로 못 쓴다(RD-001.md
-  // "결정"). setNodeMarkup으로 attrs 일부만 바꿔도 나머지는 항상
-  // node.attrs를 스프레드해 유지한다 — 부분 attrs를 넘기면 schema
-  // default(null)로 리셋되는 함정을 그대로 피한다.
+  // setMediaBlockUrl/Name/Caption/BackgroundColor가 공유하는 본체. media
+  // 4종은 divider·table처럼 blockContainer로 감싸이지 않는 atom이라
+  // (media-block-extension.ts) 위 helper의 `blockContainer &&
+  // isNestableBlockType` 가드를 그대로 못 쓴다(RD-001.md "결정").
   //
   // url을 확정하는 호출(setMediaBlockUrl)은 같은 transaction에서 로컬 프리뷰
   // attrs를 null로 정리하지만 통지는 하지 않는다(Issue #382). undo로 URL이
   // 문서에 돌아올 수 있어서다. 통지는 MediaLocalPreviewLifecycleExtension이
   // 그 URL이 undo·redo로 못 돌아올 때 낸다.
-  //
-  // 모델이 같고 프리뷰 attrs만 달라지는 호출은 dispatch 전에 거절한다
-  // (hasSameModelMarkup, Issue #376) — 거절 Result인데 PM만 바뀌는 것을 막는다.
   const runSetMediaBlockAttrCommand = (
     command: string,
     blockId: string,
@@ -138,34 +101,15 @@ export const createBlockAttributeCommands = (
       value: string | null,
     ) => Record<string, unknown>,
     isApplicableNodeName: (name: string) => boolean = isMediaBlockNodeName,
-  ): Result<void, EditorError> => {
-    if (session.isDestroyed) return commandNotApplicable(command);
-    const { doc } = session.editor.state;
-    const position = findBlockPosition(doc, blockId);
-    const node = position === null ? null : doc.nodeAt(position);
-    if (position === null || node === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (!isApplicableNodeName(node.type.name)) {
-      return commandNotApplicable(command);
-    }
-    if (value !== null) {
-      const error = validate(value);
-      if (error !== null) return { ok: false, error };
-    }
-    const updatedAttrs = nextAttrs(node.attrs, value);
-    if (hasSameModelMarkup(node, updatedAttrs))
-      return commandNotApplicable(command);
-    return session.runDocumentCommand(command, "local", () => {
-      const transaction = session.editor.state.tr.setNodeMarkup(
-        position,
-        undefined,
-        updatedAttrs,
-      );
-      session.editor.view.dispatch(closeHistory(transaction));
-      return true;
+  ): Result<void, EditorError> =>
+    runBlockAttrCommand(session, {
+      command,
+      blockId,
+      target: "block",
+      appliesTo: (node) => isApplicableNodeName(node.type.name),
+      validate: () => (value === null ? null : validate(value)),
+      nextAttrs: (attrs) => nextAttrs(attrs, value),
     });
-  };
 
   // media 5종 중 image/video/iframe만 리사이즈를 지원한다(spec §3 —
   // iframe은 explicit width 없이는 브라우저 기본값(300x150)으로
@@ -176,268 +120,138 @@ export const createBlockAttributeCommands = (
   ): name is "image" | "video" | "iframe" =>
     name === "image" || name === "video" || name === "iframe";
 
-  // setMediaPreviewWidth 전용 본체. runSetMediaBlockAttrCommand를 재사용하지
-  // 않는다 — 값 타입이 string이 아니라 number이고, kind 가드도 4종 전체가
-  // 아니라 image/video만이라(위 isResizableMediaBlockKind) 그 헬퍼의
-  // `value: string | null` 시그니처에 끼워 넣을 수 없다(readiness probe
-  // 결론, RD-001-DELTA-01.md "배경" 참고). "찾기→가드→검증→setNodeMarkup
-  // 1회" 골격은 위 두 헬퍼와 동일하게 따른다.
-  const runSetMediaPreviewWidthCommand = (
-    blockId: string,
-    width: number,
-  ): Result<void, EditorError> => {
-    const command = "setMediaPreviewWidth";
-    if (session.isDestroyed) return commandNotApplicable(command);
-    const { doc } = session.editor.state;
-    const position = findBlockPosition(doc, blockId);
-    const node = position === null ? null : doc.nodeAt(position);
-    if (position === null || node === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (!isResizableMediaBlockKind(node.type.name)) {
-      return { ok: false, error: { code: "MEDIA_RESIZE_NOT_SUPPORTED" } };
-    }
-    if (!isValidMediaPreviewWidth(width)) {
-      return {
-        ok: false,
-        error: {
-          code: "DOCUMENT_INVALID",
-          message: "previewWidth must be a positive finite number",
-        },
-      };
-    }
-    const updatedAttrs = { ...node.attrs, previewWidth: width };
-    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
-    return session.runDocumentCommand(command, "local", () => {
-      const transaction = session.editor.state.tr.setNodeMarkup(
-        position,
-        undefined,
-        updatedAttrs,
-      );
-      session.editor.view.dispatch(closeHistory(transaction));
-      return true;
-    });
-  };
-
   const isPreviewToggleableMediaBlockKind = (
     name: string,
   ): name is "image" | "video" | "audio" =>
     name === "image" || name === "video" || name === "audio";
 
-  // setMediaShowPreview 전용 본체(RD-002 DELTA-01). 위
-  // runSetMediaPreviewWidthCommand와 같은 "찾기→가드→setNodeMarkup 1회"
-  // 골격이지만 값 타입이 boolean이고 kind 가드가 반대 방향이다(resize는
-  // image/video만 허용해 audio/file을 거절하지만, 이 명령은 image/video/
-  // audio를 허용하고 file만 거절한다 — 위 isPreviewToggleableMediaBlockKind).
-  // boolean은 TS 시그니처 자체가 값 공간 전체를 강제하므로(model
-  // showPreview?: boolean과 동형) previewWidth처럼 별도 값 검증 단계가 없다.
-  const runSetMediaShowPreviewCommand = (
+  const setMediaPreviewWidth = (
+    blockId: string,
+    width: number,
+  ): Result<void, EditorError> =>
+    runBlockAttrCommand(session, {
+      command: "setMediaPreviewWidth",
+      blockId,
+      target: "block",
+      appliesTo: (node) => isResizableMediaBlockKind(node.type.name),
+      unsupported: { code: "MEDIA_RESIZE_NOT_SUPPORTED" },
+      validate: () =>
+        isValidMediaPreviewWidth(width)
+          ? null
+          : {
+              code: "DOCUMENT_INVALID",
+              message: "previewWidth must be a positive finite number",
+            },
+      nextAttrs: (attrs) => ({ ...attrs, previewWidth: width }),
+    });
+
+  // 리사이즈는 image/video/iframe만 허용해 audio/file을 거절하지만, 이
+  // 명령은 image/video/audio를 허용하고 file만 거절한다(RD-002 DELTA-01).
+  // boolean은 TS 시그니처 자체가 값 공간 전체를 강제하므로 별도 값 검증이
+  // 없다.
+  const setMediaShowPreview = (
     blockId: string,
     show: boolean,
-  ): Result<void, EditorError> => {
-    const command = "setMediaShowPreview";
-    if (session.isDestroyed) return commandNotApplicable(command);
-    const { doc } = session.editor.state;
-    const position = findBlockPosition(doc, blockId);
-    const node = position === null ? null : doc.nodeAt(position);
-    if (position === null || node === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (!isPreviewToggleableMediaBlockKind(node.type.name)) {
-      return {
-        ok: false,
-        error: { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" },
-      };
-    }
-    const updatedAttrs = { ...node.attrs, showPreview: show };
-    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
-    return session.runDocumentCommand(command, "local", () => {
-      const transaction = session.editor.state.tr.setNodeMarkup(
-        position,
-        undefined,
-        updatedAttrs,
-      );
-      session.editor.view.dispatch(closeHistory(transaction));
-      return true;
+  ): Result<void, EditorError> =>
+    runBlockAttrCommand(session, {
+      command: "setMediaShowPreview",
+      blockId,
+      target: "block",
+      appliesTo: (node) => isPreviewToggleableMediaBlockKind(node.type.name),
+      unsupported: { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" },
+      nextAttrs: (attrs) => ({ ...attrs, showPreview: show }),
     });
-  };
 
-  // setCodeBlockWrap 전용 본체(RD-001 DELTA-02, Issue #194). media 계열과
-  // 달리 `wrap`은 blockContainer가 아니라 codeBlock 콘텐츠 노드 자신의
-  // attrs다(language와 같은 자리, code-block-extension.ts) — findBlockPosition
-  // (blockContainer 위치)이 아니라 findEditableBlockContent(콘텐츠 노드
-  // 자신의 위치, generic-block-type-commands.ts의 setBlockType이 language를
-  // 읽고 쓸 때 쓰는 것과 동일 프리미티브)로 찾는다. 가드는 kind 부분집합이
-  // 아니라 단일 타입 — codeBlock은 media 4종처럼 서로 다른 kind로 나뉘지
-  // 않는다. 불일치는 media처럼 전용 에러 코드를 새로 만들지 않고
-  // commandNotApplicable을 쓴다(runSetBlockTextPropCommand의 블록타입
-  // 불일치 분기와 동일 근거 — "대상이 codeBlock 자체가 아니다"는 kind 세부
-  // 정책이 아니라 명령 부적합이다). 값이 boolean 타입 자체로 이미 값공간
-  // 전체를 강제하므로 runSetMediaShowPreviewCommand와 같은 이유로 별도 값
-  // 검증이 없다.
-  const runSetCodeBlockWrapCommand = (
+  // codeBlock의 `wrap`·`caption`은 blockContainer가 아니라 codeBlock 콘텐츠
+  // 노드 자신의 attrs다(language와 같은 자리, code-block-extension.ts,
+  // RD-001 DELTA-02·RD-002 DELTA-02, Issue #194). 그래서 target이
+  // "content"다. 가드는 단일 타입이고, 불일치는 media처럼 전용 에러 코드를
+  // 만들지 않고 COMMAND_NOT_APPLICABLE이다("대상이 codeBlock 자체가
+  // 아니다"는 kind 세부 정책이 아니라 명령 부적합이다). wrap은 boolean이라
+  // 값공간이 타입으로 닫히고, caption은 setMediaBlockCaption(media 자유
+  // 텍스트)과 같은 이유로 별도 형식 검증이 없다(G-CNV-001, model이 유일
+  // 검증 권위).
+  const setCodeBlockWrap = (
     blockId: string,
     wrap: boolean,
-  ): Result<void, EditorError> => {
-    const command = "setCodeBlockWrap";
-    if (session.isDestroyed) return commandNotApplicable(command);
-    const target = findEditableBlockContent(session.editor.state.doc, blockId);
-    if (target === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (target.node.type.name !== "codeBlock") {
-      return commandNotApplicable(command);
-    }
-    const updatedAttrs = { ...target.node.attrs, wrap };
-    if (hasSameMarkup(target.node, updatedAttrs)) {
-      return commandNotApplicable(command);
-    }
-    return session.runDocumentCommand(command, "local", () => {
-      const transaction = session.editor.state.tr.setNodeMarkup(
-        target.position,
-        undefined,
-        updatedAttrs,
-      );
-      session.editor.view.dispatch(closeHistory(transaction));
-      return true;
+  ): Result<void, EditorError> =>
+    runBlockAttrCommand(session, {
+      command: "setCodeBlockWrap",
+      blockId,
+      target: "content",
+      appliesTo: (node) => node.type.name === "codeBlock",
+      nextAttrs: (attrs) => ({ ...attrs, wrap }),
     });
-  };
-
-  // setCodeBlockCaption 전용 본체(RD-002 DELTA-02, Issue #194).
-  // runSetCodeBlockWrapCommand와 완전히 같은 "찾기(findEditableBlockContent)
-  // →가드(단일 타입)→setNodeMarkup 1회" 골격이다 — caption은 codeBlock
-  // 콘텐츠 노드 자신의 attrs이지 blockContainer attrs가 아니다(model
-  // CodeBlock.caption, code-block-extension.ts). wrap과 다른 점은 값이
-  // boolean이 아니라 string이라 타입 자체로 값공간이 닫히지 않는다는
-  // 것인데, `setMediaBlockCaption`(media 자유 텍스트 caption)도 같은 이유로
-  // 별도 형식 검증이 없다 — 그 선례를 따라 여기도 길이 상한 등 정책 판단을
-  // 추가하지 않는다(G-CNV-001, model이 유일 검증 권위).
-  const runSetCodeBlockCaptionCommand = (
+  const setCodeBlockCaption = (
     blockId: string,
     caption: string,
-  ): Result<void, EditorError> => {
-    const command = "setCodeBlockCaption";
-    if (session.isDestroyed) return commandNotApplicable(command);
-    const target = findEditableBlockContent(session.editor.state.doc, blockId);
-    if (target === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (target.node.type.name !== "codeBlock") {
-      return commandNotApplicable(command);
-    }
-    const updatedAttrs = { ...target.node.attrs, caption };
-    if (hasSameMarkup(target.node, updatedAttrs)) {
-      return commandNotApplicable(command);
-    }
-    return session.runDocumentCommand(command, "local", () => {
-      const transaction = session.editor.state.tr.setNodeMarkup(
-        target.position,
-        undefined,
-        updatedAttrs,
-      );
-      session.editor.view.dispatch(closeHistory(transaction));
-      return true;
+  ): Result<void, EditorError> =>
+    runBlockAttrCommand(session, {
+      command: "setCodeBlockCaption",
+      blockId,
+      target: "content",
+      appliesTo: (node) => node.type.name === "codeBlock",
+      nextAttrs: (attrs) => ({ ...attrs, caption }),
     });
-  };
 
-  // setMediaTextAlignment 전용 본체(Issue #154, MED-009). 위
-  // runSetMediaPreviewWidthCommand·runSetMediaShowPreviewCommand와 같은
-  // "찾기→가드→검증→setNodeMarkup 1회" 골격이지만, kind 가드 집합이
+  // setMediaTextAlignment(Issue #154, MED-009). kind 가드 집합이
   // isResizableMediaBlockKind(image/video)와 우연히 같아도 관심사가
-  // 다르므로(리사이즈가 아니라 정렬) 공유하지 않고 전용 가드를 새로 둔다
-  // (runSetMediaShowPreviewCommand 위 주석이 이미 "명령마다 전용 가드
-  // 함수" 컨벤션의 이유를 문서화). 값 검증은 setBlockTextAlignment
-  // (runSetBlockTextPropCommand)와 동일하게 isCanonicalCellAlign을
+  // 다르므로(리사이즈가 아니라 정렬) 공유하지 않고 전용 가드를 둔다. 값
+  // 검증은 setBlockTextAlignment와 동일하게 isCanonicalCellAlign을
   // 재사용한다 — value가 TS 시그니처로 이미 좁혀져 있어도(런타임 caller가
   // 그 타입을 우회할 수 있으므로) 방어적으로 검증한다.
-  const runSetMediaTextAlignmentCommand = (
+  const setMediaTextAlignment = (
     blockId: string,
     alignment: "left" | "center" | "right" | null,
-  ): Result<void, EditorError> => {
-    const command = "setMediaTextAlignment";
-    if (session.isDestroyed) return commandNotApplicable(command);
-    const { doc } = session.editor.state;
-    const position = findBlockPosition(doc, blockId);
-    const node = position === null ? null : doc.nodeAt(position);
-    if (position === null || node === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (!isTextAlignableMediaBlockKind(node.type.name)) {
-      return {
-        ok: false,
-        error: { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" },
-      };
-    }
-    if (alignment !== null && !isCanonicalCellAlign(alignment)) {
-      return { ok: false, error: { code: "INVALID_ALIGN", align: alignment } };
-    }
-    const updatedAttrs = { ...node.attrs, textAlignment: alignment };
-    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
-    return session.runDocumentCommand(command, "local", () => {
-      const transaction = session.editor.state.tr.setNodeMarkup(
-        position,
-        undefined,
-        updatedAttrs,
-      );
-      session.editor.view.dispatch(closeHistory(transaction));
-      return true;
+  ): Result<void, EditorError> =>
+    runBlockAttrCommand(session, {
+      command: "setMediaTextAlignment",
+      blockId,
+      target: "block",
+      appliesTo: (node) => isTextAlignableMediaBlockKind(node.type.name),
+      unsupported: { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" },
+      validate: () =>
+        alignment === null || isCanonicalCellAlign(alignment)
+          ? null
+          : { code: "INVALID_ALIGN", align: alignment },
+      nextAttrs: (attrs) => ({ ...attrs, textAlignment: alignment }),
     });
-  };
 
-  // setIframeSrc 전용 본체(CUS-001~004, roadmap Issue #212 RD-002 DELTA-02,
-  // spec §3). runSetMediaPreviewWidthCommand와 같은 "찾기→가드→검증→
-  // setNodeMarkup 1회" 골격이지만 검증이 model isValidMediaPreviewWidth가
-  // 아니라 model resolveIframeEmbedDecision(URL 허용 정책, host가 주입한
+  // setIframeSrc(CUS-001~004, roadmap Issue #212 RD-002 DELTA-02, spec §3).
+  // 검증은 model resolveIframeEmbedDecision(URL 허용 정책, host가 주입한
   // session.getIframeEmbedConfig())이다. runSetMediaBlockAttrCommand(file/
   // image/video/audio 전용)를 재사용하지 않는다 — 대상 kind가 "iframe"
-  // 단일 타입이고(4종 전체가 아님), 로컬 프리뷰 정리 감지도 필요 없다
-  // (iframe은 업로드 플로우가 없어 localPreviewUrl이 항상 null).
+  // 단일 타입이고, 로컬 프리뷰 정리도 필요 없다(iframe은 업로드 플로우가
+  // 없어 localPreviewUrl이 항상 null).
   //
   // name을 지정하면 같은 setNodeMarkup의 attrs에 url과 함께 넣는다(Issue
   // #374) — URL 적용과 이름 갱신이 별도 명령이면 closeHistory가 각각 박혀
   // undo가 두 번 필요하다. 거절 판정은 name과 무관하게 url 기준이다.
-  const runSetIframeSrcCommand = (
+  const setIframeSrc = (
     blockId: string,
     url: string,
     name?: string,
-  ): Result<void, EditorError> => {
-    const command = "setIframeSrc";
-    if (session.isDestroyed) return commandNotApplicable(command);
-    const { doc } = session.editor.state;
-    const position = findBlockPosition(doc, blockId);
-    const node = position === null ? null : doc.nodeAt(position);
-    if (position === null || node === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    if (node.type.name !== "iframe") {
-      return commandNotApplicable(command);
-    }
-    const decision = resolveIframeEmbedDecision(
-      url,
-      session.getIframeEmbedConfig(),
-    );
-    if (!decision.allowed) {
-      return {
-        ok: false,
-        error: { code: "IFRAME_URL_NOT_ALLOWED", reason: decision.reason },
-      };
-    }
-    const updatedAttrs = {
-      ...node.attrs,
-      url,
-      ...(name === undefined ? {} : { name }),
-    };
-    if (hasSameMarkup(node, updatedAttrs)) return commandNotApplicable(command);
-    return session.runDocumentCommand(command, "local", () => {
-      const transaction = session.editor.state.tr.setNodeMarkup(
-        position,
-        undefined,
-        updatedAttrs,
-      );
-      session.editor.view.dispatch(closeHistory(transaction));
-      return true;
+  ): Result<void, EditorError> =>
+    runBlockAttrCommand(session, {
+      command: "setIframeSrc",
+      blockId,
+      target: "block",
+      appliesTo: (node) => node.type.name === "iframe",
+      validate: () => {
+        const decision = resolveIframeEmbedDecision(
+          url,
+          session.getIframeEmbedConfig(),
+        );
+        return decision.allowed
+          ? null
+          : { code: "IFRAME_URL_NOT_ALLOWED", reason: decision.reason };
+      },
+      nextAttrs: (attrs) => ({
+        ...attrs,
+        url,
+        ...(name === undefined ? {} : { name }),
+      }),
     });
-  };
 
   const setBlockTextColor = (
     blockId: string,
@@ -553,34 +367,6 @@ export const createBlockAttributeCommands = (
       // 이유 없이 iframe에서만 COMMAND_NOT_APPLICABLE로 거절하게 된다.
       isMediaOrIframeBlockNodeName,
     );
-  const setMediaPreviewWidth = (
-    blockId: string,
-    width: number,
-  ): Result<void, EditorError> =>
-    runSetMediaPreviewWidthCommand(blockId, width);
-  const setMediaShowPreview = (
-    blockId: string,
-    show: boolean,
-  ): Result<void, EditorError> => runSetMediaShowPreviewCommand(blockId, show);
-  const setMediaTextAlignment = (
-    blockId: string,
-    alignment: "left" | "center" | "right" | null,
-  ): Result<void, EditorError> =>
-    runSetMediaTextAlignmentCommand(blockId, alignment);
-  const setIframeSrc = (
-    blockId: string,
-    url: string,
-    name?: string,
-  ): Result<void, EditorError> => runSetIframeSrcCommand(blockId, url, name);
-  const setCodeBlockWrap = (
-    blockId: string,
-    wrap: boolean,
-  ): Result<void, EditorError> => runSetCodeBlockWrapCommand(blockId, wrap);
-  const setCodeBlockCaption = (
-    blockId: string,
-    caption: string,
-  ): Result<void, EditorError> =>
-    runSetCodeBlockCaptionCommand(blockId, caption);
   // RD-002 DELTA-02 — 오케스트레이션 본체(session.uploadMediaFile)를
   // 세션으로 이동했다. 여기는 command 이름만 매개변수화해 위임하는
   // 얇은 wrapper다(공개 시그니처·Result/Promise 계약은 그대로).

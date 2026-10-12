@@ -225,7 +225,7 @@ const UNRELATED_COMMANDS: Partial<Record<CommandName, string>> = {
   toggleListItemCollapse:
     "toggleListItem의 collapsed attr만 뒤집는다(toggle-collapse-commands.ts).",
   setCalloutIcon:
-    "기존 callout의 icon attr만 바꾼다(callout-commands.ts). callout이 없으면 BLOCK_NOT_FOUND다.",
+    "기존 callout의 icon attr만 바꾼다(generic-block-nesting-commands.ts). callout이 없으면 BLOCK_NOT_FOUND다.",
   toggleBold: "선택 범위에 마크를 켜고 끈다(inline-mark-commands.ts).",
   toggleItalic: "선택 범위에 마크를 켜고 끈다(inline-mark-commands.ts).",
   toggleUnderline: "선택 범위에 마크를 켜고 끈다(inline-mark-commands.ts).",

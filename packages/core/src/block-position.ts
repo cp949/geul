@@ -51,19 +51,15 @@ export const findEditableBlockContent = (
     : { position: contentPosition, node: contentNode };
 };
 
-// attrs를 node에 setNodeMarkup으로 적용해도 아무것도 바뀌지 않는지 판정한다.
+// attrs를 node에 setNodeMarkup으로 적용해도 모델이 바뀌지 않는지 판정한다.
 // 같은 값 재적용이 dispatch되면 문서는 그대로인데 빈 history 단위가 남아 다음
-// undo를 삼킨다(Issue #375). 속성 setter가 검증을 마친 뒤 dispatch 직전에
-// 호출한다. attrs는 node.attrs를 스프레드한 완전한 attrs여야 한다.
-export const hasSameMarkup = (
-  node: ProseMirrorNode,
-  attrs: Record<string, unknown>,
-): boolean => node.hasMarkup(node.type, attrs);
-
+// undo를 삼킨다(Issue #375). attrs는 node.attrs를 스프레드한 완전한 attrs여야
+// 한다.
+//
 // 로컬 프리뷰(ADR 0015)는 저장 모델에 없는 PM 전용 attrs다. 명령이 이 attrs만
 // 바꾸면 commitDocument가 변경 0건으로 거절하는데도 PM 상태는 이미 바뀌어
-// 있다(Issue #376). "모델이 같은가"를 판정할 때는 두 attr를 현재 값으로
-// 고정해 비교한다. 로컬 프리뷰 attrs가 없는 노드 타입은 hasSameMarkup과 같다.
+// 있다(Issue #376). 그래서 두 attr를 현재 값으로 고정해 비교한다. 로컬 프리뷰
+// attrs가 없는 노드 타입은 node.hasMarkup(node.type, attrs)와 같다.
 export const hasSameModelMarkup = (
   node: ProseMirrorNode,
   attrs: Record<string, unknown>,

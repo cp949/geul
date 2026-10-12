@@ -1,6 +1,6 @@
-import type { Result } from "@cp949/geul-model";
+import { isValidInlineText, type Result } from "@cp949/geul-model";
 
-import { setCalloutIconCommand } from "./callout-commands.js";
+import { runBlockAttrCommand } from "./block-attr-command.js";
 import { toggleCheckListItemCheckedCommand } from "./check-list-item-commands.js";
 import { toggleListItemCollapseCommand } from "./toggle-collapse-commands.js";
 import { indentBlockCommand, outdentBlockCommand } from "./indent-commands.js";
@@ -73,20 +73,27 @@ export const createGenericBlockNestingCommands = (
     );
   };
 
+  // callout의 `icon`을 교체한다(Issue #209 RD-002 DELTA-02). icon은
+  // blockContainer가 아니라 콘텐츠 노드(callout) 자신의 attrs라 target이
+  // "content"다. 빈 문자열·제어문자를 포함한 icon은 신규 EditorError 코드를
+  // 만들지 않고 COMMAND_NOT_APPLICABLE로 수렴한다(block-type-commands.ts D2와
+  // 동일 원칙). isValidInlineText는 model(string-invariants.ts)을 재사용한다
+  // (G-CNV-001).
   const setCalloutIcon = (
     blockId: string,
     icon: string,
-  ): Result<void, EditorError> => {
-    if (session.isDestroyed) return commandNotApplicable("setCalloutIcon");
-    if (findBlockEntryInTree(session.document.blocks, blockId) === null) {
-      return { ok: false, error: { code: "BLOCK_NOT_FOUND", blockId } };
-    }
-    return session.runDocumentCommand(
-      "setCalloutIcon",
-      "local",
-      () => setCalloutIconCommand(session.editor, blockId, icon).ok,
-    );
-  };
+  ): Result<void, EditorError> =>
+    runBlockAttrCommand(session, {
+      command: "setCalloutIcon",
+      blockId,
+      target: "content",
+      appliesTo: (node) => node.type.name === "callout",
+      validate: () =>
+        icon.length === 0 || !isValidInlineText(icon)
+          ? { code: "COMMAND_NOT_APPLICABLE", command: "setCalloutIcon" }
+          : null,
+      nextAttrs: (attrs) => ({ ...attrs, icon }),
+    });
 
   return {
     indentBlock,
