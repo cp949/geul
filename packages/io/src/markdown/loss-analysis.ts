@@ -10,7 +10,8 @@ import {
 
 import { computeColumnAlignments } from "./column-align.js";
 import {
-  hasAmbiguousLeadingParagraph,
+  firstChildMergesIntoOwnContent,
+  isCheckboxAnchorLost,
   isGfmContainerLikeBlockType,
 } from "./gfm-container-shape.js";
 
@@ -188,9 +189,10 @@ const collectTableLosses = (
   }
 };
 
-// 표현하므로 손실 없이 재귀 순회한다. 단, 빈 own content 뒤 첫 paragraph는
-// GFM이 own paragraph와 child paragraph 경계를 구분하지 못하므로 부모 목록
-// 항목의 NESTED_CHILDREN으로 분류한다.
+// 블록 하나의 손실을 모으고 children을 재귀 순회한다. 목록 항목·quote의
+// children은 mdast가 직접 표현하므로 손실 없이 순회한다. 단, 빈 own content 뒤
+// 첫 자식이 mdast paragraph로 나가면(paragraph, image, callout, 미디어) GFM이
+// own content와 첫 자식 경계를 구분하지 못하므로 부모의 NESTED_CHILDREN이다.
 const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
   if (block.type === "table") {
     collectTableLosses(block, losses);
@@ -318,32 +320,29 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
   }
   const hasChildren = block.children !== undefined && block.children.length > 0;
 
-  if (hasChildren) {
-    if (
-      !isGfmContainerLikeBlockType(block.type) ||
-      hasAmbiguousLeadingParagraph(block)
-    ) {
-      losses.push({
-        kind: "NESTED_CHILDREN",
-        blockId: block.id,
-        message: `Block ${block.id} has nested children; GFM export flattens them into sibling blocks`,
-      });
-    } else if (
-      block.type === "checkListItem" &&
-      block.content.length === 0 &&
-      block.children?.[0]?.type !== "paragraph"
-    ) {
-      // mdast-util-gfm-task-list-item은 listItem의 첫 자식이 paragraph일 때만
-      // `[ ]`/`[x]`를 붙인다(export-markdown.ts listNode 주석 참고). own
-      // content가 비고 첫 child가 non-paragraph면(예: quote) 체크박스가
-      // stringify에서 조용히 사라진다 — 콘텐츠·중첩은 보존되지만 checked만
-      // 손실되는 별도 카테고리라 NESTED_CHILDREN과 분리한다.
-      losses.push({
-        kind: "CHECKED_STATE_LOST",
-        blockId: block.id,
-        message: `Block ${block.id} has empty content and a non-paragraph first child; GFM cannot anchor the checkbox marker`,
-      });
-    }
+  if (
+    hasChildren &&
+    (!isGfmContainerLikeBlockType(block.type) ||
+      firstChildMergesIntoOwnContent(block))
+  ) {
+    losses.push({
+      kind: "NESTED_CHILDREN",
+      blockId: block.id,
+      message: isGfmContainerLikeBlockType(block.type)
+        ? `Block ${block.id} has empty content and a first child that GFM cannot tell apart from the block's own content`
+        : `Block ${block.id} has nested children; GFM export flattens them into sibling blocks`,
+    });
+  } else if (isCheckboxAnchorLost(block)) {
+    // mdast-util-gfm-task-list-item은 listItem의 첫 자식이 paragraph일 때만
+    // `[ ]`/`[x]`를 붙인다(export-markdown.ts listNode 주석 참고). own
+    // content가 비고 첫 자식이 없거나 mdast paragraph가 아니면(예: quote)
+    // 체크박스가 stringify에서 조용히 사라진다. 콘텐츠·중첩은 보존되지만
+    // checked만 손실되는 별도 카테고리라 NESTED_CHILDREN과 분리한다.
+    losses.push({
+      kind: "CHECKED_STATE_LOST",
+      blockId: block.id,
+      message: `Block ${block.id} has empty content and no leading paragraph; GFM cannot anchor the checkbox marker`,
+    });
   }
 
   // "토글이라는 사실 자체"는 GFM이 표현할 수 없는 상태라 children 유무와

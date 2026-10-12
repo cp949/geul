@@ -1,6 +1,8 @@
 import {
   isListItemBlockType,
+  isTextRunItem,
   type Block,
+  type InlineContent,
   type ListItemBlock,
   type ListItemBlockType,
   type QuoteBlock,
@@ -8,8 +10,17 @@ import {
 } from "@cp949/geul-model";
 
 // GFM export가 컨테이너로 다루는 블록의 모양 판정을 모은다.
-// loss-analysis.ts(손실 보고)와 export-markdown.ts(출력)가 같은 판정을 읽는다.
+// loss-analysis.ts(손실 보고)와 export-markdown.ts(출력)가 이 파일을 읽는다.
+// 손실 보고는 넓은 판정(firstChildMergesIntoOwnContent)을, 승격과 own 단락
+// 판단은 좁은 판정(hasAmbiguousLeadingParagraph)을 읽는다. 둘은 의도된 분리다.
 // 한쪽만 조정되면 손실 보고와 실제 출력이 조용히 어긋난다.
+
+// own content가 비었는지 본다. 빈 배열뿐 아니라 글자가 없는 런만 있는 content도
+// 비었다. parseDocument는 `[{ text: "" }]`를 정규화하지 않고, 이 content는 빈
+// 배열과 똑같이 빈 문단으로 나가기 때문이다. 글자 런이 아닌 원소(커스텀 inline)는
+// 비지 않은 것으로 본다.
+export const isEmptyContent = (content: InlineContent): boolean =>
+  content.every((item) => isTextRunItem(item) && item.text === "");
 
 // toggleListItem은 model isListItemBlockType(로드맵 D2, <ul>/<li> HTML 직렬화
 // 축)에 없어 GFM export가 기본적으로 이를 목록으로 인식하지 못하고 default
@@ -58,5 +69,70 @@ export const hasAmbiguousLeadingParagraph = (block: Block): boolean => {
   // 처음 부딪힘). predicate가 이미 그 계약을 증명했으므로 캐스트는 안전하다.
   if (!isGfmContainerLikeBlockType(block.type)) return false;
   const item = block as ListItemBlock | ToggleListItemBlock | QuoteBlock;
-  return item.content.length === 0 && item.children?.[0]?.type === "paragraph";
+  return (
+    isEmptyContent(item.content) && item.children?.[0]?.type === "paragraph"
+  );
+};
+
+// export-markdown.ts의 blockNode가 모델 블록 타입마다 내는 mdast 노드 종류다.
+// "첫 자식이 mdast paragraph로 나가는가"를 모델 타입이 아니라 이 표로 판정한다.
+// blockNode와 일치해야 하며 gfm-container-shape.test.ts의 parity 테스트가 지킨다.
+// model/src/block-kind.ts의 `satisfies Record<...>` 표와 같은 패턴이라 새 블록
+// 타입이 오면 컴파일 단계에서 이 표가 모자란다.
+export type MdastNodeKind =
+  | "table"
+  | "thematicBreak"
+  | "paragraph"
+  | "code"
+  | "list"
+  | "blockquote"
+  | "heading";
+
+export const MDAST_NODE_KIND = {
+  paragraph: "paragraph",
+  // callout과 미디어 5종은 GFM에 고유 표현이 없어 paragraph(텍스트·링크·이미지)로 나간다.
+  callout: "paragraph",
+  file: "paragraph",
+  image: "paragraph",
+  video: "paragraph",
+  audio: "paragraph",
+  iframe: "paragraph",
+  heading: "heading",
+  quote: "blockquote",
+  bulletListItem: "list",
+  numberedListItem: "list",
+  checkListItem: "list",
+  toggleListItem: "list",
+  codeBlock: "code",
+  divider: "thematicBreak",
+  table: "table",
+} as const satisfies Record<Block["type"], MdastNodeKind>;
+
+// hasAmbiguousLeadingParagraph의 상위 집합이다. 좁은 판정은 모델 타입
+// paragraph만 보고, 이 판정은 mdast paragraph로 나가는 모든 첫 자식(image,
+// callout, 미디어)을 본다. 손실 보고는 이 넓은 판정을 읽는다 — image 첫 자식도
+// 재가져오기 때 own content로 뭉친다. 승격(flattenBlocks)과 own 빈 단락 판단
+// (containerChildNodes)은 좁은 판정을 읽는다. 넓은 판정으로 바꾸면 image 첫
+// 자식에서 own 빈 단락이 생겨 `*\n\n  ![img]` 모양으로 깨진다.
+export const firstChildMergesIntoOwnContent = (block: Block): boolean => {
+  if (!isGfmContainerLikeBlockType(block.type)) return false;
+  const item = block as ListItemBlock | ToggleListItemBlock | QuoteBlock;
+  const first = item.children?.[0];
+  return (
+    isEmptyContent(item.content) &&
+    first !== undefined &&
+    MDAST_NODE_KIND[first.type] === "paragraph"
+  );
+};
+
+// mdast-util-gfm-task-list-item은 listItem의 첫 자식이 paragraph일 때만
+// `[ ]`/`[x]`를 붙인다. own content가 비고 첫 자식이 없거나 mdast paragraph가
+// 아니면 체크박스가 stringify에서 조용히 사라진다.
+export const isCheckboxAnchorLost = (block: Block): boolean => {
+  if (block.type !== "checkListItem") return false;
+  const first = block.children?.[0];
+  return (
+    isEmptyContent(block.content) &&
+    (first === undefined || MDAST_NODE_KIND[first.type] !== "paragraph")
+  );
 };

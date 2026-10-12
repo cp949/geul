@@ -5,8 +5,9 @@
  * children(재귀, 임의 깊이·임의 block 타입)을 blockquote 중첩으로 그대로
  * 표현한다 — strict export가 성공하고 lossy export도 경고 없이 같은 구조를
  * 낸다. 유일한 예외는 목록 항목과 같은 모호성이다: own content가 비고 첫
- * child가 paragraph면 GFM이 둘의 경계를 구분하지 못해 NESTED_CHILDREN을
- * 그대로 보고한다(gfm-container-shape.ts의 hasAmbiguousLeadingParagraph).
+ * child가 mdast paragraph로 나가는 블록(paragraph, image, callout, 미디어)이면
+ * GFM이 둘의 경계를 구분하지 못해 NESTED_CHILDREN을 그대로 보고한다
+ * (gfm-container-shape.ts의 firstChildMergesIntoOwnContent).
  * 앞부분(export만)은 DELTA-02 범위, 마지막 "export→import round-trip" describe는
  * DELTA-03이 추가했다 — `blockquoteToBlocks`(import-markdown-blocks.ts)가
  * 이 파일이 만드는 markdown을 다시 quote children 구조로 복원하는지
@@ -121,10 +122,10 @@ describe("quote children의 GFM round-trip(BLK-005)", () => {
     });
   });
 
-  // own content가 "진짜 빈 배열"이고 첫 child가 paragraph인 조합만 GFM이
-  // 재파싱 때 둘의 경계를 구분하지 못한다(목록 항목의
-  // hasAmbiguousLeadingParagraph와 동일 모호성) — 이 한 조합만
-  // NESTED_CHILDREN을 그대로 보고한다.
+  // own content가 비고 첫 child가 paragraph인 조합은 GFM이 재파싱 때 둘의
+  // 경계를 구분하지 못한다(목록 항목과 동일 모호성) — NESTED_CHILDREN을
+  // 그대로 보고한다. image·callout 같은 다른 mdast paragraph 첫 자식은
+  // markdown-empty-container-loss.test.ts가 다룬다.
   it("own content가 빈 배열이고 첫 child가 paragraph면 여전히 NESTED_CHILDREN을 보고한다(모호성)", () => {
     const document = buildDocument([
       {
