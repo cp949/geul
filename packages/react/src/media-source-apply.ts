@@ -50,9 +50,11 @@ export type ApplyMediaUrlResult =
  * core는 현재 값과 같은 적용을 COMMAND_NOT_APPLICABLE로 거절한다(#375·#376).
  * 이 표면에서 그 거절은 "변경 없음"이라 ok로 돌려주고 거절 문구를 띄우지
  * 않는다(Issue #384). URL 검증과 iframe 정책은 같은 값 판정보다 먼저라
- * 여기까지 온 COMMAND_NOT_APPLICABLE은 URL이 적법하다는 뜻이다. 다만 이
- * 코드는 같은 값 외에 onBeforeChange 거절·세션 파괴·블록 종류 불일치에도
- * 나온다. 그래서 현재 블록을 읽어 요청과 같을 때만 변경 없음으로 본다.
+ * 여기까지 온 COMMAND_NOT_APPLICABLE은 URL이 적법하다는 뜻이다.
+ * 이 코드는 같은 값 외에 onBeforeChange 거절·세션 파괴·블록 종류 불일치에도
+ * 나온다. 그래서 현재 블록을 읽어 url(과 넘긴 name)이 요청과 같을 때만 변경
+ * 없음으로 본다. 블록 type은 비교하지 않는다. url·name이 이미 같으면 어느
+ * 종류로 적용하려 했든 문서는 요청한 상태다.
  */
 export const applyMediaUrl = (
   editor: Pick<EditorController, "commands" | "getBlock">,

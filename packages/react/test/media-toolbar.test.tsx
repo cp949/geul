@@ -1541,8 +1541,7 @@ describe("MediaToolbar Replace Embed 같은 URL 재저장(Issue #384, 실제 편
   const IFRAME_URL = "https://www.youtube.com/embed/x";
   const BLOCKED_IFRAME_URL = "https://vimeo.com/embed/x";
 
-  // jsdom은 NodeSelection을 만들지 못해 선택만 덮고, 문서와 명령은 실제
-  // 컨트롤러를 쓴다(selection-media-override.tsx).
+  // 선택 덮어쓰기 이유와 규칙은 selection-media-override.tsx가 소유한다.
   const mountReplaceToolbar = (
     block: {
       kind: "image" | "iframe";

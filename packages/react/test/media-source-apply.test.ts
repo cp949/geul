@@ -20,7 +20,7 @@ import {
   type EditorError,
   type MediaBlockKind,
 } from "@cp949/geul-core";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   applyMediaUrl,
@@ -322,12 +322,18 @@ describe("applyMediaUrl(실제 core 명령)", () => {
       name: url.slice(url.lastIndexOf("/") + 1),
     }) as Block;
 
+  // 단언이 실패해도 편집기가 다음 테스트로 새지 않게 afterEach가 destroy한다.
+  const created: EditorController[] = [];
+  afterEach(() => {
+    for (const editor of created.splice(0)) editor.destroy();
+  });
+
   const realEditor = (
     kind: MediaBlockKind,
     url: string = OLD_URL,
     onBeforeChange?: CreateEditorOptions["onBeforeChange"],
-  ) =>
-    createEditor({
+  ) => {
+    const editor = createEditor({
       ...(onBeforeChange === undefined ? {} : { onBeforeChange }),
       initialDocument: {
         formatVersion: 1,
@@ -343,6 +349,9 @@ describe("applyMediaUrl(실제 core 명령)", () => {
         ],
       },
     });
+    created.push(editor);
+    return editor;
+  };
 
   const blockOf = (editor: EditorController) => editor.getDocument().blocks[0];
 
@@ -392,7 +401,6 @@ describe("applyMediaUrl(실제 core 명령)", () => {
       );
       expect(result).toEqual({ ok: true, name: "old" });
       expect(editor.getDocument()).toEqual(before);
-      editor.destroy();
     },
   );
 
@@ -411,7 +419,6 @@ describe("applyMediaUrl(실제 core 명령)", () => {
         DEFAULT_DICTIONARY.status.iframeUrlRejected.notWhitelisted,
     });
     expect(editor.getDocument()).toEqual(before);
-    editor.destroy();
   });
 
   it("지원하지 않는 URL은 unsupportedMediaUrl 문구로 거절한다", () => {
@@ -425,7 +432,6 @@ describe("applyMediaUrl(실제 core 명령)", () => {
       ok: false,
       rejectedMessage: DEFAULT_DICTIONARY.status.unsupportedMediaUrl,
     });
-    editor.destroy();
   });
 
   it("image는 name을 넘겨도 거절된 URL이면 문서를 바꾸지 않는다", () => {
@@ -459,7 +465,6 @@ describe("applyMediaUrl(실제 core 명령)", () => {
         rejectedMessage: DEFAULT_DICTIONARY.status.unsupportedMediaUrl,
       });
       expect(editor.getDocument()).toEqual(before);
-      editor.destroy();
     },
   );
 });

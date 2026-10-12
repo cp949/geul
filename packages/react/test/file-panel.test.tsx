@@ -591,9 +591,8 @@ describe("FilePanel 파일 패널", () => {
 describe("FilePanel Embed 같은 URL 재저장(Issue #384, 실제 편집기)", () => {
   const URL_TO_SAVE = "https://e.com/a.png";
 
-  // jsdom은 NodeSelection을 만들지 못해 선택만 덮고, 문서와 명령은 실제
-  // 컨트롤러를 쓴다(selection-media-override.tsx). 선택은 계속 빈 블록이라
-  // 첫 저장 뒤에도 패널이 열린 채 남는다.
+  // 선택 덮어쓰기 이유와 규칙은 selection-media-override.tsx가 소유한다.
+  // 선택은 계속 빈 블록이라 첫 저장 뒤에도 패널이 열린 채 남는다.
   const mountEmptyImagePanel = (onBeforeChange?: () => boolean) => {
     const selection: SelectionBox = { current: null };
     const WithSelectionOverride = createSelectionOverride(selection);

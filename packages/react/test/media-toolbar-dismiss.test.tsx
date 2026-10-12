@@ -42,16 +42,19 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import { type FC, type ReactNode, useMemo } from "react";
+import type { FC } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EditorContent, MediaToolbar } from "../src/index.js";
 import { MediaHandleOverlays } from "../src/media-handle-overlays.js";
-import { EditorContext, useEditor } from "../src/use-editor.js";
 import { withProvider } from "./fake-editor-provider.js";
 import { mountBlockEditor } from "./mount-editor.js";
 import { queryMountedEditable } from "./query-mounted-editable.js";
 import { fireSelectionChange } from "./selection-events.js";
+import {
+  createSelectionOverride,
+  type SelectionBox,
+} from "./selection-media-override.js";
 
 // jsdom은 setPointerCapture를 구현하지 않는다. 핸들 pointerdown이 호출한다.
 if (typeof Element.prototype.setPointerCapture !== "function") {
@@ -729,22 +732,8 @@ describe("옛 훅과 같은 결과를 내는 MediaToolbar 회귀 가드(Issue #2
  * 열린다. 그래서 두 오버레이의 열림 순서를 테스트가 정할 수 있다.
  */
 const mountToolbarWithMediaHandles = () => {
-  const selection: { current: SelectionMediaBlock | null } = { current: null };
-  const WithSelectionOverride = ({ children }: { children: ReactNode }) => {
-    const editor = useEditor();
-    const overridden = useMemo<EditorController>(
-      () =>
-        Object.create(editor, {
-          getSelectionMediaBlock: { value: () => selection.current },
-        }) as EditorController,
-      [editor],
-    );
-    return (
-      <EditorContext.Provider value={overridden}>
-        {children}
-      </EditorContext.Provider>
-    );
-  };
+  const selection: SelectionBox = { current: null };
+  const WithSelectionOverride = createSelectionOverride(selection);
   const mounted = mountBlockEditor({
     initialBlocks: [
       { id: "image-1", type: "image" as const, url: MEDIA_URL },
