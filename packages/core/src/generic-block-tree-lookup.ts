@@ -13,13 +13,19 @@ import { commandNotApplicable } from "./production-editor-session.js";
 export const findBlockEntryInTree = (
   blocks: readonly DocumentBlock[],
   blockId: string,
-): { block: Block; siblings: readonly Block[]; index: number } | null => {
+): {
+  block: Block;
+  siblings: readonly Block[];
+  index: number;
+  depth: number;
+} | null => {
   const location = locateBlock(modelBlockTreeAdapter(blocks), blockId);
   if (location === null) return null;
   return {
     block: location.node as Block,
     siblings: location.siblings as readonly Block[],
     index: location.index,
+    depth: location.depth,
   };
 };
 
@@ -39,39 +45,6 @@ export const isDescendantOfBlock = (
     if (isDescendantOfBlock(child, candidateId)) return true;
   }
   return false;
-};
-
-// Issue #125 D3 — beforeBlockId가 현재 트리에서 위치할 모델 깊이(top-level=1,
-// model/schema.ts와 같은 정의)를 구한다. moveBlockBefore가 이동 결과 깊이를
-// mutation 전에 사전 판정하는 데 쓴다 — beforeBlockId 자신의 깊이가 곧 그
-// 형제 목록에 새로 끼워질 소스 블록의 깊이다.
-export const findBlockDepth = (
-  blocks: readonly DocumentBlock[],
-  targetId: string,
-  depth: number,
-): number | null => {
-  for (const block of blocks) {
-    if (block.id === targetId) return depth;
-    if ("children" in block && block.children !== undefined) {
-      const found = findBlockDepth(block.children, targetId, depth + 1);
-      if (found !== null) return found;
-    }
-  }
-  return null;
-};
-
-// Issue #125 D3 — block 자신의 하위 트리 높이(자식이 없으면 0). indent-commands.ts의
-// PM Node 버전 subtreeHeight와 같은 정의를 model Block 트리에서 재사용한다 —
-// moveBlockBefore는 PM transaction을 만들기 전에 판정해야 해서 PM Node가
-// 아직 없고, session.document.blocks(모델 트리)만으로 계산해야 한다.
-export const subtreeHeightOfBlock = (block: Block): number => {
-  if (!("children" in block) || block.children === undefined) return 0;
-  let max = 0;
-  for (const child of block.children) {
-    const height = 1 + subtreeHeightOfBlock(child);
-    if (height > max) max = height;
-  }
-  return max;
 };
 
 export type BlockSelectionRangeResolution = {

@@ -1,4 +1,4 @@
-import { MAX_NESTING_DEPTH, type Result } from "@cp949/geul-model";
+import type { Result } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import {
@@ -10,7 +10,12 @@ import { TextSelection, type Transaction } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
 import { pmBlockTreeAdapter } from "./block-tree-adapters.js";
-import { resolveSiblingRange } from "./block-tree-query.js";
+import {
+  fitsNestingLimit,
+  locateBlock,
+  resolveSiblingRange,
+  subtreeHeight,
+} from "./block-tree-query.js";
 import { deleteBlockRange } from "./delete-block-range.js";
 import { blockNotFound, commandNotApplicable } from "./command-results.js";
 import type { EditorError } from "./errors.js";
@@ -69,20 +74,6 @@ export const modelDepthAtPasteTarget = ($pos: ResolvedPos): number => {
   return isBlockLevelBoundary ? modelDepthAt($pos) : modelDepthAt($pos) - 1;
 };
 
-// target 노드 자신의 하위 트리 높이(자식이 없으면 0). blockContainer가
-// 아니면(table) 애초에 blockGroup 자식을 가질 스키마 경로가 없어 항상 0이다
-// (D19 — 표는 children 불가).
-const subtreeHeight = (node: ProseMirrorNode): number => {
-  if (node.type.name !== "blockContainer" || node.childCount < 2) return 0;
-  const group = node.child(1);
-  let max = 0;
-  group.forEach((child) => {
-    const height = 1 + subtreeHeight(child);
-    if (height > max) max = height;
-  });
-  return max;
-};
-
 type BlockNestingActionState = {
   canIndent: boolean;
   canOutdent: boolean;
@@ -96,32 +87,35 @@ const isNestableBlockContainer = (node: ProseMirrorNode): boolean =>
   node.childCount > 0 &&
   node.child(0).type.isInGroup("nestableBlockContent");
 
+// 바로 앞 형제가 자식 부모가 될 수 있는지 판정한다. 블록 하나와 범위 판정이
+// 같은 조건을 쓴다.
+const isIndentParentCandidate = (
+  previousSibling: ProseMirrorNode | undefined,
+): boolean =>
+  previousSibling !== undefined &&
+  isNestableBlockContainer(previousSibling) &&
+  typeof previousSibling.attrs.blockId === "string" &&
+  previousSibling.attrs.blockId.length > 0;
+
 // 명령 실행 없이 blockId의 중첩 action 가능 여부를 판정한다. 실제 명령과
 // EditorController 공개 query가 이 함수 하나를 공유해 Tab·버튼의 구조 조건이
-// 갈리지 않게 한다.
+// 갈리지 않게 한다. 깊이·높이 산술은 모델 트리 판정과 같은 규칙
+// (block-tree-query.ts)이다.
 export const getBlockNestingActionState = (
   doc: ProseMirrorNode,
   blockId: string,
 ): BlockNestingActionState => {
-  const targetPosition = findBlockPosition(doc, blockId);
-  if (targetPosition === null) {
-    return { canIndent: false, canOutdent: false };
-  }
-  const targetNode = doc.nodeAt(targetPosition);
-  if (targetNode === null) {
+  const adapter = pmBlockTreeAdapter(doc);
+  const target = locateBlock(adapter, blockId);
+  if (target === null) {
     return { canIndent: false, canOutdent: false };
   }
 
-  const $target = doc.resolve(targetPosition);
-  const previousSibling = $target.nodeBefore;
   const canIndent =
-    previousSibling !== null &&
-    isNestableBlockContainer(previousSibling) &&
-    typeof previousSibling.attrs.blockId === "string" &&
-    previousSibling.attrs.blockId.length > 0 &&
-    modelDepthAt($target) + 1 + subtreeHeight(targetNode) <= MAX_NESTING_DEPTH;
+    isIndentParentCandidate(target.siblings[target.index - 1]) &&
+    fitsNestingLimit(target.depth + 1, subtreeHeight(adapter, target.node));
 
-  return { canIndent, canOutdent: $target.depth > 0 };
+  return { canIndent, canOutdent: target.depth > 1 };
 };
 
 type TextSelectionBookmark = {
@@ -384,37 +378,24 @@ export const getBlockRangeNestingActionState = (
   fromBlockId: string,
   toBlockId: string,
 ): BlockNestingActionState => {
-  const rangeIds = resolveBlockRangeInDoc(doc, fromBlockId, toBlockId);
-  if (rangeIds === null || rangeIds.length === 0) {
-    return { canIndent: false, canOutdent: false };
+  const adapter = pmBlockTreeAdapter(doc);
+  const range = resolveSiblingRange(adapter, fromBlockId, toBlockId);
+  if (!range.ok) return { canIndent: false, canOutdent: false };
+  const { nodes, siblings, startIndex, depth } = range.value;
+  const [first] = nodes;
+  if (first === undefined) return { canIndent: false, canOutdent: false };
+  if (nodes.length === 1) {
+    return getBlockNestingActionState(doc, adapter.idOf(first) ?? fromBlockId);
   }
-  const firstId = rangeIds[0];
-  if (firstId === undefined) return { canIndent: false, canOutdent: false };
-  if (rangeIds.length === 1) return getBlockNestingActionState(doc, firstId);
 
-  const firstPosition = findBlockPosition(doc, firstId);
-  if (firstPosition === null) return { canIndent: false, canOutdent: false };
-  const $first = doc.resolve(firstPosition);
-
-  const previousSibling = $first.nodeBefore;
-  const previousSiblingNestable =
-    previousSibling !== null &&
-    isNestableBlockContainer(previousSibling) &&
-    typeof previousSibling.attrs.blockId === "string" &&
-    previousSibling.attrs.blockId.length > 0;
-
-  const resultDepth = modelDepthAt($first) + 1;
+  const resultDepth = depth + 1;
   const canIndent =
-    previousSiblingNestable &&
-    rangeIds.every((blockId) => {
-      const position = findBlockPosition(doc, blockId);
-      if (position === null) return false;
-      const node = doc.nodeAt(position);
-      if (node === null) return false;
-      return resultDepth + subtreeHeight(node) <= MAX_NESTING_DEPTH;
-    });
+    isIndentParentCandidate(siblings[startIndex - 1]) &&
+    nodes.every((node) =>
+      fitsNestingLimit(resultDepth, subtreeHeight(adapter, node)),
+    );
 
-  return { canIndent, canOutdent: $first.depth > 0 };
+  return { canIndent, canOutdent: depth > 1 };
 };
 
 type RangeSelectionBookmark = {

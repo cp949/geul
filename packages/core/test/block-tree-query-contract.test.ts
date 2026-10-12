@@ -7,14 +7,19 @@
  * (resolveBlockSelectionRange, resolveBlockRangeInDoc)도 같은 범위를 내는지
  * 함께 본다. 표 셀 안 블록은 모델 트리 밖이라 대상이 아니다.
  */
-import type { DocumentBlock } from "@cp949/geul-model";
+import { MAX_NESTING_DEPTH, type DocumentBlock } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
 import {
   modelBlockTreeAdapter,
   pmBlockTreeAdapter,
 } from "../src/block-tree-adapters.js";
-import { locateBlock, resolveSiblingRange } from "../src/block-tree-query.js";
+import {
+  fitsNestingLimit,
+  locateBlock,
+  resolveSiblingRange,
+  subtreeHeight,
+} from "../src/block-tree-query.js";
 import { resolveBlockRangeInDoc } from "../src/indent-commands.js";
 import { resolveBlockSelectionRange } from "../src/generic-block-tree-lookup.js";
 import {
@@ -170,6 +175,40 @@ describe("블록 트리 질의 계약(모델 어댑터 ↔ PM 어댑터)", () =>
     }
 
     expect(mismatches).toEqual([]);
+  });
+
+  it("모든 블록의 하위 트리 높이가 두 어댑터에서 같다", () => {
+    const { editor, tiptap } = mounted(mixedNestingDocument());
+    const model = modelBlockTreeAdapter(editor.getDocument().blocks);
+    const pm = pmBlockTreeAdapter(tiptap.state.doc);
+
+    const heights = (id: string) => {
+      const m = locateBlock(model, id);
+      const p = locateBlock(pm, id);
+      return {
+        model: m === null ? null : subtreeHeight(model, m.node),
+        pm: p === null ? null : subtreeHeight(pm, p.node),
+      };
+    };
+
+    const mismatches = knownIds.filter((id) => {
+      const { model: m, pm: p } = heights(id);
+      return m !== p;
+    });
+
+    expect(mismatches).toEqual([]);
+    expect(heights("a")).toEqual({ model: 2, pm: 2 });
+    expect(heights("a2")).toEqual({ model: 1, pm: 1 });
+    expect(heights("z")).toEqual({ model: 0, pm: 0 });
+    // 표·divider·codeBlock은 자식 블록을 가질 수 없다.
+    expect(heights("tbl")).toEqual({ model: 0, pm: 0 });
+  });
+
+  it("깊이 한도 비교는 결과 깊이와 높이의 합이 상한과 같으면 통과한다", () => {
+    expect(fitsNestingLimit(MAX_NESTING_DEPTH, 0)).toBe(true);
+    expect(fitsNestingLimit(MAX_NESTING_DEPTH - 1, 1)).toBe(true);
+    expect(fitsNestingLimit(MAX_NESTING_DEPTH, 1)).toBe(false);
+    expect(fitsNestingLimit(1, MAX_NESTING_DEPTH)).toBe(false);
   });
 
   it("블록 범위 래퍼 둘이 없는 id를 섞은 id 쌍 전수에서 같은 범위를 낸다", () => {

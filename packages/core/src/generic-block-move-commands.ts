@@ -1,8 +1,9 @@
-import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
 import type { Block, Result } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
 
 import { findBlockPosition } from "./block-position.js";
+import { modelBlockTreeAdapter } from "./block-tree-adapters.js";
+import { fitsNestingLimit, subtreeHeight } from "./block-tree-query.js";
 import { deleteBlockRange } from "./delete-block-range.js";
 import type { EditorError } from "./errors.js";
 import {
@@ -10,11 +11,9 @@ import {
   type ProductionEditorSession,
 } from "./production-editor-session.js";
 import {
-  findBlockDepth,
   findBlockEntryInTree,
   isDescendantOfBlock,
   resolveBlockSelectionRange,
-  subtreeHeightOfBlock,
 } from "./generic-block-tree-lookup.js";
 
 export const createGenericBlockMoveCommands = (
@@ -63,10 +62,8 @@ export const createGenericBlockMoveCommands = (
       }
       targetSiblings = target.siblings;
       targetIndex = target.index;
-      // target은 findBlockEntryInTree로 이미 찾았으니 findBlockDepth는 항상
-      // 값을 반환한다 — null 분기는 타입 좁히기용 방어일 뿐이다.
-      destinationDepth =
-        findBlockDepth(session.document.blocks, beforeBlockId, 1) ?? 1;
+      // target.depth가 곧 그 형제 목록에 새로 끼워질 소스 블록의 깊이다.
+      destinationDepth = target.depth;
     }
 
     if (
@@ -77,17 +74,26 @@ export const createGenericBlockMoveCommands = (
     }
 
     // D3: 이동 후 하위 트리 최심부가 MAX_NESTING_DEPTH(64)를 넘으면 mutation
-    // 전에 거절한다 — indentBlockCommand의 modelDepthAt+subtreeHeight 사전
-    // 판정과 같은 산술을 model 트리 위에서 재사용한다. 새 EditorError 코드를
-    // 만들지 않고(범위 밖: 공개 에러 union 변경) indentBlockCommand와 같이
-    // COMMAND_NOT_APPLICABLE로 수렴한다.
+    // 전에 거절한다 — 들여쓰기 사전 판정(indent-commands.ts)과 같은 규칙
+    // (block-tree-query.ts)을 model 트리 어댑터로 돌린다. 새 EditorError
+    // 코드를 만들지 않고(범위 밖: 공개 에러 union 변경) indentBlockCommand와
+    // 같이 COMMAND_NOT_APPLICABLE로 수렴한다.
     if (
-      destinationDepth + subtreeHeightOfBlock(source.block) >
-      MAX_NESTING_DEPTH
+      !fitsNestingLimit(
+        destinationDepth,
+        subtreeHeight(
+          modelBlockTreeAdapter(session.document.blocks),
+          source.block,
+        ),
+      )
     ) {
       return commandNotApplicable("moveBlockBefore");
     }
 
+    // 한계: 위 사전 판정은 모델 트리 기준이고, 아래 mutation은 PM doc에서 같은
+    // id를 다시 찾는다. 두 트리가 어긋나면(확인된 사례 없음) 사전 판정이 통과해도
+    // 아래에서 false로 물러난다. 규칙은 block-tree-query.ts 한 벌이라 어긋남은
+    // 어댑터 구현 차이에서만 생기고, block-tree-query-contract.test.ts가 지킨다.
     return session.runDocumentCommand("moveBlockBefore", "local", () => {
       const sourcePosition = findBlockPosition(
         session.editor.state.doc,

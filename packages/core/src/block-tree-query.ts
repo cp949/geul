@@ -5,7 +5,10 @@
 // 받아 두 트리에 같은 코드를 돌린다. 어댑터 구현은 block-tree-adapters.ts다.
 //
 // 이 파일은 session·PM·model 타입 어느 쪽에도 의존하지 않는 순수 규칙이다.
-// 실패 이유만 돌려주고, 에러 코드 변환은 호출하는 래퍼가 맡는다.
+// 모델 패키지에서는 깊이 상한 상수만 읽는다. 실패 이유만 돌려주고, 에러 코드
+// 변환은 호출하는 래퍼가 맡는다.
+
+import { MAX_NESTING_DEPTH } from "@cp949/geul-model";
 
 export type BlockTreeAdapter<N> = {
   // 최상위 형제 목록. 모델은 Document.blocks, PM은 doc의 직계 자식이다.
@@ -99,3 +102,24 @@ export const resolveSiblingRange = <N>(
     },
   };
 };
+
+// node 자신의 하위 트리 높이다. 자식이 없으면 0이다.
+export const subtreeHeight = <N>(
+  adapter: BlockTreeAdapter<N>,
+  node: N,
+): number => {
+  let max = 0;
+  for (const child of adapter.childrenOf(node)) {
+    const height = 1 + subtreeHeight(adapter, child);
+    if (height > max) max = height;
+  }
+  return max;
+};
+
+// 블록이 resultDepth(최상위 = 1)에 놓일 때 가장 깊은 후손이
+// MAX_NESTING_DEPTH를 넘지 않는지 판정한다. 들여쓰기와 이동의 사전 판정이
+// 함께 쓴다.
+export const fitsNestingLimit = (
+  resultDepth: number,
+  height: number,
+): boolean => resultDepth + height <= MAX_NESTING_DEPTH;

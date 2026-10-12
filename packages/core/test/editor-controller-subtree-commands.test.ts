@@ -189,6 +189,28 @@ describe("moveBlockBefore 하위 트리 계약(Issue #125)", () => {
     });
   });
 
+  it("이동 후 최심부가 MAX_NESTING_DEPTH(64)를 1 넘으면 거절한다(D3 경계)", () => {
+    // 목적지(g-1..g-61)는 깊이 61, 소스(h-1..h-5)는 subtreeHeight=4 — 이동 결과
+    // 최심부는 61+4=65로 상한을 정확히 1 넘는다. 위 성공 경계와 짝이다.
+    const initialDocument: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        buildChain(idsFor("g", 61)),
+        buildChain(idsFor("h", 5)),
+        tailParagraphBlock,
+      ],
+    };
+    const editor = createEditor({ initialDocument });
+    const before = editor.getDocument();
+
+    expect(editor.commands.moveBlockBefore("h-1", "g-61")).toEqual({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", command: "moveBlockBefore" },
+    });
+    expect(editor.getDocument()).toEqual(before);
+  });
+
   it("다른 부모의 children 목록 임의 위치로 하위 트리를 동반 이동한다(D1a) — undo 1회로 복원된다", () => {
     const initialDocument: Document = {
       formatVersion: 1,

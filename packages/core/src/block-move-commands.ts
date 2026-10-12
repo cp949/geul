@@ -1,9 +1,11 @@
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
-import { Fragment } from "@tiptap/pm/model";
+import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
+import { pmBlockTreeAdapter } from "./block-tree-adapters.js";
+import { resolveSiblingRange } from "./block-tree-query.js";
 
 export type MoveDirection = "up" | "down";
 
@@ -75,11 +77,11 @@ export const moveBlockAdjacent = (
 };
 
 // moveSelectedBlocksBefore(generic-block-commands.ts)도 session bound
-// (model tree resolveBlockSelectionRange·findBlockInTree)라 재사용하지
-// 않는다 — 위 moveBlockAdjacent와 같은 이유(RD-004.md "결정" (b)). 그
-// 커맨드의 계약(같은 형제 배열이 아니면 거절, startIndex/endIndex는
-// from·to 인덱스의 min/max)을 PM ResolvedPos.index()로 재현한다. 범위는
-// blockId를 안 바꾸므로(moveSelectedBlocksBefore 자신의 계약과 동일)
+// (model tree 어댑터)라 재사용하지 않는다 — 위 moveBlockAdjacent와 같은
+// 이유(RD-004.md "결정" (b)). 범위 규칙(같은 형제 배열이 아니면 거절,
+// startIndex/endIndex는 from·to 인덱스의 min/max)은 그 커맨드와 같은
+// resolveSiblingRange(block-tree-query.ts)를 PM doc 어댑터로 돌려 얻는다.
+// 범위는 blockId를 안 바꾸므로(moveSelectedBlocksBefore 자신의 계약과 동일)
 // session.setBlockSelection을 다시 부를 필요가 없다 — 이 함수는 PM
 // selection도 건드리지 않는다(block 선택은 PM Selection과 독립된 별도
 // 상태라 여기서 다룰 것이 없다).
@@ -90,33 +92,29 @@ export const moveBlockRangeAdjacent = (
   direction: MoveDirection,
 ): boolean => {
   const { state } = editor;
-  const fromStart = findBlockPosition(state.doc, fromBlockId);
-  const toStart = findBlockPosition(state.doc, toBlockId);
-  if (fromStart === null || toStart === null) return false;
-
-  const $from = state.doc.resolve(fromStart);
-  const $to = state.doc.resolve(toStart);
-  if ($from.parent !== $to.parent) return false;
-  const parent = $from.parent;
-
-  const fromIndex = $from.index();
-  const toIndex = $to.index();
-  const startIndex = Math.min(fromIndex, toIndex);
-  const endIndex = Math.max(fromIndex, toIndex);
+  const adapter = pmBlockTreeAdapter(state.doc);
+  const range = resolveSiblingRange(adapter, fromBlockId, toBlockId);
+  if (!range.ok) return false;
+  const { siblings, startIndex, endIndex, nodes } = range.value;
 
   const siblingIndex = direction === "up" ? startIndex - 1 : endIndex + 1;
-  if (siblingIndex < 0 || siblingIndex >= parent.childCount) return false;
+  if (siblingIndex < 0 || siblingIndex >= siblings.length) return false;
 
-  const rangeStart = fromIndex <= toIndex ? fromStart : toStart;
-  const lastNodeStart = fromIndex >= toIndex ? fromStart : toStart;
-  const lastNode = state.doc.nodeAt(lastNodeStart);
-  if (lastNode === null) return false;
+  const firstNode = nodes[0];
+  const lastNode = nodes[nodes.length - 1];
+  if (firstNode === undefined || lastNode === undefined) return false;
+  const firstId = adapter.idOf(firstNode);
+  const lastId = adapter.idOf(lastNode);
+  if (firstId === undefined || lastId === undefined) return false;
+  const rangeStart = findBlockPosition(state.doc, firstId);
+  const lastNodeStart = findBlockPosition(state.doc, lastId);
+  if (rangeStart === null || lastNodeStart === null) return false;
   const rangeEnd = lastNodeStart + lastNode.nodeSize;
   // moveSelectedBlocksBefore의 sourceSlice와 같은 패턴 — 범위 경계가 항상
   // 형제 노드 경계와 정확히 맞아 openStart/openEnd 0인 완전한 Fragment다.
   const rangeFragment = state.doc.slice(rangeStart, rangeEnd).content;
 
-  const siblingNode = parent.child(siblingIndex);
+  const siblingNode = siblings[siblingIndex] as ProseMirrorNode;
   const replaceFrom =
     direction === "up" ? rangeStart - siblingNode.nodeSize : rangeStart;
   const replaceTo =
