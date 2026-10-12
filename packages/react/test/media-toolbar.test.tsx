@@ -127,6 +127,7 @@ const fakeController = ({
   unmount: vi.fn(),
   destroy: vi.fn(),
   getDocument: vi.fn(),
+  getBlock: vi.fn(() => undefined),
   getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
   isUploadEnabled: vi.fn(isUploadEnabled),
   getMediaUploadState: vi.fn(getMediaUploadState),
@@ -1638,6 +1639,63 @@ describe("MediaToolbar Replace Embed 같은 URL 재저장(Issue #384, 실제 편
     ).not.toBeNull();
     expect(editor.getDocument().revision).toBe(before.revision);
     expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("image 블록에 같은 URL을 저장해도 사용자가 정한 name을 덮어쓰지 않는다(Issue #388)", () => {
+    const { editor } = mountReplaceToolbar({
+      kind: "image",
+      url: IMAGE_URL,
+      name: "내가 바꾼 이름",
+    });
+    const before = editor.getDocument();
+
+    saveEmbedUrl("Image URL", IMAGE_URL);
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "More media options" }),
+    ).not.toBeNull();
+    expect(editor.getDocument().blocks[0]).toMatchObject({
+      name: "내가 바꾼 이름",
+    });
+    expect(editor.getDocument().revision).toBe(before.revision);
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("iframe 블록에 정책이 허용한 같은 URL을 저장해도 사용자가 정한 name을 덮어쓰지 않는다(Issue #388)", () => {
+    const { editor } = mountReplaceToolbar({
+      kind: "iframe",
+      url: IFRAME_URL,
+      name: "내가 바꾼 이름",
+    });
+    const before = editor.getDocument();
+
+    saveEmbedUrl("Iframe URL", IFRAME_URL);
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "More media options" }),
+    ).not.toBeNull();
+    expect(editor.getDocument().blocks[0]).toMatchObject({
+      name: "내가 바꾼 이름",
+    });
+    expect(editor.getDocument().revision).toBe(before.revision);
+    expect(editor.getDocument()).toEqual(before);
+  });
+
+  it("다른 URL을 저장하면 사용자가 정한 name이 새 URL 끝 segment로 바뀐다(#374 특성화)", () => {
+    const { editor } = mountReplaceToolbar({
+      kind: "image",
+      url: IMAGE_URL,
+      name: "내가 바꾼 이름",
+    });
+
+    saveEmbedUrl("Image URL", "https://e.com/b.png");
+
+    expect(editor.getDocument().blocks[0]).toMatchObject({
+      url: "https://e.com/b.png",
+      name: "b.png",
+    });
   });
 
   it("정책이 막는 iframe URL은 현재 값과 같아도 거절 문구를 띄우고 replacing에 머문다", () => {

@@ -185,7 +185,7 @@ describe("applyMediaUrl", () => {
       },
     );
 
-    it("name 추출에 실패해 name을 넘기지 않았으면 url만 같아도 ok를 돌려준다", () => {
+    it("name 추출에 실패하는 URL이어도 url이 같으면 현재 블록 name을 돌려준다", () => {
       const draft = "https://example.com/";
       const { editor } = fakeEditor(notApplicable("image"), {
         id: "b1",
@@ -198,7 +198,7 @@ describe("applyMediaUrl", () => {
         { blockId: "b1", kind: "image", draft },
         DEFAULT_DICTIONARY,
       );
-      expect(result).toEqual({ ok: true, name: undefined });
+      expect(result).toEqual({ ok: true, name: "custom" });
     });
 
     it.each(KINDS)(
@@ -233,7 +233,7 @@ describe("applyMediaUrl", () => {
     );
 
     it.each(KINDS)(
-      "%s의 현재 블록 name이 요청 name과 다르면 거절 문구를 돌려준다",
+      "%s의 현재 블록 url이 같고 name이 URL 끝 segment와 달라도 ok이고 현재 name을 돌려준다(Issue #388)",
       (kind) => {
         const { editor } = fakeEditor(notApplicable(kind), {
           id: "b1",
@@ -246,7 +246,7 @@ describe("applyMediaUrl", () => {
           { blockId: "b1", kind, draft: DRAFT },
           DEFAULT_DICTIONARY,
         );
-        expect(result).toEqual(unsupported);
+        expect(result).toEqual({ ok: true, name: "custom" });
       },
     );
 
@@ -264,8 +264,8 @@ describe("applyMediaUrl", () => {
       expect(result).toEqual(unsupported);
     });
 
-    it("COMMAND_NOT_APPLICABLE가 아닌 거절에서는 getBlock을 읽지 않는다", () => {
-      const { editor, getBlock } = fakeEditor(
+    it("COMMAND_NOT_APPLICABLE가 아닌 거절은 같은 url이어도 거절 문구를 돌려준다", () => {
+      const { editor } = fakeEditor(
         { code: "BLOCK_NOT_FOUND", blockId: "b1" },
         { id: "b1", type: "image", url: DRAFT, name: "pic.png" },
       );
@@ -275,7 +275,116 @@ describe("applyMediaUrl", () => {
         DEFAULT_DICTIONARY,
       );
       expect(result).toEqual(unsupported);
-      expect(getBlock).not.toHaveBeenCalled();
+    });
+
+    it("호출 전에 현재 블록을 읽는다(같은 url이면 name을 넘기지 않기 위해, Issue #388)", () => {
+      const { editor, getBlock, setMediaBlockUrl } = fakeEditor(undefined, {
+        id: "b1",
+        type: "image",
+        url: DRAFT,
+        name: "custom",
+      });
+      applyMediaUrl(
+        editor,
+        { blockId: "b1", kind: "image", draft: DRAFT },
+        DEFAULT_DICTIONARY,
+      );
+      expect(getBlock).toHaveBeenCalledWith("b1");
+      expect(getBlock.mock.invocationCallOrder[0]).toBeLessThan(
+        setMediaBlockUrl.mock.invocationCallOrder[0] ?? 0,
+      );
+    });
+  });
+
+  describe("현재 블록 url과 같은 URL은 name을 넘기지 않는다(Issue #388)", () => {
+    const DRAFT = "https://example.com/a/pic.png";
+    it.each(KINDS)(
+      "%s는 name 인자 undefined로 호출하고 현재 블록 name을 돌려준다",
+      (kind) => {
+        const { editor, setIframeSrc, setMediaBlockUrl } = fakeEditor(
+          undefined,
+          { id: "b1", type: kind, url: DRAFT, name: "내가 바꾼 이름" },
+        );
+        const result = applyMediaUrl(
+          editor,
+          { blockId: "b1", kind, draft: DRAFT },
+          DEFAULT_DICTIONARY,
+        );
+        expect(result).toEqual({ ok: true, name: "내가 바꾼 이름" });
+        expect(
+          (kind === "iframe" ? setIframeSrc : setMediaBlockUrl).mock.calls,
+        ).toEqual([["b1", DRAFT, undefined]]);
+      },
+    );
+
+    it("현재 name이 빈 문자열이면 빈 문자열을 돌려주고 name을 넘기지 않는다", () => {
+      const { editor, setMediaBlockUrl } = fakeEditor(undefined, {
+        id: "b1",
+        type: "image",
+        url: DRAFT,
+        name: "",
+      });
+      const result = applyMediaUrl(
+        editor,
+        { blockId: "b1", kind: "image", draft: DRAFT },
+        DEFAULT_DICTIONARY,
+      );
+      expect(result).toEqual({ ok: true, name: "" });
+      expect(setMediaBlockUrl.mock.calls).toEqual([["b1", DRAFT, undefined]]);
+    });
+
+    it("현재 name이 없으면 name을 undefined로 돌려주고 넘기지 않는다", () => {
+      const { editor, setMediaBlockUrl } = fakeEditor(undefined, {
+        id: "b1",
+        type: "image",
+        url: DRAFT,
+      });
+      const result = applyMediaUrl(
+        editor,
+        { blockId: "b1", kind: "image", draft: DRAFT },
+        DEFAULT_DICTIONARY,
+      );
+      expect(result).toEqual({ ok: true, name: undefined });
+      expect(setMediaBlockUrl.mock.calls).toEqual([["b1", DRAFT, undefined]]);
+    });
+
+    it.each(KINDS)(
+      "%s의 현재 블록 url이 다르면 새 URL 끝 segment를 name으로 넘긴다(기존 동작)",
+      (kind) => {
+        const { editor, setIframeSrc, setMediaBlockUrl } = fakeEditor(
+          undefined,
+          {
+            id: "b1",
+            type: kind,
+            url: "https://example.com/a/old.png",
+            name: "내가 바꾼 이름",
+          },
+        );
+        const result = applyMediaUrl(
+          editor,
+          { blockId: "b1", kind, draft: DRAFT },
+          DEFAULT_DICTIONARY,
+        );
+        expect(result).toEqual({ ok: true, name: "pic.png" });
+        expect(
+          (kind === "iframe" ? setIframeSrc : setMediaBlockUrl).mock.calls,
+        ).toEqual([["b1", DRAFT, "pic.png"]]);
+      },
+    );
+
+    it("url 비교는 정확 일치다(끝 슬래시가 다르면 다른 URL이다)", () => {
+      const { editor, setMediaBlockUrl } = fakeEditor(undefined, {
+        id: "b1",
+        type: "image",
+        url: `${DRAFT}/`,
+        name: "내가 바꾼 이름",
+      });
+      applyMediaUrl(
+        editor,
+        { blockId: "b1", kind: "image", draft: DRAFT },
+        DEFAULT_DICTIONARY,
+      );
+      expect(setMediaBlockUrl.mock.calls).toEqual([["b1", DRAFT, "pic.png"]]);
     });
   });
 
@@ -314,13 +423,11 @@ describe("applyMediaUrl", () => {
 describe("applyMediaUrl(실제 core 명령)", () => {
   const OLD_URL = "https://www.youtube.com/embed/old";
 
-  const mediaBlock = (kind: MediaBlockKind, url: string): Block =>
-    ({
-      id: "m1",
-      type: kind,
-      url,
-      name: url.slice(url.lastIndexOf("/") + 1),
-    }) as Block;
+  const mediaBlock = (
+    kind: MediaBlockKind,
+    url: string,
+    name: string = url.slice(url.lastIndexOf("/") + 1),
+  ): Block => ({ id: "m1", type: kind, url, name }) as Block;
 
   // 단언이 실패해도 편집기가 다음 테스트로 새지 않게 afterEach가 destroy한다.
   const created: EditorController[] = [];
@@ -332,13 +439,14 @@ describe("applyMediaUrl(실제 core 명령)", () => {
     kind: MediaBlockKind,
     url: string = OLD_URL,
     onBeforeChange?: CreateEditorOptions["onBeforeChange"],
+    name?: string,
   ) => {
     const editor = createEditor({
       ...(onBeforeChange === undefined ? {} : { onBeforeChange }),
       initialDocument: {
         formatVersion: 1,
         revision: 0,
-        blocks: [mediaBlock(kind, url)],
+        blocks: [mediaBlock(kind, url, name)],
       },
       iframeEmbed: {
         providers: [
@@ -401,6 +509,59 @@ describe("applyMediaUrl(실제 core 명령)", () => {
       );
       expect(result).toEqual({ ok: true, name: "old" });
       expect(editor.getDocument()).toEqual(before);
+    },
+  );
+
+  it.each(KINDS)(
+    "%s에 사용자 name이 있는 블록의 같은 URL 재적용은 name을 지키고 문서를 바꾸지 않는다(Issue #388)",
+    (kind) => {
+      const editor = realEditor(kind, OLD_URL, undefined, "내가 바꾼 이름");
+      const before = editor.getDocument();
+      const result = applyMediaUrl(
+        editor,
+        { blockId: "m1", kind, draft: OLD_URL },
+        DEFAULT_DICTIONARY,
+      );
+      expect(result).toEqual({ ok: true, name: "내가 바꾼 이름" });
+      expect(editor.getDocument().revision).toBe(before.revision);
+      expect(editor.getDocument()).toEqual(before);
+    },
+  );
+
+  it.each(KINDS)(
+    "%s의 name이 빈 문자열인 블록의 같은 URL 재적용은 빈 문자열로 남는다(Issue #388)",
+    (kind) => {
+      const editor = realEditor(kind, OLD_URL, undefined, "");
+      const before = editor.getDocument();
+      const result = applyMediaUrl(
+        editor,
+        { blockId: "m1", kind, draft: OLD_URL },
+        DEFAULT_DICTIONARY,
+      );
+      expect(result).toEqual({ ok: true, name: "" });
+      expect(blockOf(editor)).toMatchObject({ name: "" });
+      expect(editor.getDocument()).toEqual(before);
+    },
+  );
+
+  it.each(KINDS)(
+    "%s에 사용자 name이 있어도 다른 URL을 적용하면 name이 새 URL 끝 segment로 바뀐다(#374 특성화)",
+    (kind) => {
+      const editor = realEditor(kind, OLD_URL, undefined, "내가 바꾼 이름");
+      const result = applyMediaUrl(
+        editor,
+        {
+          blockId: "m1",
+          kind,
+          draft: "https://www.youtube.com/embed/new",
+        },
+        DEFAULT_DICTIONARY,
+      );
+      expect(result).toEqual({ ok: true, name: "new" });
+      expect(blockOf(editor)).toMatchObject({
+        url: "https://www.youtube.com/embed/new",
+        name: "new",
+      });
     },
   );
 

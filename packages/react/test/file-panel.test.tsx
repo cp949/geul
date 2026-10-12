@@ -16,6 +16,7 @@ import {
   type MediaBlockKind,
 } from "@cp949/geul-core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -103,6 +104,7 @@ const fakeController = ({
   unmount: vi.fn(),
   destroy: vi.fn(),
   getDocument: vi.fn(),
+  getBlock: vi.fn(() => undefined),
   getSelectionMediaBlock: vi.fn(getSelectionMediaBlock),
   isUploadEnabled: vi.fn(isUploadEnabled),
   getMediaUploadState: vi.fn(getMediaUploadState),
@@ -637,6 +639,29 @@ describe("FilePanel Embed 같은 URL 재저장(Issue #384, 실제 편집기)", (
     expect(screen.getByText("Name: a.png")).not.toBeNull();
     expect(editor.getDocument().revision).toBe(applied.revision);
     expect(editor.getDocument()).toEqual(applied);
+  });
+
+  it("사용자가 name을 바꾼 뒤 같은 URL을 다시 저장해도 name이 유지되고 revision이 그대로다(Issue #388)", () => {
+    const { editor } = mountEmptyImagePanel();
+    fireEvent.change(screen.getByRole("textbox", { name: "Image URL" }), {
+      target: { value: URL_TO_SAVE },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+    act(() => {
+      editor.commands.setMediaBlockName("m1", "내가 바꾼 이름");
+    });
+    const renamed = editor.getDocument();
+    expect(renamed.blocks[0]).toMatchObject({ name: "내가 바꾼 이름" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Name: 내가 바꾼 이름")).not.toBeNull();
+    expect(editor.getDocument().blocks[0]).toMatchObject({
+      name: "내가 바꾼 이름",
+    });
+    expect(editor.getDocument().revision).toBe(renamed.revision);
+    expect(editor.getDocument()).toEqual(renamed);
   });
 
   it("onBeforeChange가 거절한 URL 저장은 경고를 띄우고 이름을 표시하지 않는다(F1)", () => {

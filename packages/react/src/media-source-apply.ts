@@ -24,36 +24,32 @@ export const canReplaceMedia = (
   kind: MediaBlockKind,
 ): boolean => editor.isUploadEnabled() || kind === "iframe";
 
-/** 현재 블록이 요청한 url과 같고, name을 넘겼다면 name도 같은지 본다. */
-const isAlreadyApplied = (
-  block: ReturnType<EditorController["getBlock"]>,
-  url: string,
-  name: string | undefined,
-): boolean => {
-  if (block === undefined || !("url" in block) || block.url !== url) {
-    return false;
-  }
-  return name === undefined || ("name" in block && block.name === name);
-};
-
 export type ApplyMediaUrlResult =
   | { ok: true; name: string | undefined }
   | { ok: false; rejectedMessage: string };
 
 /**
- * Embed URL을 블록에 적용한다. name 초깃값은 URL의 마지막 path segment에서
- * 추출해 url과 같은 transaction·같은 undo 단위로 넘긴다(Issue #374).
- * 추출 실패는 name을 넘기지 않는다(undefined). iframe은 setMediaBlockUrl이
- * 아니라 setIframeSrc로 보낸다. setMediaBlockUrl은 iframe 화이트리스트·
- * private network 정책을 몰라 iframe을 거절한다(core 보안 경계).
+ * Embed URL을 블록에 적용한다. URL이 현재 블록 url과 다르면 name 초깃값을
+ * URL의 마지막 path segment에서 추출해 url과 같은 transaction·같은 undo
+ * 단위로 넘긴다(Issue #374). 추출 실패는 name을 넘기지 않는다(undefined).
+ * iframe은 setMediaBlockUrl이 아니라 setIframeSrc로 보낸다. setMediaBlockUrl은
+ * iframe 화이트리스트·private network 정책을 몰라 iframe을 거절한다(core
+ * 보안 경계).
+ *
+ * URL이 현재 블록 url과 정확히 같으면 name을 넘기지 않는다(Issue #388).
+ * core는 url이 같아도 name을 넘기면 덮어쓰므로, 같은 URL 재저장이 사용자가
+ * 정한 name을 URL 끝 segment로 되돌리지 않게 한다. 이때도 core를 호출한다.
+ * URL 검증과 iframe 정책이 같은 값 판정보다 먼저라 정책이 막게 된 URL은
+ * 계속 거절된다. 반환 name은 현재 블록 name이다. URL 비교는 정확 일치다
+ * (정규화하지 않는다. core의 같은 값 판정과 맞춘다).
  *
  * core는 현재 값과 같은 적용을 COMMAND_NOT_APPLICABLE로 거절한다(#375·#376).
  * 이 표면에서 그 거절은 "변경 없음"이라 ok로 돌려주고 거절 문구를 띄우지
  * 않는다(Issue #384). URL 검증과 iframe 정책은 같은 값 판정보다 먼저라
  * 여기까지 온 COMMAND_NOT_APPLICABLE은 URL이 적법하다는 뜻이다.
  * 이 코드는 같은 값 외에 onBeforeChange 거절·세션 파괴·블록 종류 불일치에도
- * 나온다. 그래서 현재 블록을 읽어 url(과 넘긴 name)이 요청과 같을 때만 변경
- * 없음으로 본다. 블록 type은 비교하지 않는다. url·name이 이미 같으면 어느
+ * 나온다. 그래서 호출 전에 읽어 둔 현재 블록 url이 요청과 같을 때만 변경
+ * 없음으로 본다. 블록 type은 비교하지 않는다. url이 이미 같으면 어느
  * 종류로 적용하려 했든 문서는 요청한 상태다.
  */
 export const applyMediaUrl = (
@@ -62,17 +58,22 @@ export const applyMediaUrl = (
   dictionary: Dictionary,
 ): ApplyMediaUrlResult => {
   const { blockId, kind, draft } = target;
-  const name = extractNameFromUrl(draft) ?? undefined;
+  const current = editor.getBlock(blockId);
+  const sameUrl =
+    current !== undefined && "url" in current && current.url === draft;
+  const name = sameUrl ? undefined : (extractNameFromUrl(draft) ?? undefined);
+  const appliedName = sameUrl
+    ? "name" in current
+      ? current.name
+      : undefined
+    : name;
   const result =
     kind === "iframe"
       ? editor.commands.setIframeSrc(blockId, draft, name)
       : editor.commands.setMediaBlockUrl(blockId, draft, name);
   if (!result.ok) {
-    if (
-      result.error.code === "COMMAND_NOT_APPLICABLE" &&
-      isAlreadyApplied(editor.getBlock(blockId), draft, name)
-    ) {
-      return { ok: true, name };
+    if (result.error.code === "COMMAND_NOT_APPLICABLE" && sameUrl) {
+      return { ok: true, name: appliedName };
     }
     return {
       ok: false,
@@ -83,5 +84,5 @@ export const applyMediaUrl = (
       ),
     };
   }
-  return { ok: true, name };
+  return { ok: true, name: appliedName };
 };

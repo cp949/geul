@@ -123,7 +123,7 @@ export type UploadFile = (
 ### 5.1 명령(신규)
 
 - `insertMediaBlock(afterBlockId, kind: "file" | "image" | "video" | "audio")`
-- `setMediaBlockUrl(blockId, url, name?)` — URL 삽입(`MED-001`)과 업로드 성공 후 내부 세팅 공용. `name`을 지정하면 url과 같은 transaction·같은 undo 단위로 적용한다(Issue #374). 생략하면 name은 그대로다. 현재 값과 url·name이 모두 같은 재적용은 변경 없음이다(core는 `COMMAND_NOT_APPLICABLE`로 거절한다). react UI 표면(MediaToolbar Replace, FilePanel Embed)은 현재 블록이 요청과 같을 때만 이를 성공으로 보고 거절 문구를 띄우지 않는다. 호스트(`onBeforeChange`)가 거절한 저장은 거절 문구를 유지한다(Issue #384). url이 같고 name만 다르면 core가 name을 덮어쓴다
+- `setMediaBlockUrl(blockId, url, name?)` — URL 삽입(`MED-001`)과 업로드 성공 후 내부 세팅 공용. `name`을 지정하면 url과 같은 transaction·같은 undo 단위로 적용한다(Issue #374). 생략하면 name은 그대로다. 현재 값과 url·name이 모두 같은 재적용은 변경 없음이다(core는 `COMMAND_NOT_APPLICABLE`로 거절한다). react UI 표면(MediaToolbar Replace, FilePanel Embed)은 현재 블록 url이 요청 url과 같을 때만 이를 성공으로 보고 거절 문구를 띄우지 않는다. 호스트(`onBeforeChange`)가 거절한 저장은 거절 문구를 유지한다(Issue #384). url이 같고 name만 다르면 core가 name을 덮어쓴다. react UI 표면은 URL이 현재 블록 url과 정확히 같으면 `name`을 넘기지 않아, 같은 URL 재저장이 사용자가 정한 name을 덮어쓰지 않는다(Issue #388). URL이 바뀔 때만 URL 끝 segment에서 name 초깃값을 뽑는다
 - `uploadMediaFile(blockId, file)` — 콜백 호출 + pending 상태 관리 + 성공 시 `setMediaBlockUrl` 내부 호출(소비자에게 2단계로 노출하지 않음)
 - `cancelMediaUpload(blockId)` — 등록된 `AbortSignal`을 abort
 - `replaceMediaBlockFile(blockId, file)` — §4.2 유지 정책을 따르는 교체(`MED-005`)
