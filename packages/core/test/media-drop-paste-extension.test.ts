@@ -33,6 +33,7 @@ import {
 import {
   codeBlockBlock,
   documentOf,
+  localPreviewUrlOf,
   mediaBlock,
   mountTiptapEditor,
   oneCellTableBlock,
@@ -686,18 +687,12 @@ describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-
     const { editable, tiptap } = mountTiptapEditor(editor);
     editable.focus();
     placeCaretInBlock(tiptap, "p-1");
-    const previewUrlOf = (blockId: string) => {
-      const pos = findBlockPosition(tiptap.state.doc, blockId);
-      return pos === null
-        ? null
-        : (tiptap.state.doc.nodeAt(pos)?.attrs.localPreviewUrl as string);
-    };
 
     withUnhandledErrorTracking((errors) => {
       pasteFiles(editable, [fileOf("photo.png", "image/png")]);
       expect(errors).toEqual([]);
     });
-    const pastedUrl = previewUrlOf("id-1");
+    const pastedUrl = localPreviewUrlOf(tiptap, "id-1");
     expect(pastedUrl).toEqual(expect.stringMatching(/^blob:/));
 
     expect(editor.commands.undo().ok).toBe(true);
@@ -705,7 +700,7 @@ describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-
     expect(localPreviewCleared).toEqual([]);
 
     expect(editor.commands.redo().ok).toBe(true);
-    expect(previewUrlOf("id-1")).toBe(pastedUrl);
+    expect(localPreviewUrlOf(tiptap, "id-1")).toBe(pastedUrl);
     expect(localPreviewCleared).toEqual([]);
   });
 });

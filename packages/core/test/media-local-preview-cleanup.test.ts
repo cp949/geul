@@ -4,8 +4,9 @@
  * DELTA-02, 상세 계획 `_works/roadmap/result/RD-002-DELTA-02.md`)를
  * 고정한다. 판정 방식은 `prosemirror-history` 공개 API(`undo`/`redo`/
  * `undoDepth`/`redoDepth`)만으로 실제 히스토리를 시뮬레이션한다(비공개
- * 상수 `DEPTH_OVERFLOW`에 의존하지 않음). 정리 신호는 기존 `onLocalPreviewCleanup` 채널을 재사용한다(url
- * 확정 시 정리와 동일 채널 — RD-002.md "결정"). Issue #169(roadmap RD-001
+ * 상수 `DEPTH_OVERFLOW`에 의존하지 않음). 정리 신호는 기존
+ * `onLocalPreviewCleanup` 채널을 재사용한다(url 확정 시 정리와 동일 채널 —
+ * RD-002.md "결정"). Issue #169(roadmap RD-001
  * DELTA-01, 상세 계획 `_works/roadmap/result/RD-001-DELTA-01.md`)부터
  * `replaceDocument()`가 구 Editor를 폐기하기 직전 남은 로컬 프리뷰도 같은
  * 채널로 통지한다 — `destroy()`(세션 영구 종료)와 동일한 패턴을 네 번째
@@ -22,6 +23,7 @@ import { createEditor, type CreateEditorOptions } from "../src/index.js";
 import { createLocalPreviewAttrs } from "../src/media-local-preview.js";
 import {
   documentOf,
+  localPreviewUrlOf,
   mediaBlock,
   mountTiptapEditor,
   okResult,
@@ -384,13 +386,6 @@ describe("로컬 프리뷰 replaceDocument() 교체 시 정리(Issue #169 roadma
 });
 
 describe("로컬 프리뷰 redo 도달 가능성(Issue #380)", () => {
-  /** blockId 노드의 로컬 프리뷰 URL을 읽는다. 블록이 없으면 null이다. */
-  const previewUrlOf = (tiptap: TiptapEditor, blockId: string) => {
-    const position = findBlockPosition(tiptap.state.doc, blockId);
-    const node = position === null ? null : tiptap.state.doc.nodeAt(position);
-    return node === null ? null : (node.attrs.localPreviewUrl as string);
-  };
-
   /**
    * m-1에 프리뷰를 심고 복제해 id-1을 만든다. 복제본의 URL을 함께 돌려준다.
    * `priorEdits`는 복제 앞에 쌓을 독립 undo 이벤트 수다.
@@ -402,7 +397,7 @@ describe("로컬 프리뷰 redo 도달 가능성(Issue #380)", () => {
     seedLocalPreview(mounted.tiptap, "m-1", testFile());
     growUndoHistory(mounted.tiptap, priorEdits);
     expect(mounted.editor.commands.duplicateBlock("m-1").ok).toBe(true);
-    const duplicateUrl = previewUrlOf(mounted.tiptap, "id-1");
+    const duplicateUrl = localPreviewUrlOf(mounted.tiptap, "id-1");
     if (duplicateUrl === null) throw new Error("id-1 복제 실패");
     return { ...mounted, duplicateUrl };
   };
@@ -417,7 +412,7 @@ describe("로컬 프리뷰 redo 도달 가능성(Issue #380)", () => {
 
     expect(editor.commands.redo()).toEqual(okResult);
     expect(localPreviewCleared).toEqual([]);
-    expect(previewUrlOf(tiptap, "id-1")).toBe(duplicateUrl);
+    expect(localPreviewUrlOf(tiptap, "id-1")).toBe(duplicateUrl);
   });
 
   it("undo 뒤 새 편집으로 redo 스택이 비면 복제본의 정리 신호가 정확히 1회 발생한다", () => {
@@ -466,7 +461,7 @@ describe("로컬 프리뷰 redo 도달 가능성(Issue #380)", () => {
     expect(localPreviewCleared).toEqual([]);
 
     expect(editor.commands.redo()).toEqual(okResult);
-    expect(previewUrlOf(tiptap, "id-1")).toBe(duplicateUrl);
+    expect(localPreviewUrlOf(tiptap, "id-1")).toBe(duplicateUrl);
     expect(localPreviewCleared).toEqual([]);
   });
 

@@ -231,7 +231,7 @@ describe("updateBlock — 로컬 프리뷰 이어받기", () => {
 });
 
 describe("duplicateBlock — 로컬 프리뷰", () => {
-  it("프리뷰가 있는 미디어를 복제하고 undo하면 복제본 자신의 URL로만 통지하고 원본은 영향받지 않는다", () => {
+  it("프리뷰가 있는 미디어를 복제하고 undo한 뒤 새 편집으로 redo 스택이 비면 복제본 자신의 URL로만 통지하고 원본은 영향받지 않는다", () => {
     const { editor, tiptap, localPreviewCleared } =
       mountedWithLocalPreviewCleanup(
         documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),

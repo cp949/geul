@@ -4,7 +4,7 @@ import type { EditorState, Transaction } from "@tiptap/pm/state";
 import { findBlockPosition } from "./block-position.js";
 
 // Issue #168 roadmap RD-002 DELTA-02 — "삭제된 로컬 프리뷰(ADR 0015) 블록이
-// 아직 undo로 복구 가능한가"를 판정한다. Issue #380부터 redo 방향도 본다
+// 아직 undo·redo로 복구 가능한가"를 판정한다. Issue #380부터 redo 방향도 본다
 // (아래 "redo 시뮬레이션" 문단). `prosemirror-history`(vendored
 // 1.5.0) 공개 API(`closeHistory`/`history`/`isHistoryTransaction`/`redo`/
 // `redoDepth`/`redoNoScroll`/`undo`/`undoDepth`/`undoNoScroll`, `dist/

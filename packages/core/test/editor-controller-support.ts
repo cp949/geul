@@ -592,6 +592,16 @@ export const mountedWithLocalPreviewCleanup = (initialDocument: Document) => {
   };
 };
 
+/** blockId 노드의 로컬 프리뷰(ADR 0015) URL을 읽는다. 블록이 없으면 null이다. */
+export const localPreviewUrlOf = (
+  tiptap: TiptapEditor,
+  blockId: string,
+): string | null => {
+  const position = findBlockPosition(tiptap.state.doc, blockId);
+  const node = position === null ? null : tiptap.state.doc.nodeAt(position);
+  return node === null ? null : (node.attrs.localPreviewUrl as string);
+};
+
 /**
  * blockId 노드에 로컬 프리뷰(ADR 0015) attrs를 직접 채운다 — 공개 명령
  * 표면에는 "url도 있고 로컬 프리뷰도 있는 블록"을 만드는 경로가 없어

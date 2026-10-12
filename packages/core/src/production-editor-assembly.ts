@@ -409,15 +409,15 @@ export const createProductionEditor = (options: {
   triggerMediaUpload?: (blockId: string, file: File) => void;
   // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-02) —
   // triggerMediaUpload와 같은 모양의 클로저다. 로컬 프리뷰(ADR 0015)가
-  // 남은 미디어 블록이 삭제된 뒤 undo로도 복구 불가라고 판정되면 호출한다
-  // (`RD-002.md` "결정" — url 확정 정리와 같은 `onLocalPreviewCleanup`
-  // 채널을 재사용, 신규 공개 옵션 아님). 미지정이면 그 확장 자신의
-  // 기본값(no-op)을 쓴다.
+  // 남은 미디어 블록이 사라진 뒤 undo로도 redo로도 복구 불가라고 판정되면
+  // 호출한다(`RD-002.md` "결정" — url 확정 정리와 같은
+  // `onLocalPreviewCleanup` 채널을 재사용, 신규 공개 옵션 아님). 미지정이면
+  // 그 확장 자신의 기본값(no-op)을 쓴다.
   notifyLocalPreviewUnreachable?: (
     blockId: string,
     cleared: LocalPreviewAttrs,
   ) => void;
-  // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03) — 삭제됐지만
+  // MediaLocalPreviewLifecycleExtension 전용(RD-002 DELTA-03) — 사라졌지만
   // 아직 복구 불가 판정 전이라 그 확장의 `pending`에만 남아 있는 로컬
   // 프리뷰 스냅샷이 바뀔 때마다 호출한다. `production-editor-session.ts::
   // destroy()`가 이 스냅샷을 세션 필드로 미러링해 뒀다가, doc 순회
