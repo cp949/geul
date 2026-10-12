@@ -2,6 +2,7 @@ import {
   isKnownBlockType,
   isListItemBlockType,
   isMediaBlock,
+  mediaBlockHasField,
   isTextRunItem,
   type Block,
   type Document,
@@ -289,9 +290,7 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       });
     }
     if (
-      (block.type === "image" ||
-        block.type === "video" ||
-        block.type === "iframe") &&
+      mediaBlockHasField(block, "previewWidth") &&
       block.previewWidth !== undefined
     ) {
       losses.push({
@@ -301,8 +300,7 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       });
     }
     if (
-      block.type !== "file" &&
-      block.type !== "iframe" && // file·iframe은 showPreview 자체가 없다(mediaVisualNode 전례와 동일 조건)
+      mediaBlockHasField(block, "showPreview") &&
       block.showPreview === false
     ) {
       losses.push({
@@ -312,9 +310,7 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       });
     }
     if (
-      (block.type === "image" ||
-        block.type === "video" ||
-        block.type === "iframe") &&
+      mediaBlockHasField(block, "textAlignment") &&
       block.textAlignment !== undefined
     ) {
       losses.push({

@@ -12,6 +12,7 @@ import {
   isSupportedLinkHref,
   isSupportedMediaUrl,
   isValidMediaPreviewWidth,
+  mediaBlockTypeHasField,
   resolveIframeEmbedDecision,
   sanitizeInlineText,
 } from "@cp949/geul-model";
@@ -262,18 +263,17 @@ export const mediaBlockFromNode = (
     isCanonicalCellColor,
   );
   const showPreviewRaw = propertyString(node, "dataGeulShowPreview");
-  // 아래 세 필드는 image·video·iframe만 싣는다. 다른 타입은 읽지도 경고하지도
-  // 않는다. previewWidth는 정수가 아니면 이전처럼 조용히 없는 값이고, 정수인데
-  // 양수가 아니면 버리고 경고한다.
-  const readsLayoutFields =
-    mediaType === "image" || mediaType === "video" || mediaType === "iframe";
+  // 아래 세 필드는 소유한 종류(MEDIA_BLOCK_FIELDS)만 읽는다. 다른 종류는
+  // 읽지도 경고하지도 않는다. previewWidth는 정수가 아니면 이전처럼 조용히
+  // 없는 값이고, 정수인데 양수가 아니면 버리고 경고한다.
   const previewWidthRaw = propertyInteger(
     node,
     "dataGeulPreviewWidth",
     Number.NaN,
   );
   const previewWidth =
-    !readsLayoutFields || Number.isNaN(previewWidthRaw)
+    !mediaBlockTypeHasField(mediaType, "previewWidth") ||
+    Number.isNaN(previewWidthRaw)
       ? undefined
       : validOptionalValue(
           context,
@@ -282,7 +282,7 @@ export const mediaBlockFromNode = (
           previewWidthRaw,
           isValidMediaPreviewWidth,
         );
-  const textAlignment = readsLayoutFields
+  const textAlignment = mediaBlockTypeHasField(mediaType, "textAlignment")
     ? (validOptionalValue(
         context,
         node,
@@ -291,18 +291,16 @@ export const mediaBlockFromNode = (
         isCanonicalCellAlign,
       ) as "left" | "center" | "right" | undefined)
     : undefined;
-  // iframe(CUS-001~004) 전용 필드 — 다른 4종은 이 값을 싣지 않는다(model
-  // IframeBlock.aspectRatio, spec §2). v1은 "16:9" 리터럴 하나만 허용한다.
-  const aspectRatio =
-    mediaType === "iframe"
-      ? (validOptionalValue(
-          context,
-          node,
-          "dataGeulAspectRatio",
-          propertyString(node, "dataGeulAspectRatio"),
-          (value) => value === "16:9",
-        ) as "16:9" | undefined)
-      : undefined;
+  // v1은 "16:9" 리터럴 하나만 허용한다.
+  const aspectRatio = mediaBlockTypeHasField(mediaType, "aspectRatio")
+    ? (validOptionalValue(
+        context,
+        node,
+        "dataGeulAspectRatio",
+        propertyString(node, "dataGeulAspectRatio"),
+        (value) => value === "16:9",
+      ) as "16:9" | undefined)
+    : undefined;
   // caption은 plain string이다(rich text 아님, spec §3.1) — 인라인 mark를
   // 보존할 필요가 없어 textValue로 평탄화한다. sanitizeInlineText로 지운
   // 글자는 정제하는 이 자리에서 UNSAFE_CODE_POINT_REMOVED로 경고한다

@@ -9,6 +9,7 @@ import {
   isKnownBlockType,
   isListItemBlockType,
   isMediaBlock,
+  mediaBlockHasField,
   isSafeCodeBlockLanguageClassToken,
   type ListItemBlock,
   type MediaBlockType,
@@ -140,20 +141,15 @@ const mediaDataAttributes = (
   ...(block.backgroundColor === undefined
     ? {}
     : { dataGeulBackgroundColor: block.backgroundColor }),
-  ...(block.type !== "file" &&
-  block.type !== "iframe" &&
+  ...(mediaBlockHasField(block, "showPreview") &&
   block.showPreview !== undefined
     ? { dataGeulShowPreview: String(block.showPreview) }
     : {}),
-  ...((block.type === "image" ||
-    block.type === "video" ||
-    block.type === "iframe") &&
+  ...(mediaBlockHasField(block, "previewWidth") &&
   block.previewWidth !== undefined
     ? { dataGeulPreviewWidth: String(block.previewWidth) }
     : {}),
-  ...((block.type === "image" ||
-    block.type === "video" ||
-    block.type === "iframe") &&
+  ...(mediaBlockHasField(block, "textAlignment") &&
   block.textAlignment !== undefined
     ? { dataGeulTextAlignment: block.textAlignment }
     : {}),
@@ -164,7 +160,8 @@ const mediaDataAttributes = (
   ...(block.type === "iframe" && block.url !== undefined
     ? { dataGeulSrc: block.url }
     : {}),
-  ...(block.type === "iframe" && block.aspectRatio !== undefined
+  ...(mediaBlockHasField(block, "aspectRatio") &&
+  block.aspectRatio !== undefined
     ? { dataGeulAspectRatio: block.aspectRatio }
     : {}),
 });
