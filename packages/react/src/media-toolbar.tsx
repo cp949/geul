@@ -1292,9 +1292,8 @@ export const MediaToolbar = ({
       )}
       {(toolbarState.kind === "image" ||
         toolbarState.kind === "video" ||
-        // iframe(CUS-001~004, RD-004 DELTA-02) — core
-        // isTextAlignableMediaBlockKind(block-attribute-commands.ts)가 이미
-        // image/video/iframe 3종을 정렬 가능으로 취급한다.
+        // iframe(CUS-001~004, RD-004 DELTA-02) — model MEDIA_BLOCK_FIELDS가
+        // image/video/iframe 3종을 textAlignment 소유로 둔다.
         toolbarState.kind === "iframe") && (
         // block-side-menu-menu.tsx 정렬 행 클래스를 코드 복제 없이 그대로
         // 재사용한다(01-계획.md 6절 "결정") — 4번째 해제(×) 버튼은 추가하지

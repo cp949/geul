@@ -21,6 +21,7 @@ import {
   isSupportedLinkHref,
   isTextRunItem,
   isValidInlineText,
+  mediaBlockHasField,
   type NumberedListItemBlock,
   type ParagraphBlock,
   type QuoteBlock,
@@ -458,8 +459,9 @@ const codeBlockContentToTiptapJson = (block: CodeBlock): TiptapJsonNode => ({
 // §3) — divider와 같은 패턴으로 컨테이너 없이 attrs에 전체 prop을 직접
 // 배정한다. 값 검증(previewWidth 양수 등)은 model parseDocument 권위라
 // 여기서는 null 승격(필드 부재 ↔ PM attr 기본값)만 한다(numberedListItem.
-// startNumber와 같은 패턴). iframe은 showPreview가 없다(로컬 미리보기
-// 토글 개념이 없다, 항상 라이브 임베드) — 대신 aspectRatio를 갖는다.
+// startNumber와 같은 패턴). 어느 필드를 싣는지는 model MEDIA_BLOCK_FIELDS가
+// 정한다. iframe은 showPreview가 없고(로컬 미리보기 토글 개념이 없다, 항상
+// 라이브 임베드) 대신 aspectRatio를 갖는다.
 const mediaBlockToTiptapJson = (
   block: FileBlock | ImageBlock | VideoBlock | AudioBlock | IframeBlock,
 ): TiptapJsonNode => ({
@@ -470,21 +472,18 @@ const mediaBlockToTiptapJson = (
     name: block.name ?? null,
     caption: block.caption ?? null,
     backgroundColor: block.backgroundColor ?? null,
-    ...(block.type === "file"
-      ? {}
-      : block.type === "audio"
-        ? { showPreview: block.showPreview ?? null }
-        : block.type === "iframe"
-          ? {
-              previewWidth: block.previewWidth ?? null,
-              textAlignment: block.textAlignment ?? null,
-              aspectRatio: block.aspectRatio ?? null,
-            }
-          : {
-              showPreview: block.showPreview ?? null,
-              previewWidth: block.previewWidth ?? null,
-              textAlignment: block.textAlignment ?? null,
-            }),
+    ...(mediaBlockHasField(block, "showPreview")
+      ? { showPreview: block.showPreview ?? null }
+      : {}),
+    ...(mediaBlockHasField(block, "previewWidth")
+      ? { previewWidth: block.previewWidth ?? null }
+      : {}),
+    ...(mediaBlockHasField(block, "textAlignment")
+      ? { textAlignment: block.textAlignment ?? null }
+      : {}),
+    ...(mediaBlockHasField(block, "aspectRatio")
+      ? { aspectRatio: block.aspectRatio ?? null }
+      : {}),
   },
 });
 

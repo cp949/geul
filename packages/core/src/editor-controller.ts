@@ -1,12 +1,13 @@
-import { isMediaBlockType, type Result } from "@cp949/geul-model";
+import {
+  isMediaBlockType,
+  mediaBlockTypeHasField,
+  type Result,
+} from "@cp949/geul-model";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 import { CellSelection, isInTable, selectedRect } from "@tiptap/pm/tables";
 
-import {
-  createBlockAttributeCommands,
-  isTextAlignableMediaBlockKind,
-} from "./block-attribute-commands.js";
+import { createBlockAttributeCommands } from "./block-attribute-commands.js";
 import {
   evaluateBlockTypeChange,
   evaluateBlockTypesChange,
@@ -246,7 +247,7 @@ export const createEditor = (
         showPreview:
           node.type.name === "file" ? null : node.attrs.showPreview !== false,
         textAlignment:
-          isTextAlignableMediaBlockKind(node.type.name) &&
+          mediaBlockTypeHasField(node.type.name, "textAlignment") &&
           typeof node.attrs.textAlignment === "string"
             ? (node.attrs.textAlignment as "left" | "center" | "right")
             : null,

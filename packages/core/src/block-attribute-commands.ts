@@ -4,6 +4,7 @@ import {
   isNestableBlockType,
   isSupportedMediaUrl,
   isValidMediaPreviewWidth,
+  mediaBlockTypeHasField,
   resolveIframeEmbedDecision,
   type Result,
 } from "@cp949/geul-model";
@@ -15,16 +16,6 @@ import {
   commandNotApplicable,
   type ProductionEditorSession,
 } from "./production-editor-session.js";
-
-// setMediaTextAlignment/getSelectionMediaBlock이 공유하는 kind 가드 —
-// media 5종 중 image/video/iframe만 정렬을 지원한다(Issue #154, MED-009;
-// iframe은 roadmap Issue #212 RD-002 DELTA-02, spec §3 previewAttributes
-// 재사용). getSelectionMediaBlock(editor-controller.ts)이 textAlignment
-// 필드 유효성 판정에도 재사용하므로 factory 밖 module-level export로 둔다.
-export const isTextAlignableMediaBlockKind = (
-  name: string,
-): name is "image" | "video" | "iframe" =>
-  name === "image" || name === "video" || name === "iframe";
 
 // 기존 블록·미디어 블록의 attrs를 blockId로 찾아 바꾸는 명령 묶음
 // (setBlockTextColor 등 + setMediaBlockUrl 등 + 업로드 래퍼).
@@ -111,20 +102,6 @@ export const createBlockAttributeCommands = (
       nextAttrs: (attrs) => nextAttrs(attrs, value),
     });
 
-  // media 5종 중 image/video/iframe만 리사이즈를 지원한다(spec §3 —
-  // iframe은 explicit width 없이는 브라우저 기본값(300x150)으로
-  // 찌그러져 image/video와 동일하게 setMediaPreviewWidth 대상이다,
-  // roadmap Issue #212 RD-002 DELTA-02).
-  const isResizableMediaBlockKind = (
-    name: string,
-  ): name is "image" | "video" | "iframe" =>
-    name === "image" || name === "video" || name === "iframe";
-
-  const isPreviewToggleableMediaBlockKind = (
-    name: string,
-  ): name is "image" | "video" | "audio" =>
-    name === "image" || name === "video" || name === "audio";
-
   const setMediaPreviewWidth = (
     blockId: string,
     width: number,
@@ -133,7 +110,8 @@ export const createBlockAttributeCommands = (
       command: "setMediaPreviewWidth",
       blockId,
       target: "block",
-      appliesTo: (node) => isResizableMediaBlockKind(node.type.name),
+      appliesTo: (node) =>
+        mediaBlockTypeHasField(node.type.name, "previewWidth"),
       unsupported: { code: "MEDIA_RESIZE_NOT_SUPPORTED" },
       validate: () =>
         isValidMediaPreviewWidth(width)
@@ -145,8 +123,10 @@ export const createBlockAttributeCommands = (
       nextAttrs: (attrs) => ({ ...attrs, previewWidth: width }),
     });
 
-  // 리사이즈는 image/video/iframe만 허용해 audio/file을 거절하지만, 이
-  // 명령은 image/video/audio를 허용하고 file만 거절한다(RD-002 DELTA-01).
+  // 리사이즈는 previewWidth를 소유한 종류(image/video/iframe)만 허용해
+  // audio/file을 거절하지만, 이 명령은 showPreview를 소유한 image/video/
+  // audio를 허용하고 file·iframe을 거절한다(RD-002 DELTA-01). 대상 판정은
+  // model의 MEDIA_BLOCK_FIELDS가 소유한다.
   // boolean은 TS 시그니처 자체가 값 공간 전체를 강제하므로 별도 값 검증이
   // 없다.
   const setMediaShowPreview = (
@@ -157,7 +137,8 @@ export const createBlockAttributeCommands = (
       command: "setMediaShowPreview",
       blockId,
       target: "block",
-      appliesTo: (node) => isPreviewToggleableMediaBlockKind(node.type.name),
+      appliesTo: (node) =>
+        mediaBlockTypeHasField(node.type.name, "showPreview"),
       unsupported: { code: "MEDIA_PREVIEW_TOGGLE_NOT_SUPPORTED" },
       nextAttrs: (attrs) => ({ ...attrs, showPreview: show }),
     });
@@ -194,9 +175,8 @@ export const createBlockAttributeCommands = (
       nextAttrs: (attrs) => ({ ...attrs, caption }),
     });
 
-  // setMediaTextAlignment(Issue #154, MED-009). kind 가드 집합이
-  // isResizableMediaBlockKind(image/video)와 우연히 같아도 관심사가
-  // 다르므로(리사이즈가 아니라 정렬) 공유하지 않고 전용 가드를 둔다. 값
+  // setMediaTextAlignment(Issue #154, MED-009). 대상은 textAlignment를
+  // 소유한 종류다. previewWidth와 집합이 같아도 필드가 달라 따로 묻는다. 값
   // 검증은 setBlockTextAlignment와 동일하게 isCanonicalCellAlign을
   // 재사용한다 — value가 TS 시그니처로 이미 좁혀져 있어도(런타임 caller가
   // 그 타입을 우회할 수 있으므로) 방어적으로 검증한다.
@@ -208,7 +188,8 @@ export const createBlockAttributeCommands = (
       command: "setMediaTextAlignment",
       blockId,
       target: "block",
-      appliesTo: (node) => isTextAlignableMediaBlockKind(node.type.name),
+      appliesTo: (node) =>
+        mediaBlockTypeHasField(node.type.name, "textAlignment"),
       unsupported: { code: "MEDIA_TEXT_ALIGNMENT_NOT_SUPPORTED" },
       validate: () =>
         alignment === null || isCanonicalCellAlign(alignment)

@@ -152,9 +152,9 @@ export interface SelectionQuery {
     // 미설정(null)이 기본 true를 뜻하는 실제 유효값을 보고한다(슬라이스5
     // RD-002 DELTA-02, react MediaToolbar의 preview 토글 버튼이 소비한다).
     showPreview: boolean | null;
-    // image/video만 실제 유효값을 보고한다(Issue #154, MED-009) — audio/file은
-    // attrs 자체가 없어 null이다(showPreview와 반대 kind 집합, setMediaPreviewWidth
-    // 의 MEDIA_RESIZE_NOT_SUPPORTED 대상과 동일 경계). react MediaToolbar의
+    // image/video/iframe만 실제 유효값을 보고한다(Issue #154, MED-009) —
+    // audio/file은 필드가 없어 null이다(showPreview와 반대 kind 집합,
+    // setMediaPreviewWidth의 MEDIA_RESIZE_NOT_SUPPORTED 대상과 동일 경계). react MediaToolbar의
     // 정렬 버튼 3개가 aria-pressed 판정에 소비한다.
     textAlignment: "left" | "center" | "right" | null;
   } | null;
