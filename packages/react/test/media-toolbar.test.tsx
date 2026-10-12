@@ -1607,6 +1607,59 @@ describe("MediaToolbar iframe 전용 액션(CUS-001~004, roadmap Issue #212 RD-0
     });
   });
 
+  it("업로드가 꺼진 편집기에서도 iframe 블록의 more 메뉴에 Replace 항목이 있다(Issue #373)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledIframeBlock,
+      isUploadEnabled: () => false,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+
+    expect(
+      screen.getByRole("menuitem", { name: "Replace file" }),
+    ).not.toBeNull();
+  });
+
+  it("업로드가 꺼진 편집기에서 iframe Replace를 누르면 Upload 탭 없이 Iframe URL 입력이 열린다(Issue #373)", () => {
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledIframeBlock,
+      isUploadEnabled: () => false,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+
+    expect(screen.queryByRole("tab", { name: "Upload" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Iframe URL" })).not.toBeNull();
+  });
+
+  it("업로드가 꺼진 편집기에서 iframe URL을 저장하면 setIframeSrc를 호출한다(setMediaBlockUrl 아님, Issue #373)", () => {
+    const setIframeSrc = vi.fn(() => ({ ok: true }));
+    const setMediaBlockUrl = vi.fn(() => ({ ok: true }));
+    const controller = fakeController({
+      getSelectionMediaBlock: () => filledIframeBlock,
+      isUploadEnabled: () => false,
+      setIframeSrc,
+      setMediaBlockUrl,
+    });
+    renderToolbar(controller);
+
+    openMoreMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace file" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Iframe URL" }), {
+      target: { value: "https://www.youtube.com/embed/y" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(setIframeSrc).toHaveBeenCalledWith(
+      "media-1",
+      "https://www.youtube.com/embed/y",
+    );
+    expect(setMediaBlockUrl).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["PROTOCOL_NOT_ALLOWED", "This protocol isn't allowed"],
     ["PRIVATE_NETWORK_BLOCKED", "Private network addresses aren't allowed"],

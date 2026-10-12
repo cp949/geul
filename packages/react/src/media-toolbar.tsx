@@ -490,10 +490,11 @@ export const MediaToolbar = ({
   // Replace 팝업의 Upload 탭 노출 여부(Issue #213) — file-panel.tsx의
   // `uploadEnabled = editor.isUploadEnabled() && kind !== "iframe"`와 같은
   // 게이트(spec §5 "iframe은 업로드 탭 개념이 없어 URL 입력 단일 흐름").
-  // more-menu의 "Replace" 항목 자체는 kind와 무관하게 isUploadEnabled()만
-  // 본다(아래 moreMenu) — 팝업이 열린 뒤 탭 렌더링에서 kind를 한 번 더
-  // 걸러야 한다. Embed 탭은 이 값과 무관하게 항상 보인다(iframe 필수
-  // 흐름) — 게이트 대상은 Upload 탭/콘텐츠뿐이다.
+  // more-menu의 "Replace" 항목은 isUploadEnabled() 또는 iframe일 때
+  // 노출한다(아래 moreMenu, Issue #373) — 업로드가 켜진 iframe은 팝업이
+  // 열린 뒤 탭 렌더링에서 kind를 한 번 더 걸러야 한다. Embed 탭은 이 값과
+  // 무관하게 항상 보인다(iframe 필수 흐름) — 게이트 대상은 Upload
+  // 탭/콘텐츠뿐이다.
   const replaceUploadEnabled =
     toolbarState.mode === "replacing"
       ? editor.isUploadEnabled() && toolbarState.kind !== "iframe"
@@ -1260,7 +1261,9 @@ export const MediaToolbar = ({
       role="menu"
       style={moreMenuStyle}
     >
-      {editor.isUploadEnabled() && (
+      {/* iframe은 업로드 없이도 URL 변경(Embed 탭)이 가능해 항상 노출한다
+          (Issue #373). 다른 kind는 업로드가 켜져 있을 때만 노출한다. */}
+      {(editor.isUploadEnabled() || toolbarState.kind === "iframe") && (
         <MenuItemButton
           className={mediaToolbarMoreMenuItemClassName}
           onClick={startReplacing}
