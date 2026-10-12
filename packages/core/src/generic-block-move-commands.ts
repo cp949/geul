@@ -3,6 +3,7 @@ import type { Block, Result } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
 
 import { findBlockPosition } from "./block-position.js";
+import { deleteBlockRange } from "./delete-block-range.js";
 import type { EditorError } from "./errors.js";
 import {
   commandNotApplicable,
@@ -95,21 +96,15 @@ export const createGenericBlockMoveCommands = (
       if (sourcePosition === null) return false;
       const sourceNode = session.editor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
-      // deleteBlock과 같은 판정: 소스가 blockGroup의 유일한 자식이면
-      // 소스만 지워서는 "block+"를 위반하는 빈 그룹이 남는다 — 그룹 자체를
-      // 지운다. 이전 구현은 자식 유무 가드로 소스가 항상 leaf였고, leaf가
+      // 소스가 blockGroup의 유일한 자식이면 deleteBlockRange가 그룹 자체를
+      // 지운다("block+" 위반 방지). 이전 구현은 자식 유무 가드로 소스가 항상 leaf였고, leaf가
       // 유일한 자식인 경우는 "같은 부모 형제만" 가드가 no-op으로 흡수해
       // 이 분기에 도달할 수 없었다 — cross-parent 이동을 여는 이 변경에서
       // 처음으로 도달 가능해졌다.
-      const $source = session.editor.state.doc.resolve(sourcePosition);
-      const removesWholeGroup =
-        $source.parent.type.name === "blockGroup" &&
-        $source.parent.childCount === 1;
-      let transaction = session.editor.state.tr.delete(
-        removesWholeGroup ? $source.before() : sourcePosition,
-        removesWholeGroup
-          ? $source.after()
-          : sourcePosition + sourceNode.nodeSize,
+      let transaction = deleteBlockRange(
+        session.editor.state.tr,
+        sourcePosition,
+        sourcePosition + sourceNode.nodeSize,
       );
       let insertPosition: number;
       if (beforeBlockId !== null) {

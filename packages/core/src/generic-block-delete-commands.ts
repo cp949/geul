@@ -2,6 +2,7 @@ import type { Result } from "@cp949/geul-model";
 import { closeHistory } from "@tiptap/pm/history";
 
 import { findBlockPosition } from "./block-position.js";
+import { deleteBlockRange } from "./delete-block-range.js";
 import type { EditorError } from "./errors.js";
 import {
   commandNotApplicable,
@@ -35,15 +36,10 @@ export const createGenericBlockDeleteCommands = (
       if (sourcePosition === null) return false;
       const sourceNode = session.editor.state.doc.nodeAt(sourcePosition);
       if (sourceNode === null) return false;
-      const $source = session.editor.state.doc.resolve(sourcePosition);
-      const removesWholeGroup =
-        $source.parent.type.name === "blockGroup" &&
-        $source.parent.childCount === 1;
-      const transaction = session.editor.state.tr.delete(
-        removesWholeGroup ? $source.before() : sourcePosition,
-        removesWholeGroup
-          ? $source.after()
-          : sourcePosition + sourceNode.nodeSize,
+      const transaction = deleteBlockRange(
+        session.editor.state.tr,
+        sourcePosition,
+        sourcePosition + sourceNode.nodeSize,
       );
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
@@ -51,7 +47,7 @@ export const createGenericBlockDeleteCommands = (
   };
 
   // spec §5.3 — blockSelection 범위(및 각 블록의 children)를 통째로
-  // 삭제한다. deleteBlock(위)의 removesWholeGroup 판정·최상위 유일 블록
+  // 삭제한다. deleteBlock(위)의 deleteBlockRange 호출·최상위 유일 블록
   // 가드를 범위로 확장해 재사용한다(DELTA-02) — 범위 안 각 블록을 개별
   // 삭제하지 않고 하나의 transaction.delete로 묶어 undo 1단위를 보장한다
   // (G-EDT-001).
@@ -84,7 +80,6 @@ export const createGenericBlockDeleteCommands = (
     if (firstBlockId === undefined || lastBlockId === undefined) {
       return commandNotApplicable("deleteSelectedBlocks");
     }
-    const rangeBlockCount = rangeBlocks.length;
     const result = session.runDocumentCommand(
       "deleteSelectedBlocks",
       "local",
@@ -101,17 +96,13 @@ export const createGenericBlockDeleteCommands = (
         if (lastPosition === null) return false;
         const lastNode = session.editor.state.doc.nodeAt(lastPosition);
         if (lastNode === null) return false;
-        const $first = session.editor.state.doc.resolve(firstPosition);
-        // deleteBlock과 같은 판정: 범위가 blockGroup의 전체 자식과
-        // 일치하면 blockGroup 노드 자체를 지워 빈 컨테이너가 남지 않게
-        // 한다(완료 조건 3). 1이 아니라 rangeBlockCount와 비교하는 점이
-        // 단일 블록 버전과 다르다.
-        const removesWholeGroup =
-          $first.parent.type.name === "blockGroup" &&
-          $first.parent.childCount === rangeBlockCount;
-        const transaction = session.editor.state.tr.delete(
-          removesWholeGroup ? $first.before() : firstPosition,
-          removesWholeGroup ? $first.after() : lastPosition + lastNode.nodeSize,
+        // 범위가 blockGroup의 전체 자식과 일치하면 deleteBlockRange가
+        // blockGroup 노드 자체를 지워 빈 컨테이너가 남지 않게 한다(완료
+        // 조건 3).
+        const transaction = deleteBlockRange(
+          session.editor.state.tr,
+          firstPosition,
+          lastPosition + lastNode.nodeSize,
         );
         session.editor.view.dispatch(closeHistory(transaction));
         return true;

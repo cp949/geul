@@ -9,6 +9,7 @@ import {
   codeSourceToInline,
   inlineToCodeSource,
 } from "./code-block-inline-text.js";
+import { deleteBlockRange } from "./delete-block-range.js";
 import { deleteKeyBindings } from "./delete-key-bindings.js";
 import { outdentBlockCommand } from "./indent-commands.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
@@ -262,14 +263,13 @@ function deleteSelectedTable(editor: Editor): boolean {
   const table = selection.$anchorCell.node(tableDepth);
   if (table.type.name !== "table") return false;
   const tableStart = selection.$anchorCell.before(tableDepth);
-  const $table = state.doc.resolve(tableStart);
-  const removesWholeGroup =
-    $table.parent.type.name === "blockGroup" && $table.parent.childCount === 1;
-  const deleteFrom = removesWholeGroup ? $table.before() : tableStart;
-  const deleteTo = removesWholeGroup
-    ? $table.after()
-    : tableStart + table.nodeSize;
-  view.dispatch(state.tr.delete(deleteFrom, deleteTo).scrollIntoView());
+  view.dispatch(
+    deleteBlockRange(
+      state.tr,
+      tableStart,
+      tableStart + table.nodeSize,
+    ).scrollIntoView(),
+  );
   return true;
 }
 
@@ -786,8 +786,7 @@ function exitListItem(
 //
 // 제거 대상이 blockGroup의 유일한 자식이고 승격할 자식도 없으면 그룹째
 // 지운다 — 컨테이너만 지우면 빈 그룹의 "block+"를 PM이 기본 노드로 다시
-// 채워 유령 빈 블록이 새 id로 나타난다(editor-controller.ts deleteBlock의
-// removesWholeGroup과 같은 규칙).
+// 채워 유령 빈 블록이 새 id로 나타난다(deleteBlockRange와 같은 규칙).
 //
 // 대부분의 호출부에서 mergePos는 제거 범위보다 앞이다(Backspace의 대상은
 // 자기보다 앞, Delete의 제거 대상은 자기 텍스트 끝보다 뒤) — 이때는 첫
@@ -818,15 +817,9 @@ function mergeContainers(
   const promoted =
     removed.childCount > 1 ? removed.child(1).content : Fragment.empty;
 
-  const $removed = state.doc.resolve(removedStart);
-  const removesWholeGroup =
-    promoted.size === 0 &&
-    $removed.parent.type.name === "blockGroup" &&
-    $removed.parent.childCount === 1;
-
   const tr = state.tr;
-  if (removesWholeGroup) {
-    tr.delete($removed.before(), $removed.after());
+  if (promoted.size === 0) {
+    deleteBlockRange(tr, removedStart, removedEnd);
   } else {
     tr.replaceWith(removedStart, removedEnd, promoted);
   }

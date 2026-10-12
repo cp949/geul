@@ -10,6 +10,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { findBlockPosition } from "./block-position.js";
+import { deleteBlockRange } from "./delete-block-range.js";
 import { findBlockInTree, findSiblingContext } from "./block-tree.js";
 import {
   insertSiblingsInTree,
@@ -417,18 +418,10 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
         if (node === null || node.attrs.blockId !== removedNode.attrs.blockId) {
           return false;
         }
-        // deleteBlock(generic-block-commands.ts)과 동일한 판정 — 대상이
-        // blockGroup의 유일한 자식이면 대상만 지워서는 "block+"를 위반하는
-        // 빈 그룹이 남는다, 그룹 자체를 지운다.
-        const $position = transaction.doc.resolve(mappedPosition);
-        const removesWholeGroup =
-          $position.parent.type.name === "blockGroup" &&
-          $position.parent.childCount === 1;
-        transaction = transaction.delete(
-          removesWholeGroup ? $position.before() : mappedPosition,
-          removesWholeGroup
-            ? $position.after()
-            : mappedPosition + node.nodeSize,
+        transaction = deleteBlockRange(
+          transaction,
+          mappedPosition,
+          mappedPosition + node.nodeSize,
         );
       }
 
@@ -487,13 +480,10 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
         if (position === null) return false;
         const node = transaction.doc.nodeAt(position);
         if (node === null) return false;
-        const $position = transaction.doc.resolve(position);
-        const removesWholeGroup =
-          $position.parent.type.name === "blockGroup" &&
-          $position.parent.childCount === 1;
-        transaction = transaction.delete(
-          removesWholeGroup ? $position.before() : position,
-          removesWholeGroup ? $position.after() : position + node.nodeSize,
+        transaction = deleteBlockRange(
+          transaction,
+          position,
+          position + node.nodeSize,
         );
       }
 
@@ -561,8 +551,8 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
   // 공개 commands.moveBlockBefore는 호출하지 않는다 — "## 계획"의 설계
   // 결정, beforeBlockId=null의 "항상 최상위 문서 끝" 의미와 충돌한다).
   // 앞 형제를 지워도 범위 자신이 같은 형제 배열에 남아 있어(비어있지
-  // 않음) blockGroup이 통째로 비는 경우가 없다 — deleteBlock의
-  // removesWholeGroup 판정이 필요 없다.
+  // 않음) blockGroup이 통째로 비는 경우가 없다 — deleteBlockRange의 그룹
+  // 확대가 필요 없다.
   const moveBlocksUpImpl = (blockIds: string[]): Result<void, EditorError> => {
     if (session.isDestroyed) return commandNotApplicable("moveBlocksUp");
     const resolved = resolveMoveRange(blockIds, "moveBlocksUp");

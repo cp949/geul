@@ -857,7 +857,7 @@ describe("에디터 컨트롤러 블록 명령", () => {
     it("다른 부모의 형제 목록으로 이동하면 moveBlockBefore가 성공하고 유일한 자식을 잃은 부모에 빈 blockGroup을 남기지 않는다(Issue #125 D1, R2)", () => {
       // 변이(회귀): 소스가 유일한 자식일 때 그 노드만 지우면 부모의
       // blockGroup이 0개 자식으로 남아 "block+" 스키마를 어긴다 —
-      // moveBlockBefore가 deleteBlock과 같은 removesWholeGroup 판정을
+      // moveBlockBefore가 deleteBlock과 같은 deleteBlockRange 판정을
       // 공유해야 한다.
       const initialDocument: Document = {
         formatVersion: 1,

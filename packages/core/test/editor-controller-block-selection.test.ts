@@ -82,7 +82,7 @@ const wholeGroupDocument = () =>
 
 /**
  * parent-1의 children 세 개 중 두 개만 선택 범위에 포함되는 fixture —
- * removesWholeGroup이 "전체 자식과 일치"가 아니라 범위 블록 수만으로
+ * deleteBlockRange가 "전체 자식과 일치"가 아니라 범위 블록 수만으로
  * 부당하게 true가 되지 않는지(blockGroup이 부당하게 삭제되지 않는지)
  * 검증하는 완료 조건 3의 경계 케이스 전용(DELTA-02 즉시 리뷰 잔여 위험).
  */
@@ -271,7 +271,7 @@ describe("에디터 컨트롤러 선택 범위 삭제(deleteSelectedBlocks)", ()
 
     expect(editor.commands.deleteSelectedBlocks()).toEqual(okResult);
     const document = editor.getDocument();
-    // child-3은 범위 밖이라 살아남아야 한다 — removesWholeGroup이
+    // child-3은 범위 밖이라 살아남아야 한다 — deleteBlockRange가
     // childCount를 보지 않고 범위 블록 수만으로 부당하게 true가 되면
     // child-3까지 blockGroup째 함께 지워진다.
     expect(document.blocks).toMatchObject([

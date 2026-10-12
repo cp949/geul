@@ -9,6 +9,7 @@ import {
 import { TextSelection, type Transaction } from "@tiptap/pm/state";
 
 import { findBlockPosition } from "./block-position.js";
+import { deleteBlockRange } from "./delete-block-range.js";
 import type { EditorError } from "./errors.js";
 import { nearestBlockContainerId } from "./selection-query-helpers.js";
 
@@ -300,19 +301,18 @@ const appendOutdentStep = (
 ): Transaction | null => {
   const $target = tr.doc.resolve(targetPosition);
   const groupDepth = $target.depth;
-  const groupNode = $target.node(groupDepth);
   const parentContainer = $target.node(groupDepth - 1);
   const parentBlockId = parentContainer.attrs.blockId;
   if (typeof parentBlockId !== "string" || parentBlockId.length === 0) {
     return null;
   }
 
-  const nextTr =
-    groupNode.childCount === 1
-      ? // 대상이 그룹의 유일한 자식 — 대상만 지우면 "block+"를 위반하는 빈
-        // 그룹이 남는다. 그룹 노드 자체를 제거한다.
-        tr.delete($target.before(groupDepth), $target.after(groupDepth))
-      : tr.delete(targetPosition, targetPosition + targetNode.nodeSize);
+  // 대상이 그룹의 유일한 자식이면 deleteBlockRange가 그룹 노드째 제거한다.
+  const nextTr = deleteBlockRange(
+    tr,
+    targetPosition,
+    targetPosition + targetNode.nodeSize,
+  );
 
   const mappedParentPosition = findBlockPosition(nextTr.doc, parentBlockId);
   if (mappedParentPosition === null) return null;

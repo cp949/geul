@@ -8,6 +8,7 @@ import {
 } from "@tiptap/pm/state";
 
 import { codeSourceToInline } from "./code-block-inline-text.js";
+import { deleteBlockRange } from "./delete-block-range.js";
 import { deleteKeyBindings } from "./delete-key-bindings.js";
 import { resolveSelectionAwareState } from "./selection-aware-state.js";
 
@@ -248,25 +249,21 @@ function deleteEmptyCodeBlock(editor: Editor): boolean {
   const container = $from.node(containerDepth);
   if (container.type.name !== "blockContainer") return false;
 
-  // deleteBlock(generic-block-commands.ts)과 같은 가드 — blockGroup의
-  // 유일한 자식이면 그 그룹째로 지운다. "문서 최상위 유일 블록" 가드는
+  // deleteBlockRange가 blockGroup의 유일한 자식이면 그 그룹째로 지운다.
+  // "문서 최상위 유일 블록" 가드는
   // 여기 없다: codeBlock은 위 exitCodeBlockOnDoubleEnter와 같은 이유로
   // 문서 최상위 마지막 블록일 때 TrailingBlockExtension이 항상 trailing
   // paragraph를 붙여 두므로, 이 codeBlock이 doc의 유일한 자식인 상태
   // 자체가 이 handler가 실행되는 시점엔 존재할 수 없다(도달 불가능한
   // 가드는 만들지 않는다 — 테스트로 고정할 수 없는 분기다).
-  const parentDepth = containerDepth - 1;
-  const parent = $from.node(parentDepth);
-  const removesWholeGroup =
-    parent.type.name === "blockGroup" && parent.childCount === 1;
-
-  const deleteFrom = removesWholeGroup
-    ? $from.before(parentDepth)
-    : $from.before(containerDepth);
-  const deleteTo = removesWholeGroup
-    ? $from.after(parentDepth)
-    : $from.after(containerDepth);
-
-  editor.view.dispatch(closeHistory(liveState.tr.delete(deleteFrom, deleteTo)));
+  editor.view.dispatch(
+    closeHistory(
+      deleteBlockRange(
+        liveState.tr,
+        $from.before(containerDepth),
+        $from.after(containerDepth),
+      ),
+    ),
+  );
   return true;
 }
