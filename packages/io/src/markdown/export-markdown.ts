@@ -29,6 +29,7 @@ import {
   isGfmListLikeBlockType,
 } from "./gfm-container-shape.js";
 import { handleDelete } from "./gfm-strike-attention.js";
+import { handleText } from "./gfm-text-backslash.js";
 import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 import { mergeAdjacentInline } from "./merge-adjacent-inline.js";
 
@@ -36,11 +37,13 @@ import { mergeAdjacentInline } from "./merge-adjacent-inline.js";
 // 옵션이다 — thematicBreak를 기본값 "***" 대신 "---"로 쓰게 한다(spec §7.2,
 // DELTA-07).
 // handlers.delete는 strike에 attention을 더한 핸들러다(Issue #397).
+// handlers.text는 구분자 앞에서 `\`+글자로 끝날 때 `\`를 하나 더하는 핸들러다
+// (Issue #398). 라이브러리가 글자만 문자 참조로 바꿔 `\&`가 남는 것을 막는다.
 const stringifyProcessor = unified()
   .use(remarkStringify, {
     rule: "-",
     incrementListMarker: false,
-    handlers: { delete: handleDelete },
+    handlers: { delete: handleDelete, text: handleText },
   })
   .use(remarkGfm);
 
