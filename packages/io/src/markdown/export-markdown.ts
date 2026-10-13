@@ -28,13 +28,19 @@ import {
   isGfmContainerLikeBlockType,
   isGfmListLikeBlockType,
 } from "./gfm-container-shape.js";
+import { handleDelete } from "./gfm-strike-attention.js";
 import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 
 // rule: "-"는 mdast-util-to-markdown(remark-stringify 내부 직렬화기) 기존
 // 옵션이다 — thematicBreak를 기본값 "***" 대신 "---"로 쓰게 한다(spec §7.2,
 // DELTA-07).
+// handlers.delete는 strike에 attention을 더한 핸들러다(Issue #397).
 const stringifyProcessor = unified()
-  .use(remarkStringify, { rule: "-", incrementListMarker: false })
+  .use(remarkStringify, {
+    rule: "-",
+    incrementListMarker: false,
+    handlers: { delete: handleDelete },
+  })
   .use(remarkGfm);
 
 type MarkdownOutputNode = {

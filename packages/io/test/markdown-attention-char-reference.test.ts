@@ -13,19 +13,19 @@
  * mark 달린 빈 런은 입력에 쓰지 않는다(#393 EMPTY_MARKED_RUN 범위).
  */
 import type {
-  Block,
-  Document,
   InlineContent,
   InlineContentItem,
   TextMark,
 } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
-import { exportMarkdown, importMarkdown } from "../src/index.js";
 import {
-  buildDocument,
-  paragraphBlock,
-} from "./fixtures/quote-divider-document.js";
+  importedRuns,
+  paragraphDocument,
+  run,
+  strictMarkdown,
+  tableCellDocument,
+} from "./markdown-inline-run-support.js";
 
 const BOLD: TextMark = { type: "bold" };
 const ITALIC: TextMark = { type: "italic" };
@@ -39,14 +39,6 @@ const EMOJI = "😀";
  * 기대 목록에는 빈 런이 없다.
  */
 type Case = readonly [string, InlineContent, InlineContentItem[]];
-
-/**
- * mark 목록을 가진 글자 런 하나를 만든다.
- */
-const run = (text: string, marks: TextMark[]): InlineContentItem => ({
-  text,
-  marks,
-});
 
 /**
  * 빈 런 + 여러 겹 mark 런의 케이스를 만든다. 입력과 기대 모두 마지막 런은 같다.
@@ -97,64 +89,6 @@ const EMOJI_CASES: readonly Case[] = [
 ];
 
 const ALL_CASES: readonly Case[] = [...EMPTY_RUN_CASES, ...EMOJI_CASES];
-
-/**
- * content를 담은 paragraph 하나짜리 문서를 만든다.
- */
-const paragraphDocument = (content: InlineContent): Document => {
-  const block: Block = { ...paragraphBlock("host", ""), content };
-  return buildDocument([block]);
-};
-
-/**
- * 열 1개·행 1개 표의 유일한 셀에 content를 둔 문서를 만든다.
- */
-const tableCellDocument = (content: InlineContent): Document =>
-  buildDocument([
-    {
-      id: "host",
-      type: "table",
-      columns: [{ id: "col", width: 160 }],
-      rows: [
-        {
-          id: "row",
-          cells: [
-            {
-              id: "cell",
-              columnId: "col",
-              rowSpan: 1,
-              columnSpan: 1,
-              content,
-            },
-          ],
-        },
-      ],
-      headerRows: 1,
-      headerColumns: 0,
-    },
-  ]);
-
-/**
- * strict 내보내기를 실행해 markdown 문자열을 돌려준다. 실패하면 던진다.
- */
-const strictMarkdown = (document: Document): string => {
-  const result = exportMarkdown(document, { mode: "strict" });
-  if (!result.ok) throw new Error(`strict 내보내기 실패: ${result.error.code}`);
-  return result.value;
-};
-
-/**
- * markdown을 재가져와 첫 블록의 글자 런을 돌려준다. 표이면 첫 셀의 글자 런이다.
- * 실패하면 던진다.
- */
-const importedRuns = (markdown: string): unknown => {
-  const result = importMarkdown(markdown);
-  if (!result.ok) throw new Error(`재가져오기 실패: ${result.error.code}`);
-  const block = result.value.document.blocks[0];
-  if (block === undefined) throw new Error("재가져온 블록이 없다");
-  if ("rows" in block) return block.rows[0]?.cells[0]?.content;
-  return "content" in block ? block.content : undefined;
-};
 
 /**
  * 출력에 문자 참조 오염과 깨진 서로게이트가 없음을 단언한다.
