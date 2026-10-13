@@ -53,3 +53,6 @@ overrides:
   'brace-expansion@>=4.0.0 <5.0.12': 5.0.12
   'source-map-js@>=1.0.0 <1.2.2': 1.2.2
   'shell-quote@>=1.8.4 <1.11.0': 1.12.0
+  # braces <=3.0.3(GHSA-vfj7-8cjw-p6xm)는 패치 버전이 없다. micromatch를 끌어오는
+  # @parcel/watcher 2.5.x 대신 picomatch 기반인 2.6.0을 쓴다(sass optionalDependencies ^2.4.1 충족).
+  '@parcel/watcher@<2.6.0': 2.6.0

@@ -129,7 +129,7 @@ const allowedDependencies = {
       autoprefixer: "10.6.1",
       esbuild: "0.28.2",
       postcss: "8.5.29",
-      "postcss-cli": "11.0.1",
+      "postcss-cli": "12.0.0",
       sass: "1.105.1",
     },
     peerDependencies: {},
