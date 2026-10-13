@@ -25,10 +25,21 @@ import { type InlineContent, isTextRunItem } from "@cp949/geul-model";
 import { inlineNodes, type MarkdownOutputNode } from "./inline-run-nodes.js";
 
 // `|` 바로 앞의 연속 백슬래시 중 홀수 개인 것이 하나라도 있는지 본다.
-const hasOddBackslashBeforePipe = (text: string): boolean =>
-  Array.from(text.matchAll(/(\\+)\|/g)).some(
-    (match) => (match[1]?.length ?? 0) % 2 === 1,
-  );
+// 정규식 `/(\\+)\|/g`는 백슬래시가 긴 값에서 시작 위치마다 런을 다시 훑어 제곱 시간이 든다.
+// 한 번 훑는 선형 스캔으로 센다.
+const hasOddBackslashBeforePipe = (text: string): boolean => {
+  let backslashes = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "\\") {
+      backslashes += 1;
+      continue;
+    }
+    if (char === "|" && backslashes % 2 === 1) return true;
+    backslashes = 0;
+  }
+  return false;
+};
 
 const isTargetNode = (node: MarkdownOutputNode): boolean =>
   node.type === "inlineCode" && hasOddBackslashBeforePipe(node.value ?? "");

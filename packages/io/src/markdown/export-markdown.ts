@@ -21,6 +21,7 @@ import type { ExportError } from "../errors.js";
 import { blocksInlineContentViolation } from "../inline-content-violation.js";
 import { groupListItemRuns } from "../list-item-run-grouping.js";
 import type { Result } from "../result.js";
+import { stripCodeTablePipeNodes } from "./code-table-pipe.js";
 import { computeColumnAlignments } from "./column-align.js";
 import {
   hasAmbiguousLeadingParagraph,
@@ -28,12 +29,11 @@ import {
   isGfmContainerLikeBlockType,
   isGfmListLikeBlockType,
 } from "./gfm-container-shape.js";
-import { stripCodeTablePipeNodes } from "./code-table-pipe.js";
 import { handleDelete } from "./gfm-strike-attention.js";
 import { handleText } from "./gfm-text-backslash.js";
 import { normalizeHardBreakEdges } from "./hard-break-edges.js";
-import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 import { inlineNodes, type MarkdownOutputNode } from "./inline-run-nodes.js";
+import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 import { mergeAdjacentText } from "./merge-adjacent-text.js";
 
 // rule: "-"는 mdast-util-to-markdown(remark-stringify 내부 직렬화기) 기존
