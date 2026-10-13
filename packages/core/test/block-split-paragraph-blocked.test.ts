@@ -12,6 +12,12 @@
  * 가지 않으므로, 그 거절만 확인한다.
  *
  * 여러 줄 붙여넣기 쪽 회귀는 clipboard-paste-plain-multiline.test.ts가 맡는다.
+ *
+ * Issue #411: 빈 목록 항목 Enter도 같은 설정에서 종료 규칙(항목을 paragraph로
+ * 바꾼다)이 대상을 잃어 false를 반환했고 키가 Tiptap 기본 체인으로 샌다. 이제
+ * 종료 규칙을 건너뛰고 같은 타입의 새 빈 항목을 연다. 목록 4종 × paragraph를
+ * 막은 설정 5종 × 위치 2종이다. Backspace 쪽은
+ * block-join/list-item-paragraph-blocked.test.ts가 맡는다.
  */
 import type { Block } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
@@ -25,8 +31,10 @@ import {
 } from "./clipboard-test-support.js";
 import {
   calloutBlock,
+  checkListItemBlock,
   documentOf,
   headingBlock,
+  listItemBlock,
   mountTiptapEditor,
   quoteBlock,
   sequentialIds,
@@ -163,6 +171,100 @@ describe("paragraph를 막은 설정의 끝 Enter(Issue #406)", () => {
         "p:",
         "p:",
       ]);
+    }
+  });
+});
+
+// 빈 항목 하나를 담은 목록 4종. label은 outline 약어다.
+const EMPTY_LIST_ITEMS: ReadonlyArray<{
+  type: string;
+  label: string;
+  item: () => Block;
+}> = [
+  {
+    type: "bulletListItem",
+    label: "ul",
+    item: () => listItemBlock("i", "bulletListItem", ""),
+  },
+  {
+    type: "numberedListItem",
+    label: "ol",
+    item: () => listItemBlock("i", "numberedListItem", ""),
+  },
+  {
+    type: "checkListItem",
+    label: "checkListItem",
+    item: () => checkListItemBlock("i", "", false),
+  },
+  {
+    type: "toggleListItem",
+    label: "toggle",
+    item: () => listItemBlock("i", "toggleListItem", ""),
+  },
+];
+
+describe("paragraph를 막은 설정의 빈 목록 항목 Enter(Issue #411)", () => {
+  for (const setting of SETTINGS) {
+    if (!setting.denied.includes("paragraph")) continue;
+
+    for (const list of EMPTY_LIST_ITEMS) {
+      it(`${setting.name} 막음 / ${list.type}: 빈 항목만 있는 문서에서 키를 소비하고 같은 타입의 빈 항목을 연다`, () => {
+        const { editor, tiptap } = setupPasteSelection(
+          [list.item()],
+          { id: "i", offset: 0 },
+          { id: "i", offset: 0 },
+          { enabledBlockTypes: deny(...setting.denied) },
+        );
+
+        expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
+
+        expect(outline(blocksOf(editor))).toEqual([
+          `${list.label}:`,
+          `${list.label}:`,
+        ]);
+        // 문서에 막은 타입이 없다.
+        tiptap.state.doc.descendants((node) => {
+          expect(setting.denied).not.toContain(node.type.name);
+        });
+      });
+
+      // heading을 막은 설정은 heading 뒤 위치의 문서 로드가 거절돼 목록 뒤로 대신한다.
+      it(`${setting.name} 막음 / ${list.type}: 목록 뒤 빈 항목도 같은 타입의 빈 항목을 열고 undo 한 번에 되돌아간다`, () => {
+        const { editor, tiptap } = setupPasteSelection(
+          [listItemBlock("b", "bulletListItem", "x"), list.item()],
+          { id: "i", offset: 0 },
+          { id: "i", offset: 0 },
+          { enabledBlockTypes: deny(...setting.denied) },
+        );
+        const beforeJson = tiptap.state.doc.toJSON();
+
+        expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
+
+        expect(outline(blocksOf(editor))).toEqual([
+          "ul:x",
+          `${list.label}:`,
+          `${list.label}:`,
+        ]);
+        tiptap.commands.undo();
+        expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+      });
+    }
+  }
+
+  // 대조군은 막은 타입을 넘기지 않는다(enabledBlockTypes 미지정). exactOptionalPropertyTypes라
+  // overrides에 undefined를 명시할 수 없어 빈 객체를 쓴다. deny 기본 인자 패턴은 쓰지 않는다.
+  it("대조군: paragraph를 막지 않으면 빈 항목 Enter가 항목을 paragraph로 바꾼다", () => {
+    for (const list of EMPTY_LIST_ITEMS) {
+      const { editor, tiptap } = setupPasteSelection(
+        [list.item()],
+        { id: "i", offset: 0 },
+        { id: "i", offset: 0 },
+        {},
+      );
+
+      expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
+      // 끝의 "p:" 하나는 로드 때 TrailingBlockExtension이 붙인 문단이다.
+      expect(outline(blocksOf(editor))).toEqual(["p:", "p:"]);
     }
   });
 });

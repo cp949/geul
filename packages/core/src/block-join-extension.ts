@@ -542,7 +542,11 @@ function handleCodeBlockBoundary(
   if (adjacent !== null) {
     if (direction === "backward") {
       const context = caretContext(selectionState);
-      if (context !== null && isListItemContent(context.$from.parent)) {
+      if (
+        context !== null &&
+        isListItemContent(context.$from.parent) &&
+        canExitListItem(liveState)
+      ) {
         return exitListItem(editor.view, liveState, {
           contentPosition: context.$from.before(context.$from.depth),
         });
@@ -651,9 +655,23 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
     isListItemContent($from.parent) &&
     (isToggleHeader || adjacent === null || isEmptyListItem)
   ) {
-    return exitListItem(view, liveState, {
-      contentPosition: $from.before($from.depth),
-    });
+    if (canExitListItem(liveState)) {
+      return exitListItem(view, liveState, {
+        contentPosition: $from.before($from.depth),
+      });
+    }
+    // paragraph를 막은 설정(Issue #411): 종료할 대상이 없다. false를 반환하면
+    // 키가 Tiptap 기본 체인으로 새 빈 항목을 앞 블록의 자식으로 들여쓰거나
+    // heading으로 바꾸므로, 종료 규칙만 건너뛰고 일반 규칙을 탄다.
+    // - 병합할 앞 블록이 없다: 바꿀 것이 없으니 키만 소비한다. tr을 만들지
+    //   않아 문서·selection·history가 그대로다.
+    // - 자식 있는 toggle 헤더: 병합하면 자식이 승격되므로(종료 규칙은 자식을
+    //   제자리에 둔다) 키만 소비한다.
+    // - 그 외(빈 항목, 자식 없는 toggle 헤더): 아래 일반 병합으로 흐른다.
+    if (adjacent === null) return true;
+    if (isToggleHeader && $from.node(containerDepth).childCount > 1) {
+      return true;
+    }
   }
   // 토글의 펼쳐진 영역에서 첫 자식이 아닌 행은 이전 형제와 병합하지 않고
   // 토글 밖으로 나가 토글과 같은 레벨의 형제 블록이 된다(사용자 결정
@@ -674,6 +692,12 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
   // (RD-003) — 연속·혼합된 atom·table 전부 그 너머에 닿을 때까지 건너뛴다.
   const previous = findMergeTarget(state.doc, containerStart, -1);
   if (previous === null) {
+    // paragraph를 막은 설정의 목록 항목(Issue #411): 앞이 divider·표뿐이라
+    // 병합 대상이 없다. 최선두 항목과 같이 키만 소비한다. false로 두면 키가
+    // Tiptap 기본 체인으로 새 엔진마다 결과가 갈린다.
+    if (isListItemContent($from.parent) && !canExitListItem(liveState)) {
+      return true;
+    }
     return selectionIsStale && isJoinBoundary(liveState, "backward");
   }
 
@@ -690,7 +714,7 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
   // 같은 2단계 보호를 받는다. 숨은 CodeBlock이면 아래 라벨 끝 병합(#253)을
   // 그대로 쓴다.
   if (hiddenLabelEnd === null && $target.parent.type.name === "codeBlock") {
-    if (isListItemContent($from.parent)) {
+    if (isListItemContent($from.parent) && canExitListItem(liveState)) {
       return exitListItem(view, liveState, {
         contentPosition: $from.before($from.depth),
       });
@@ -817,11 +841,23 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
   return true;
 }
 
+// 목록 종료 규칙을 쓸 수 있는가 — 종료 대상 paragraph가 스키마에 있어야
+// 한다. enabledBlockTypes가 paragraph를 막으면 없다(Issue #411). 호출부는
+// 이 판정이 false일 때 exitListItem을 부르지 않고 일반 규칙을 탄다.
+function canExitListItem(state: EditorState): boolean {
+  return state.schema.nodes.paragraph !== undefined;
+}
+
 // 목록 항목을 그 자리에서 paragraph로 바꿔 목록을 종료한다 — 병합 대상이
 // 없거나(문서 최선두) 항목이 비어 있을 때 호출부가 고른다. 컨테이너를
 // 재구성하지 않아 blockId·blockGroup(children)·깊이를 그대로 보존한다.
 // DOM-derived state는 판정·위치 계산에만 쓰고 문서 transaction은 유효한
 // live state에서 만든다(G-EDT-002).
+//
+// 호출부가 canExitListItem으로 막으므로 아래 paragraph 부재 검사는 도달하지
+// 않는다. 새 호출부가 판정을 빠뜨려도 TypeError 대신 false(키 미소비)가
+// 되도록 남긴 방어선이다. false는 키가 Tiptap 기본 체인으로 새는 결과라
+// 호출부 판정을 대신하지 못한다.
 function exitListItem(
   view: EditorView,
   state: EditorState,

@@ -180,6 +180,7 @@ function enterOverCodeBlockRange(
 export type SplitAtCaretOptions = {
   // 빈 목록 항목에서 새 항목 대신 paragraph로 바꾸는 exit 규칙을 켠다.
   // 기본값은 true다(Enter). 붙여넣기 중간 분할(plain-text-paste.ts)은 끈다.
+  // 스키마에 paragraph가 없으면 켜도 건너뛴다(Issue #411).
   exitEmptyList?: boolean;
 };
 
@@ -218,14 +219,18 @@ export function splitAtCaret(
   // blockGroup(children), 부모 안 인덱스와 중첩 깊이가 그대로 남는다.
   // 타입 전환과 selection을 같은 tr에 담아 dispatch·revision/event·undo를
   // 각각 한 번으로 유지한다(G-EDT-001).
+  // 예외: enabledBlockTypes가 paragraph를 막아 스키마에 paragraph가 없으면
+  // 이 종료 규칙을 건너뛰고 아래 일반 분할로 보낸다(Issue #411). 같은 목록
+  // 타입의 새 빈 항목이 열린다. 여기서 false를 반환하면 키가 Tiptap 기본
+  // 체인으로 새어 엔진마다 다른 결과가 난다.
+  const paragraph = contentNode.type.schema.nodes.paragraph;
   if (
     exitEmptyList &&
+    paragraph !== undefined &&
     isListItemContent(contentNode) &&
     contentNode.content.size === 0
   ) {
     const contentPosition = $from.before($from.depth);
-    const paragraph = contentNode.type.schema.nodes.paragraph;
-    if (paragraph === undefined) return false;
     tr.setNodeMarkup(contentPosition, paragraph);
     tr.setSelection(TextSelection.create(tr.doc, contentPosition + 1));
     return true;
