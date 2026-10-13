@@ -27,11 +27,10 @@
  */
 import type { Block } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
-import { undoDepth } from "@tiptap/pm/history";
 import { describe, expect, it } from "vitest";
 
 import { createEditor } from "../../src/index.js";
-import { contentTextStart, dispatchKeydown } from "../block-test-support.js";
+import { dispatchKeydown } from "../block-test-support.js";
 import { blocksOf, outline } from "../clipboard-test-support.js";
 import {
   checkListItemBlock,
@@ -46,11 +45,11 @@ import {
 } from "../editor-controller-support.js";
 import {
   denyBlockTypes,
-  expectKeyConsumedUnchanged,
+  expectBackspaceConsumedOnly,
   expectNoDeniedNodes,
+  mountAtBlockStart,
   PARAGRAPH_BLOCKED_SETTINGS,
   pressCountingDocChanges,
-  type EnabledBlockTypes,
 } from "./block-join-test-support.js";
 
 // 목록 4종. label은 outline 약어이고 item은 같은 모양의 항목 fixture다.
@@ -124,36 +123,6 @@ const POSITIONS: readonly Position[] = [
   },
 ];
 
-// 문서를 마운트하고 대상 항목 "i"의 선두에 캐럿을 둔다.
-const mountAtItem = (
-  blocks: Block[],
-  enabledBlockTypes: EnabledBlockTypes | undefined,
-) => {
-  const editor = createEditor({
-    initialDocument: documentOf(...blocks),
-    createId: sequentialIds("id"),
-    // exactOptionalPropertyTypes라 undefined는 키째 뺀다.
-    ...(enabledBlockTypes === undefined ? {} : { enabledBlockTypes }),
-  });
-  const { editable, tiptap } = mountTiptapEditor(editor);
-  editable.focus();
-  tiptap.commands.setTextSelection(contentTextStart(tiptap, "i"));
-  return { editor, tiptap };
-};
-
-// Backspace가 문서를 바꾸지 않고 키만 소비한다. selection과 undo 깊이도 그대로다.
-const expectBackspaceConsumedOnly = (tiptap: TiptapEditor): void => {
-  const selection = tiptap.state.selection;
-  const depth = undoDepth(tiptap.state);
-
-  expectKeyConsumedUnchanged(tiptap, () =>
-    dispatchKeydown(tiptap, "Backspace"),
-  );
-
-  expect(tiptap.state.selection.eq(selection)).toBe(true);
-  expect(undoDepth(tiptap.state)).toBe(depth);
-};
-
 // 키 하나가 문서를 정확히 한 번 바꾸고, undo 한 번이 원래 문서를 되돌린다.
 // inspect는 키 직후(undo 전) 결과를 확인한다.
 const expectOneUndoUnit = (
@@ -199,7 +168,7 @@ describe("paragraph를 막은 설정의 목록 항목 Backspace·Enter(Issue #41
             }
 
             it(`${position.name} / Backspace: 종료 규칙을 건너뛰고 일반 규칙을 탄다`, () => {
-              const { editor, tiptap } = mountAtItem(
+              const { editor, tiptap } = mountAtBlockStart(
                 blocks(),
                 denyBlockTypes(setting.denied),
               );
@@ -233,7 +202,7 @@ describe("paragraph를 막은 설정의 목록 항목 Backspace·Enter(Issue #41
             });
 
             it(`${position.name} / Enter: 키를 소비하고 같은 타입의 항목을 연다`, () => {
-              const { editor, tiptap } = mountAtItem(
+              const { editor, tiptap } = mountAtBlockStart(
                 blocks(),
                 denyBlockTypes(setting.denied),
               );
@@ -265,7 +234,7 @@ describe("paragraph를 막은 설정의 toggle 헤더 Backspace(Issue #411)", ()
 
   for (const setting of PARAGRAPH_BLOCKED_SETTINGS) {
     it(`${setting.name} 막음: 자식 있는 빈 헤더는 키만 소비하고 자식을 승격하지 않는다`, () => {
-      const { editor, tiptap } = mountAtItem(
+      const { editor, tiptap } = mountAtBlockStart(
         [listItemBlock("a", "bulletListItem", "x"), withKid()],
         denyBlockTypes(setting.denied),
       );
@@ -277,7 +246,7 @@ describe("paragraph를 막은 설정의 toggle 헤더 Backspace(Issue #411)", ()
     });
 
     it(`${setting.name} 막음: 문서 최선두의 자식 있는 헤더는 키만 소비한다`, () => {
-      const { editor, tiptap } = mountAtItem(
+      const { editor, tiptap } = mountAtBlockStart(
         [withKid()],
         denyBlockTypes(setting.denied),
       );
@@ -288,7 +257,7 @@ describe("paragraph를 막은 설정의 toggle 헤더 Backspace(Issue #411)", ()
     });
 
     it(`${setting.name} 막음: 자식 없는 비어 있지 않은 헤더는 앞 목록에 일반 병합한다`, () => {
-      const { editor, tiptap } = mountAtItem(
+      const { editor, tiptap } = mountAtBlockStart(
         [
           listItemBlock("a", "bulletListItem", "x"),
           listItemBlock("i", "toggleListItem", "ab"),
@@ -307,7 +276,7 @@ describe("paragraph를 막은 설정의 toggle 헤더 Backspace(Issue #411)", ()
 describe("paragraph를 막은 설정의 divider 너머 코드 블록 뒤 항목 Backspace(Issue #411)", () => {
   for (const setting of PARAGRAPH_BLOCKED_SETTINGS) {
     it(`${setting.name} 막음: 코드 블록을 항목이 한 번에 흡수하고 divider는 제자리에 남는다`, () => {
-      const { editor, tiptap } = mountAtItem(
+      const { editor, tiptap } = mountAtBlockStart(
         [
           codeBlockBlock("c", "c"),
           dividerBlock("d"),
@@ -336,7 +305,7 @@ describe("paragraph를 막은 설정의 병합 대상 없는 빈 항목 Backspac
   for (const setting of PARAGRAPH_BLOCKED_SETTINGS) {
     for (const atom of ATOM_BEFORE) {
       it(`${setting.name} 막음: 앞이 ${atom.name}뿐인 빈 항목은 키만 소비한다`, () => {
-        const { tiptap } = mountAtItem(
+        const { tiptap } = mountAtBlockStart(
           [atom.before(), listItemBlock("i", "bulletListItem", "")],
           denyBlockTypes(setting.denied),
         );
@@ -355,7 +324,7 @@ describe("paragraph를 막지 않은 대조군(Issue #411)", () => {
   // enabledBlockTypes를 undefined로 명시한다 — deny 기본 인자로 치환되지 않는다.
   // 끝의 "p:" 하나는 문서가 목록 항목으로 끝나서 TrailingBlockExtension이 붙인 문단이다.
   it("빈 bullet만 있는 문서의 Enter는 항목을 paragraph로 바꾼다", () => {
-    const { editor, tiptap } = mountAtItem(
+    const { editor, tiptap } = mountAtBlockStart(
       [listItemBlock("i", "bulletListItem", "")],
       undefined,
     );
@@ -366,7 +335,7 @@ describe("paragraph를 막지 않은 대조군(Issue #411)", () => {
   });
 
   it("빈 bullet만 있는 문서의 Backspace는 항목을 paragraph로 바꾼다", () => {
-    const { editor, tiptap } = mountAtItem(
+    const { editor, tiptap } = mountAtBlockStart(
       [listItemBlock("i", "bulletListItem", "")],
       undefined,
     );
@@ -377,7 +346,7 @@ describe("paragraph를 막지 않은 대조군(Issue #411)", () => {
   });
 
   it("heading 뒤 빈 bullet의 Backspace는 항목을 paragraph로 바꾼다", () => {
-    const { editor, tiptap } = mountAtItem(
+    const { editor, tiptap } = mountAtBlockStart(
       [headingBlock("h", 2, "x"), listItemBlock("i", "bulletListItem", "")],
       undefined,
     );
@@ -388,7 +357,7 @@ describe("paragraph를 막지 않은 대조군(Issue #411)", () => {
   });
 
   it("코드 블록 뒤 bullet의 첫 Backspace는 항목을 paragraph로 바꾸고 코드는 남긴다", () => {
-    const { editor, tiptap } = mountAtItem(
+    const { editor, tiptap } = mountAtBlockStart(
       [codeBlockBlock("c", "c"), listItemBlock("i", "bulletListItem", "ab")],
       undefined,
     );

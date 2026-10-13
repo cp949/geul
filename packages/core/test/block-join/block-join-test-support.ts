@@ -30,12 +30,15 @@
  * 검증한다 — 이 커맨드는 addKeyboardShortcuts로만 등록돼 editor.commands로
  * 노출되지 않는다(G-WKS-001).
  */
-import { type Document } from "@cp949/geul-model";
+import { type Block, type Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
+import { undoDepth } from "@tiptap/pm/history";
 import { expect } from "vitest";
 
 import { createEditor, type CreateEditorOptions } from "../../src/index.js";
+import { contentTextStart, dispatchKeydown } from "../block-test-support.js";
 import {
+  documentOf,
   mountTiptapEditor,
   sequentialIds,
 } from "../editor-controller-support.js";
@@ -121,6 +124,42 @@ const expectKeyConsumedUnchanged = (
 };
 
 /**
+ * 블록 목록을 마운트하고 캐럿을 블록 "i"의 텍스트 선두에 둔다(Issue #411,
+ * #413). enabledBlockTypes가 undefined면 설정 없음 대조군이다.
+ */
+const mountAtBlockStart = (
+  blocks: Block[],
+  enabledBlockTypes: EnabledBlockTypes | undefined,
+) => {
+  const editor = createEditor({
+    initialDocument: documentOf(...blocks),
+    createId: sequentialIds("id"),
+    // exactOptionalPropertyTypes라 undefined는 키째 뺀다.
+    ...(enabledBlockTypes === undefined ? {} : { enabledBlockTypes }),
+  });
+  const { editable, tiptap } = mountTiptapEditor(editor);
+  editable.focus();
+  tiptap.commands.setTextSelection(contentTextStart(tiptap, "i"));
+  return { editor, tiptap };
+};
+
+/**
+ * Backspace가 문서를 바꾸지 않고 키만 소비함을 단언한다. selection과 undo
+ * 깊이도 그대로다(Issue #411, #413).
+ */
+const expectBackspaceConsumedOnly = (tiptap: TiptapEditor): void => {
+  const selection = tiptap.state.selection;
+  const depth = undoDepth(tiptap.state);
+
+  expectKeyConsumedUnchanged(tiptap, () =>
+    dispatchKeydown(tiptap, "Backspace"),
+  );
+
+  expect(tiptap.state.selection.eq(selection)).toBe(true);
+  expect(undoDepth(tiptap.state)).toBe(depth);
+};
+
+/**
  * 문서 마지막 컨테이너의 콘텐츠 노드 안 선두에 캐럿을 둔다. 자동 trailing
  * 문단은 blockId를 미리 알 수 없어(생성 시점에 정해진다) blockId 대신 위치로
  * 찾는다. 컨테이너 pos + 2가 콘텐츠 노드 안 텍스트 시작이다(D19).
@@ -170,9 +209,11 @@ const expectNoDeniedNodes = (
 export {
   countNodes,
   denyBlockTypes,
+  expectBackspaceConsumedOnly,
   expectNoDeniedNodes,
   expectKeyConsumedUnchanged,
   expectSchemaValid,
+  mountAtBlockStart,
   mountDocument,
   PARAGRAPH_BLOCKED_SETTINGS,
   placeCaretInLastContainer,
