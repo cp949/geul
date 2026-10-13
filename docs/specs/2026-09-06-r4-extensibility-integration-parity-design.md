@@ -96,7 +96,7 @@ setTextCursorPosition(blockId: string, placement?: "start" | "end"): Result<void
 setSelection(startBlockId: string, endBlockId: string): Result<void, EditorError>;
 ```
 
-`PartialBlock`은 `{ type: Block["type"]; id?: string } & Partial<Omit<Block, "type" | "id">>` 형태로 타입별 필수 하위 구조(표의 행/열/셀 등)는 여전히 해당 타입 전용 필드를 요구한다 — 이 API는 새로운 완화된 검증을 만들지 않고 기존 `model` 검증에 위임한다. 표·미디어처럼 이미 전용 명령(`insertMediaBlock`, table 명령 15종)이 있는 타입은 그 명령이 더 정확한 에러를 준다는 안내를 API 문서에 남긴다(대체가 아니라 병행). `replaceBlocks`는 제거 대상과 같은 id의 블록을 삽입할 수 있다. 제거는 id가 아니라 원래 있던 노드 기준이라 삽입한 블록은 지워지지 않는다. 제거 대상에 없는 id가 삽입 블록과 겹치면 문서 검증이 `DOCUMENT_INVALID`로 거절한다.
+`PartialBlock`은 `{ type: Block["type"]; id?: string } & Partial<Omit<Block, "type" | "id">>` 형태로 타입별 필수 하위 구조(표의 행/열/셀 등)는 여전히 해당 타입 전용 필드를 요구한다 — 이 API는 새로운 완화된 검증을 만들지 않고 기존 `model` 검증에 위임한다. 표·미디어처럼 이미 전용 명령(`insertMediaBlock`, table 명령 15종)이 있는 타입은 그 명령이 더 정확한 에러를 준다는 안내를 API 문서에 남긴다(대체가 아니라 병행). `replaceBlocks`는 제거 대상과 같은 id의 블록을 삽입할 수 있다. 제거는 id가 아니라 원래 있던 노드 기준이라 삽입한 블록은 지워지지 않는다. 제거 대상에 없는 id가 삽입 블록과 겹치면 문서 검증이 `DOCUMENT_INVALID`로 거절한다. 구현 반영(2026-10-13, Issue #405): `removeBlocks`와 `replaceBlocks`는 제거 대상 id가 중복이거나 한 대상이 다른 대상의 서브트리 안에 있으면(조상+자손) transaction 전에 `COMMAND_NOT_APPLICABLE`로 거절한다. 인자 순서와 무관하다. 문서·selection·change event·undo 단위는 호출 전과 같다. 존재하지 않는 id가 섞이면 `BLOCK_NOT_FOUND`가 먼저다. 이전에는 `removeBlocks`가 자손을 먼저 적은 조합을 성공시켰다.
 
 텍스트가 없는 leaf 블록(구분선 등)의 `setTextCursorPosition`은 NodeSelection으로 대체한다. `table` 블록은 첫 번째 셀의 시작/끝으로 매핑한다.
 
