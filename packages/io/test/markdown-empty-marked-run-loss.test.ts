@@ -11,7 +11,6 @@
  * lossy 출력은 바뀌지 않고 경고만 더해진다.
  */
 import type {
-  Block,
   Document,
   InlineContent,
   InlineContentItem,
@@ -19,33 +18,21 @@ import type {
 } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
+import { analyzeMarkdownLoss, exportMarkdown } from "../src/index.js";
+import { buildDocument } from "./fixtures/quote-divider-document.js";
 import {
-  analyzeMarkdownLoss,
-  exportMarkdown,
-  type MarkdownLoss,
-} from "../src/index.js";
-import {
-  buildDocument,
-  calloutBlock,
-  headingBlock,
-  paragraphBlock,
-  quoteBlock,
-} from "./fixtures/quote-divider-document.js";
+  type Host,
+  hostDocument,
+  kindsOf,
+  lossesOf,
+  strictRejectedLosses,
+} from "./markdown-inline-run-support.js";
 
 const LINK: TextMark = { type: "link", href: "https://e.com" };
 const BOLD: TextMark = { type: "bold" };
 const ITALIC: TextMark = { type: "italic" };
 const STRIKE: TextMark = { type: "strike" };
 const CODE: TextMark = { type: "code" };
-
-type Host =
-  | "paragraph"
-  | "heading"
-  | "bulletListItem"
-  | "checkListItem"
-  | "quote"
-  | "callout"
-  | "tableCell";
 
 const HOSTS: readonly Host[] = [
   "paragraph",
@@ -64,52 +51,6 @@ const emptyRun = (marks?: TextMark[]): InlineContentItem =>
   marks === undefined ? { text: "" } : { text: "", marks };
 
 /**
- * 호스트 종류에 content를 얹은 문서를 만든다. 호스트 블록 id는 항상 "host"다.
- * 표 셀은 열 1개·행 1개 표의 유일한 셀에 content를 둔다(rowId "row", cellId "cell").
- */
-const hostDocument = (host: Host, content: InlineContent): Document => {
-  const block: Block = (() => {
-    switch (host) {
-      case "paragraph":
-        return { ...paragraphBlock("host", ""), content };
-      case "heading":
-        return { ...headingBlock("host", 1, ""), content };
-      case "bulletListItem":
-        return { id: "host", type: "bulletListItem", content };
-      case "checkListItem":
-        return { id: "host", type: "checkListItem", checked: false, content };
-      case "quote":
-        return { ...quoteBlock("host", ""), content };
-      case "callout":
-        return { ...calloutBlock("host", ""), content };
-      case "tableCell":
-        return {
-          id: "host",
-          type: "table",
-          columns: [{ id: "col", width: 160 }],
-          rows: [
-            {
-              id: "row",
-              cells: [
-                {
-                  id: "cell",
-                  columnId: "col",
-                  rowSpan: 1,
-                  columnSpan: 1,
-                  content,
-                },
-              ],
-            },
-          ],
-          headerRows: 1,
-          headerColumns: 0,
-        };
-    }
-  })();
-  return buildDocument([block]);
-};
-
-/**
  * 호스트 종류에 맞는 손실 위치 필드를 돌려준다. 표 셀이면 rowId·cellId가 붙는다.
  */
 const locationOf = (
@@ -120,42 +61,10 @@ const locationOf = (
     : { blockId: "host" };
 
 /**
- * callout은 content와 무관하게 항상 CALLOUT_STATE_LOST를 낸다.
- * 이 파일은 빈 마커 런이 만드는 손실만 보므로 그 kind는 걸러 낸다.
- */
-const withoutCalloutLoss = (losses: readonly MarkdownLoss[]): MarkdownLoss[] =>
-  losses.filter((loss) => loss.kind !== "CALLOUT_STATE_LOST");
-
-/**
  * 경고 메시지가 담아야 하는 id를 돌려준다. 블록은 블록 id, 표 셀은 셀 id다.
  */
 const messageIdOf = (host: Host): string =>
   host === "tableCell" ? "cell" : "host";
-
-/**
- * 문서의 손실 중 callout 고유 손실을 뺀 것만 돌려준다.
- */
-const lossesOf = (document: Document): MarkdownLoss[] =>
-  withoutCalloutLoss(analyzeMarkdownLoss(document));
-
-/**
- * 문서의 손실 kind 목록만 뽑는다(callout 고유 손실 제외).
- */
-const kindsOf = (document: Document): string[] =>
-  lossesOf(document).map((loss) => loss.kind);
-
-/**
- * strict 내보내기를 실행해 거절 결과의 손실 목록(callout 고유 손실 제외)을 돌려준다.
- * 성공하면 null이다.
- */
-const strictRejectedLosses = (document: Document): MarkdownLoss[] | null => {
-  const result = exportMarkdown(document, { mode: "strict" });
-  if (result.ok) return null;
-  expect(result.error.code).toBe("MARKDOWN_LOSS_NOT_ALLOWED");
-  return "losses" in result.error
-    ? withoutCalloutLoss(result.error.losses)
-    : [];
-};
 
 /**
  * lossy 내보내기를 실행해 markdown 문자열만 돌려준다. 실패하면 결과 전체를 돌려준다.
