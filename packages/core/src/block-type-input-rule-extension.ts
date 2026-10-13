@@ -44,6 +44,14 @@ const createBlockTypeInputRule = (
   return new InputRule({
     find,
     handler: ({ state, range, match }) => {
+      // 범위 선택이면 가장 먼저 건너뛴다. 아래 계산보다 앞이어야 한다.
+      // - 입력 범위의 끝(range.to)은 선택 끝에서 온다.
+      // - 선택이 블록 경계를 걸치면 range.to가 $from.parent 밖이다.
+      // - 그때 heading 재발동 분기의 textBetween이 Fragment.nodesBetween에서
+      //   던진다(#407).
+      // 건너뛴 입력은 브라우저 기본 입력(선택 대체 평문)이 맡는다.
+      if (!state.selection.empty) return null;
+
       const $from = state.doc.resolve(range.from);
       const container = $from.node(-1);
       // range.to는 아직 트리거 문자(마지막 1글자, 공백)가 실제 삽입되기
@@ -72,13 +80,12 @@ const createBlockTypeInputRule = (
             "\ufffc",
           )
         : $from.parent.textContent;
-      // Tiptap matcher는 캐럿 앞 텍스트만 읽는다. 전체 pre-input paragraph와
-      // selection을 별도로 확인해야 suffix·선택 대체·simulated input을
-      // 막는다(list-input-rule-extension.ts와 동일 근거). childCount > 1은
+      // Tiptap matcher는 캐럿 앞 텍스트만 읽는다. 전체 pre-input paragraph를
+      // 별도로 확인해야 suffix·simulated input을 막는다. 선택 대체는 위쪽
+      // 가드가 막는다(list-input-rule-extension.ts와 동일 근거). childCount > 1은
       // container가 콘텐츠 노드 뒤에 blockGroup(들여쓴 자식)을 이미 갖고
       // 있다는 뜻 — leafBlockContent 대상은 이 상태와 공존할 수 없다.
       if (
-        !state.selection.empty ||
         (sourceTypeName !== "paragraph" && !isSameTypeRetrigger) ||
         container.type.name !== "blockContainer" ||
         beforeCaret !== marker ||
