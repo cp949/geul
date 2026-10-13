@@ -50,7 +50,7 @@ import type { Options } from "remark-stringify";
 //   - strike 고유 문제가 아니다. bold·italic 앞에서도 같다. 이 파일은 고치지 않는다.
 //
 // 본문 출처: mdast-util-to-markdown@2.2.0 `handle/text.js`. `state.safe` 호출을 옮겼다.
-// 달라진 점은 `before` 치환(#403) 하나다.
+// 달라진 점은 `before`·`after` 치환(#403) 둘이다.
 // io의 직접 의존이 아니라 import하지 않았다.
 //
 // 라이브러리 업그레이드 시 확인할 것:
