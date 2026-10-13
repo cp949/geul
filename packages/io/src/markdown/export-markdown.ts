@@ -32,6 +32,7 @@ import { handleDelete } from "./gfm-strike-attention.js";
 import { handleText } from "./gfm-text-backslash.js";
 import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 import { mergeAdjacentInline } from "./merge-adjacent-inline.js";
+import { mergeAdjacentText } from "./merge-adjacent-text.js";
 
 // rule: "-"는 mdast-util-to-markdown(remark-stringify 내부 직렬화기) 기존
 // 옵션이다 — thematicBreak를 기본값 "***" 대신 "---"로 쓰게 한다(spec §7.2,
@@ -173,10 +174,14 @@ const runNodes = (
 
 // 인접한 같은 mark 노드를 합친다(Issue #395). 합치지 않으면 strike·code가
 // `~~a~~~~b~~`처럼 나란히 나가 재가져오기에서 구분자가 글자로 샌다.
+// 그 뒤 인접 평문 text도 합친다(Issue #399). lossy에서 mark 없이 통과한 런이
+// 평문 text 둘로 남으면 `\`+글자 보정이 앞 노드 끝을 놓친다. 순서가 중요하다.
+// mergeAdjacentInline이 자식을 이어 붙인 뒤에야 text끼리 만난다.
 const inlineNodes = (
   content: InlineContent,
   inTableCell: boolean,
-): MarkdownOutputNode[] => mergeAdjacentInline(runNodes(content, inTableCell));
+): MarkdownOutputNode[] =>
+  mergeAdjacentText(mergeAdjacentInline(runNodes(content, inTableCell)));
 
 const tableNode = (table: TableBlock): MarkdownOutputNode => {
   const columnIndices = new Map(

@@ -11,7 +11,7 @@
 // - strong, emphasis, delete는 자식을 이어 붙인다.
 // - link는 url이 같을 때만 자식을 이어 붙인다. url이 다르면 의미가 다르다.
 // - inlineCode는 값을 이어 붙인다.
-// - 평문 text는 합치지 않는다. 직렬화 결과가 같아 문제를 일으키지 않는다.
+// - 평문 text는 여기서 합치지 않는다. `merge-adjacent-text.ts`가 맡는다(Issue #399).
 //
 // 함정:
 // - 이어 붙인 뒤에 자식을 다시 합쳐야 한다.

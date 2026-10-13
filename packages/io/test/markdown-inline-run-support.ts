@@ -4,7 +4,7 @@
  * `markdown-strike-flanking.test.ts`(#397)가 같은 본문을 각자 선언했던 것을
  * 여기로 올렸다(G-TST-002).
  * - 문단 하나 또는 표 셀 하나에 content를 둔 문서를 만든다.
- * - strict 내보내기 문자열과, 재가져온 첫 블록의 글자 런을 돌려준다.
+ * - strict·lossy 내보내기 문자열과, 재가져온 첫 블록의 글자 런을 돌려준다.
  */
 import type {
   Block,
@@ -71,6 +71,16 @@ export const strictMarkdown = (document: Document): string => {
   const result = exportMarkdown(document, { mode: "strict" });
   if (!result.ok) throw new Error(`strict 내보내기 실패: ${result.error.code}`);
   return result.value;
+};
+
+/**
+ * lossy 내보내기를 실행해 markdown 문자열을 돌려준다. 실패하면 던진다.
+ * underline·textColor·backgroundColor는 lossy에서 mark 없이 통과한다.
+ */
+export const lossyMarkdown = (document: Document): string => {
+  const result = exportMarkdown(document, { mode: "lossy" });
+  if (!result.ok) throw new Error(`lossy 내보내기 실패: ${result.error.code}`);
+  return result.value.markdown;
 };
 
 /**
