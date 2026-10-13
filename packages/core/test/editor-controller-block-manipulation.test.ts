@@ -1088,6 +1088,181 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — removeBlo
     expect(result.ok).toBe(true);
     expect(editor.getDocument().blocks.map((b) => b.id)).toEqual(["tail"]);
   });
+
+  describe("겹치는 제거 대상 거절(Issue #405)", () => {
+    // p1 > [c1, c2 > [m1]], p2, tail — 조상 p1, 자식 c2, 중손 m1을 모두 쓴다.
+    const nestedDocument = () =>
+      documentOf(
+        paragraphBlock("p1", "parent", [
+          paragraphBlock("c1", "child1"),
+          paragraphBlock("c2", "child2", [paragraphBlock("m1", "grand")]),
+        ]),
+        paragraphBlock("p2", "second"),
+        tailParagraphBlock,
+      );
+
+    it.each([
+      { title: "조상과 자손(p1, c1)", ids: ["p1", "c1"] },
+      { title: "자손을 먼저 적은 조상과 자손(c1, p1)", ids: ["c1", "p1"] },
+      { title: "조상과 중손(p1, m1)", ids: ["p1", "m1"] },
+      { title: "중손을 먼저 적은 조상과 중손(m1, p1)", ids: ["m1", "p1"] },
+      { title: "부모와 자식(c2, m1)", ids: ["c2", "m1"] },
+      { title: "자식을 먼저 적은 부모와 자식(m1, c2)", ids: ["m1", "c2"] },
+      {
+        title: "겹치는 쌍이 섞인 세 대상(p2, c1, p1)",
+        ids: ["p2", "c1", "p1"],
+      },
+      { title: "같은 id를 두 번 적으면(p2, p2)", ids: ["p2", "p2"] },
+      { title: "자손 id를 두 번 적으면(c1, c1)", ids: ["c1", "c1"] },
+    ])(
+      "$title 거절되고 문서·selection·change·undo 단위가 그대로다",
+      ({ ids }) => {
+        const fixture = mounted(nestedDocument());
+        const { editor, tiptap, changes } = fixture;
+        const beforePrior = editorState(editor, tiptap);
+        expect(editor.commands.setBlockTextColor("tail", "#AABBCC").ok).toBe(
+          true,
+        );
+        const before = editorState(editor, tiptap);
+        const beforeChanges = [...changes];
+
+        expect(editor.removeBlocks(ids)).toEqual(notApplicable("removeBlocks"));
+
+        expect(editorState(editor, tiptap)).toEqual(before);
+        expect(changes).toEqual(beforeChanges);
+        expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+        expect(editorState(editor, tiptap)).toEqual(restored(beforePrior, 2));
+      },
+    );
+
+    it("조상과 자손의 두 인자 순서가 같은 Result를 돌려준다", () => {
+      const results = [
+        ["p1", "c1"],
+        ["c1", "p1"],
+        ["p1", "m1"],
+        ["m1", "p1"],
+      ].map((ids) => mounted(nestedDocument()).editor.removeBlocks(ids));
+
+      for (const result of results) {
+        expect(result).toEqual(notApplicable("removeBlocks"));
+      }
+    });
+
+    it.each([
+      { title: "조상 앞", ids: ["p1", "missing", "c1"] },
+      { title: "자손 앞", ids: ["c1", "missing", "p1"] },
+      { title: "중복 id 사이", ids: ["p2", "missing", "p2"] },
+    ])(
+      "존재하지 않는 id가 섞이면 겹침 검사보다 먼저 BLOCK_NOT_FOUND다($title)",
+      ({ ids }) => {
+        const fixture = mounted(nestedDocument());
+        const { editor, tiptap, changes } = fixture;
+        const before = editorState(editor, tiptap);
+
+        expect(editor.removeBlocks(ids)).toEqual({
+          ok: false,
+          error: { code: "BLOCK_NOT_FOUND", blockId: "missing" },
+        });
+
+        expect(editorState(editor, tiptap)).toEqual(before);
+        expect(changes).toEqual([]);
+      },
+    );
+
+    it.each([
+      {
+        title: "자손과 겹치지 않는 바깥 블록(c1, p2)",
+        ids: ["c1", "p2"],
+        expected: () =>
+          documentOf(
+            paragraphBlock("p1", "parent", [
+              paragraphBlock("c2", "child2", [paragraphBlock("m1", "grand")]),
+            ]),
+            tailParagraphBlock,
+          ),
+      },
+      {
+        title: "바깥 블록을 먼저 적은 대상(p2, c1)",
+        ids: ["p2", "c1"],
+        expected: () =>
+          documentOf(
+            paragraphBlock("p1", "parent", [
+              paragraphBlock("c2", "child2", [paragraphBlock("m1", "grand")]),
+            ]),
+            tailParagraphBlock,
+          ),
+      },
+      {
+        title: "깊이가 다른 자손끼리(c1, m1)",
+        ids: ["c1", "m1"],
+        expected: () =>
+          documentOf(
+            paragraphBlock("p1", "parent", [paragraphBlock("c2", "child2")]),
+            paragraphBlock("p2", "second"),
+            tailParagraphBlock,
+          ),
+      },
+      {
+        title: "깊이가 다른 자손을 먼저 적은 순서(m1, c1)",
+        ids: ["m1", "c1"],
+        expected: () =>
+          documentOf(
+            paragraphBlock("p1", "parent", [paragraphBlock("c2", "child2")]),
+            paragraphBlock("p2", "second"),
+            tailParagraphBlock,
+          ),
+      },
+      {
+        title: "바깥 블록과 중손(p2, m1)",
+        ids: ["p2", "m1"],
+        expected: () =>
+          documentOf(
+            paragraphBlock("p1", "parent", [
+              paragraphBlock("c1", "child1"),
+              paragraphBlock("c2", "child2"),
+            ]),
+            tailParagraphBlock,
+          ),
+      },
+      {
+        title: "형제(c1, c2)",
+        ids: ["c1", "c2"],
+        expected: () =>
+          documentOf(
+            paragraphBlock("p1", "parent"),
+            paragraphBlock("p2", "second"),
+            tailParagraphBlock,
+          ),
+      },
+      {
+        title: "형제를 뒤집은 순서(c2, c1)",
+        ids: ["c2", "c1"],
+        expected: () =>
+          documentOf(
+            paragraphBlock("p1", "parent"),
+            paragraphBlock("p2", "second"),
+            tailParagraphBlock,
+          ),
+      },
+    ])(
+      "겹치지 않는 대상 — $title 순서와 무관하게 성공하고 undo 1회로 복원된다",
+      ({ ids, expected }) => {
+        const fixture = mounted(nestedDocument());
+        const { editor, tiptap } = fixture;
+        const before = editorState(editor, tiptap);
+
+        const result = editor.removeBlocks(ids);
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) throw new Error("unreachable");
+        expect(result.value.map((block) => block.id)).toEqual(ids);
+        expect(editor.getDocument().blocks).toEqual(expected().blocks);
+
+        expect(editor.commands.undo()).toEqual({ ok: true, value: undefined });
+        expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+      },
+    );
+  });
 });
 
 describe("에디터 컨트롤러 범용 블록 조작 API(DOC-006) — moveBlocksUp/moveBlocksDown", () => {
