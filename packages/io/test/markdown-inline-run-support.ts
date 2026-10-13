@@ -10,6 +10,7 @@
  * - 손실 목록(`lossesOf`)·손실 kind 목록(`kindsOf`)·strict 거절 손실
  *   (`strictRejectedLosses`)을 callout 고유 손실을 뺀 채 돌려준다.
  * - 재가져온 content의 글자를 이어 붙이고(`joinedText`), mark가 달린 런만 뽑는다(`markedRuns`).
+ * - 자주 쓰는 mark 상수(`BOLD`·`ITALIC`·`STRIKE`·`CODE`)와 런 helper(`bold`·`italic`·`boldItalic`)를 둔다.
  */
 import type {
   Block,
@@ -41,6 +42,27 @@ export const run = (text: string, marks: TextMark[]): InlineContentItem => ({
   text,
   marks,
 });
+
+export const BOLD: TextMark = { type: "bold" };
+export const ITALIC: TextMark = { type: "italic" };
+export const STRIKE: TextMark = { type: "strike" };
+export const CODE: TextMark = { type: "code" };
+
+/**
+ * bold 런 하나를 만든다.
+ */
+export const bold = (text: string): InlineContentItem => run(text, [BOLD]);
+
+/**
+ * italic 런 하나를 만든다.
+ */
+export const italic = (text: string): InlineContentItem => run(text, [ITALIC]);
+
+/**
+ * bold·italic 런 하나를 만든다.
+ */
+export const boldItalic = (text: string): InlineContentItem =>
+  run(text, [BOLD, ITALIC]);
 
 /**
  * content를 담은 paragraph 하나짜리 문서를 만든다.

@@ -3,6 +3,7 @@
 // 판정이 변환 결과의 노드를 보므로 합치는 규칙을 모델 쪽에 복제하지 않는다(G-CNV-001).
 import type { InlineContent, TextMark } from "@cp949/geul-model";
 
+import { liftEmphasisSandwich } from "./lift-emphasis-sandwich.js";
 import { mergeAdjacentInline } from "./merge-adjacent-inline.js";
 import { mergeAdjacentText } from "./merge-adjacent-text.js";
 
@@ -130,13 +131,21 @@ const runNodes = (
       );
   });
 
-// 인접한 같은 mark 노드를 합친다(Issue #395). 합치지 않으면 strike·code가
-// `~~a~~~~b~~`처럼 나란히 나가 재가져오기에서 구분자가 글자로 샌다.
-// 그 뒤 인접 평문 text도 합친다(Issue #399). lossy에서 mark 없이 통과한 런이
-// 평문 text 둘로 남으면 `\`+글자 보정이 앞 노드 끝을 놓친다. 순서가 중요하다.
-// mergeAdjacentInline이 자식을 이어 붙인 뒤에야 text끼리 만난다.
+// 변환 순서는 병합 → 끌어올림 → 평문 병합이다. 앞 단계 결과를 다음 단계가 읽는다.
+// 1. mergeAdjacentInline: 인접한 같은 mark 노드를 합친다(Issue #395). 합치지 않으면
+//    strike·code가 `~~a~~~~b~~`처럼 나란히 나가 재가져오기에서 구분자가 글자로 샌다.
+// 2. liftEmphasisSandwich: `emphasis · strong[emphasis] · emphasis` 샌드위치를 emphasis
+//    하나로 끌어올린다(Issue #415). 앞 strong이 구두점으로 끝나는데 그대로 두면
+//    라이브러리의 탐욕 탐색이 `**.***a****a****1*`처럼 `*` 구분자를 연달아 붙여 낸다.
+//    재가져오기에서 닫는 구분자가 글자로 새 글자와 mark가 달라진다.
+//    샌드위치는 1번이 인접 노드를 합친 뒤에야 나타나므로 1번 다음에 둔다.
+// 3. mergeAdjacentText: 인접 평문 text를 합친다(Issue #399). lossy에서 mark 없이 통과한
+//    런이 평문 text 둘로 남으면 `\`+글자 보정이 앞 노드 끝을 놓친다. 1번이 자식을 이어 붙이고
+//    2번이 끌어올려 자식을 재배치한 뒤에야 text끼리 만나므로 맨 마지막에 둔다.
 export const inlineNodes = (
   content: InlineContent,
   inTableCell: boolean,
 ): MarkdownOutputNode[] =>
-  mergeAdjacentText(mergeAdjacentInline(runNodes(content, inTableCell)));
+  mergeAdjacentText(
+    liftEmphasisSandwich(mergeAdjacentInline(runNodes(content, inTableCell))),
+  );
