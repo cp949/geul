@@ -798,11 +798,17 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
   // 편입한다(RD-003).
   const next = findMergeTarget(state.doc, $from.after(), 1);
   if (next === null) {
-    // 빈 마지막 문단이면 소비한다(Issue #404). false로 폴스루하면 Tiptap
-    // deleteCurrentNode가 같은 문단으로 되채워 undo 단위만 남는다.
+    // 병합 대상 없는 문서 끝이면 키만 소비한다. false로 폴스루하면 Tiptap
+    // deleteCurrentNode가 빈 블록을 되채운다.
+    // - 빈 텍스트블록(Issue #404): paragraph로 되채워 undo 단위만 남는다.
+    //   paragraph를 허용하면 문서 끝에 항상 trailing paragraph가 있어 여기
+    //   닿는 빈 블록은 paragraph뿐이다.
+    // - paragraph가 스키마에 없으면 비어 있지 않아도 소비한다(Issue #412).
+    //   trailing 문단이 없어 어떤 블록이든 문서 끝이 된다. 빈 블록은 스키마
+    //   기본 채움 타입인 level 1 heading으로 바뀐다.
     if (
-      $from.parent.type.name === "paragraph" &&
-      $from.parent.content.size === 0
+      $from.parent.content.size === 0 ||
+      state.schema.nodes.paragraph === undefined
     ) {
       return true;
     }

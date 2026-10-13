@@ -249,13 +249,13 @@ function deleteEmptyCodeBlock(editor: Editor): boolean {
   const container = $from.node(containerDepth);
   if (container.type.name !== "blockContainer") return false;
 
+  // 최상위 유일한 블록이면 지우지 않고 키만 소비한다(Issue #412). 지우면
+  // 문서에 블록이 남지 않는다. paragraph를 허용하면 TrailingBlockExtension이
+  // 문서 끝에 trailing paragraph를 붙여 두므로 이 상태는 없다. paragraph를
+  // 막으면 trailing 문단이 없어 도달한다. 중첩 유일 자식은 부모가 남아
+  // 문서가 비지 않으니 그대로 지운다.
+  if (containerDepth === 1 && $from.node(0).childCount === 1) return true;
   // deleteBlockRange가 blockGroup의 유일한 자식이면 그 그룹째로 지운다.
-  // "문서 최상위 유일 블록" 가드는
-  // 여기 없다: codeBlock은 위 exitCodeBlockOnDoubleEnter와 같은 이유로
-  // 문서 최상위 마지막 블록일 때 TrailingBlockExtension이 항상 trailing
-  // paragraph를 붙여 두므로, 이 codeBlock이 doc의 유일한 자식인 상태
-  // 자체가 이 handler가 실행되는 시점엔 존재할 수 없다(도달 불가능한
-  // 가드는 만들지 않는다 — 테스트로 고정할 수 없는 분기다).
   editor.view.dispatch(
     closeHistory(
       deleteBlockRange(
