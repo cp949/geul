@@ -307,6 +307,7 @@ Markdown dialect는 GitHub Flavored Markdown으로 고정한다.
 - `lossy` export에서도 내용 의미를 안전하게 결정할 수 없는 구조는 실패한다.
 - Markdown 안에 raw HTML을 삽입해 비표준 정보를 보존하지 않는다.
 - Markdown import의 raw HTML은 실행하거나 고충실도 HTML 경로로 승격하지 않는다. 텍스트로 낮추거나 제거하고 경고한다.
+- 구현 반영(2026-10-13, Issue #400): import는 GFM autolink literal(맨몸 `http(s)://…`, `www.…`, 이메일)을 link 마크로 만들지 않고 평문으로 둔다. 글자는 보존하고 경고는 없다. `[text](url)`, `<url>`, 참조 링크는 그대로 link다. export는 평문 URL을 구분해 쓸 방법이 없어(이스케이프·문자 참조 모두 재가져오기에서 풀린다) 가져오기 쪽에서 막는다. 이전에는 평문 URL이 왕복 뒤 link 마크를 얻었고, href가 무효인 맨몸 입력이 `importMarkdown` 실패를 일으켰다.
 
 ## 9. 스프레드시트 클립보드
 
