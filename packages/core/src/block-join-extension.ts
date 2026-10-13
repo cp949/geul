@@ -698,6 +698,23 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
     if (isListItemContent($from.parent) && !canExitListItem(liveState)) {
       return true;
     }
+    // paragraph를 막은 설정의 문서 첫 텍스트 위치 빈 텍스트 블록(Issue #413).
+    // false로 두면 키가 Tiptap Keymap handleBackspace의 clearNodes()로 샌다.
+    // clearNodes()는 문서 첫 텍스트 위치의 빈 비-paragraph 텍스트블록에서만
+    // 실행되고, paragraph가 없으면 스키마 기본 채움 타입(level 1 heading)을
+    // 넣는다. 바꿀 대상이 없으니 키만 소비한다. tr을 만들지 않아
+    // 문서·selection·history가 그대로다. 앞이 divider·표뿐인 빈 블록은 문서
+    // 첫 텍스트 위치가 아니라 clearNodes()가 닿지 않고 joinBackward가 지우므로,
+    // previous === null 전체가 아니라 이 위치로 한정한다. 빈 판정은 clearNodes()
+    // 조건과 같게 textContent로 한다. 인라인 원소만 든 블록도 포함한다.
+    // 판정은 파생 state 기준이다(G-EDT-002).
+    if (
+      state.schema.nodes.paragraph === undefined &&
+      $from.parent.textContent.length === 0 &&
+      Selection.atStart(state.doc).from === $from.pos
+    ) {
+      return true;
+    }
     return selectionIsStale && isJoinBoundary(liveState, "backward");
   }
 
