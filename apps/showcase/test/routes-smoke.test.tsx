@@ -47,7 +47,10 @@ describe("exampleRoutes 전체 스모크", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByRole("textbox", { name: "Editor" })).toBeTruthy();
+        // 한 페이지에 편집기가 둘인 예제(enabled-block-types)가 있어 하나 이상을 본다.
+        expect(
+          screen.getAllByRole("textbox", { name: "Editor" }).length,
+        ).toBeGreaterThan(0);
       });
     },
   );
