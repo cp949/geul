@@ -5,9 +5,17 @@
  * - `mdast-util-to-markdown` 2.2.0의 탐욕 탐색이 `***` 연쇄를 못 푼다.
  * - 구분자 `*`이 연달아 붙어 재가져오기에서 닫는 구분자가 글자로 샌다.
  * `inlineNodes`가 `emphasis · strong[emphasis] · emphasis`를 `emphasis[…, strong[…], …]`로 끌어올려 해소한다.
- * 적용 조건은 셋이다. 모두 만족해야 한다.
+ * 적용 조건은 넷이다. 모두 만족해야 한다.
  * - 인접 형제가 emphasis, strong(자식이 emphasis 하나), emphasis다.
  * - 이 emphasis 바로 앞 형제가 strong이다.
+ * - 앞 strong이 구두점으로 끝나거나 head emphasis가 구두점으로 시작한다. 한쪽이면 된다.
+ *   - 둘 다 영숫자 경계면 수정 전 출력(`**a***a*__*a*__*1*`)이 이미 맞아서 건드리지 않는다.
+ *   - head가 구두점으로 시작하는데 앞 strong이 영숫자로 끝나면 `**a***.a****a****a*`로 나가 같은 결함이다(#416 재현 A).
+ *   - 첫 샌드위치를 끌어올리면 뒤 샌드위치의 구분자 배치가 바뀐다. 이 모양이 그 뒤 샌드위치에서 드러난다(8런 입력).
+ * - 샌드위치와 그 이웃 노드에 astral 글자(U+10000 이상)가 없다. 있으면 끌어올리지 않는다.
+ *   - 끌어올리면 astral 글자가 문자 참조(`&#x1F600;`)로 바뀌며 앞 `_`가 이스케이프되지 않는다(#414).
+ *   - 수정 전에는 `_`로 닫는 emphasis가 astral 글자 뒤에 있어 왕복이 맞았다. 그 출력을 그대로 둔다.
+ * 앞 strong의 끝 글자 판정은 다음과 같다.
  * - 앞 strong의 마지막 잎 text가 구두점·기호·공백으로 끝난다.
  *   - strong의 마지막 자식이 `delete`이면 영숫자로 끝나는 text도 구두점으로 본다. 실제 직전 글자가 닫는 `~~`다.
  *   - 예: `strong[delete[a]]` 뒤 샌드위치는 `**~~a~~***a****a****1*`로 나가 같은 결함이었다.
@@ -143,6 +151,36 @@ const FIXED_POINT_CASES: readonly Case[] = [
   ],
 ];
 
+// 앞 strong은 영숫자로 끝나지만 head italic이 구두점으로 시작한다. 수정 전에는 `**a***.a****a****a*`로 나갔다.
+const HEAD_PUNCTUATION_CASES: readonly Case[] = [
+  [
+    "B(`a`) I(`.a`) X I",
+    [bold("a"), italic(".a"), boldItalic("a"), italic("a")],
+  ],
+  [
+    "B I X I B I(`.a`) X I",
+    [
+      bold("."),
+      italic("ab"),
+      boldItalic("a"),
+      italic("."),
+      bold("a"),
+      italic(".a"),
+      boldItalic("a"),
+      italic("a"),
+    ],
+  ],
+];
+
+// 샌드위치 text에 astral 글자가 있다. 끌어올리면 `_`가 이스케이프되지 않아(#414) 왕복이 깨진다.
+const ASTRAL_CASES: readonly OutputCase[] = [
+  [
+    "B(`.`) I(`ab_😀`) X(`!`) I(`!`)",
+    [bold("."), italic("ab_😀"), boldItalic("!"), italic("!")],
+    "**.**_ab_😀_**_!_***!*\n",
+  ],
+];
+
 // 앞 strong의 마지막 잎이 닫는 구분자를 가진 inlineCode·html이다.
 const CODE_CASES: readonly Case[] = [
   [
@@ -187,6 +225,11 @@ const OUTPUT_CASES: readonly OutputCase[] = [
     "bold·code(`.`) + italic(`a`) + bold·italic(`a`) + italic(`1`)",
     CODE_CASES[0]?.[1] ?? [],
     "**`.`***&#x61;__&#x61;__&#x31;*\n",
+  ],
+  [
+    "B(`a`) I(`.a`) X(`a`) I(`a`)",
+    HEAD_PUNCTUATION_CASES[0]?.[1] ?? [],
+    "**a**_.a**a**a_\n",
   ],
 ];
 
@@ -293,6 +336,27 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
     const markdown = strictMarkdown(tableCellDocument(content));
 
     expect(importedRuns(markdown)).toEqual(content);
+  });
+
+  it.each(HEAD_PUNCTUATION_CASES)(
+    "문단의 head가 구두점으로 시작하는 %s는 재가져오기가 글자와 mark를 보존한다",
+    (_label, content) => {
+      const markdown = strictMarkdown(paragraphDocument(content));
+
+      expect(importedRuns(markdown)).toEqual(content);
+    },
+  );
+
+  describe("불변 입력: 샌드위치에 astral 글자가 있으면 출력이 바뀌지 않는다", () => {
+    it.each(ASTRAL_CASES)(
+      "%s의 출력은 수정 전과 같고 재가져오기가 글자와 mark를 보존한다",
+      (_label, content, expected) => {
+        const markdown = strictMarkdown(paragraphDocument(content));
+
+        expect(markdown).toBe(expected);
+        expect(importedRuns(markdown)).toEqual(content);
+      },
+    );
   });
 
   it.each(CODE_CASES)(
@@ -470,6 +534,59 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
         previous,
         node("emphasis", text("a"), node("strong", text("b")), text("c")),
       ]);
+    });
+
+    it("head가 구두점 text로 시작하면 앞 strong이 영숫자로 끝나도 끌어올린다", () => {
+      const nodes = [
+        node("strong", text("a")),
+        node("emphasis", text(".a")),
+        node("strong", node("emphasis", text("b"))),
+        node("emphasis", text("c")),
+      ];
+
+      expect(liftEmphasisSandwich(nodes)).toEqual([
+        node("strong", text("a")),
+        node("emphasis", text(".a"), node("strong", text("b")), text("c")),
+      ]);
+    });
+
+    it("샌드위치나 앞 strong, 뒤 형제에 astral 글자가 있으면 적용하지 않는다", () => {
+      const astral = text("😀");
+      const cases = [
+        [node("strong", text(".")), node("emphasis", astral)],
+        [node("strong", text(".")), node("emphasis", text("a"))],
+      ];
+      const [headCase, bodyCase] = cases as [Node[], Node[]];
+      const withHead = [
+        ...headCase,
+        node("strong", node("emphasis", text("b"))),
+        node("emphasis", text("c")),
+      ];
+      const withStrong = [
+        ...bodyCase,
+        node("strong", node("emphasis", astral)),
+        node("emphasis", text("c")),
+      ];
+      const withTail = [
+        ...bodyCase,
+        node("strong", node("emphasis", text("b"))),
+        node("emphasis", astral),
+      ];
+      const withPrevious = [
+        node("strong", astral, text(".")),
+        ...sandwichNodes(),
+      ];
+      const withNext = [node("strong", text(".")), ...sandwichNodes(), astral];
+
+      for (const nodes of [
+        withHead,
+        withStrong,
+        withTail,
+        withPrevious,
+        withNext,
+      ]) {
+        expect(liftEmphasisSandwich(nodes)).toEqual(nodes);
+      }
     });
 
     it("앞 strong의 마지막 잎이 break이면 적용하지 않는다", () => {
