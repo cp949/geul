@@ -91,6 +91,23 @@ describe("detectMarkdownPaste", () => {
     expect(result).toEqual({ detected: false });
   });
 
+  // Issue #400: 붙여넣기도 importMarkdown 경로라 맨몸 URL은 link 마크가 되지 않는다.
+  it("맨몸 URL은 평문으로 두고 명시 링크만 link로 남긴다", () => {
+    const result = detectMarkdownPaste(
+      "# t\n\nsee https://x.com and [t](https://y.com)",
+    );
+
+    expect(result.detected).toBe(true);
+    if (!result.detected) return;
+    const block = result.document.blocks[1];
+    expect(block?.type).toBe("paragraph");
+    if (block?.type !== "paragraph") return;
+    expect(block.content).toEqual([
+      { text: "see https://x.com and " },
+      { text: "t", marks: [{ type: "link", href: "https://y.com" }] },
+    ]);
+  });
+
   it("반환 document는 importMarkdown 1회 호출의 결과다(재파싱하지 않는다)", () => {
     let calls = 0;
     const result = detectMarkdownPaste("# heading text", {
