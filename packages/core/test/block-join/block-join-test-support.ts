@@ -34,7 +34,7 @@ import { type Document } from "@cp949/geul-model";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { expect } from "vitest";
 
-import { createEditor } from "../../src/index.js";
+import { createEditor, type CreateEditorOptions } from "../../src/index.js";
 import {
   mountTiptapEditor,
   sequentialIds,
@@ -132,11 +132,49 @@ const placeCaretInLastContainer = (tiptap: TiptapEditor): void => {
   tiptap.commands.setTextSelection(doc.content.size - last.nodeSize + 2);
 };
 
+/**
+ * paragraph를 막은 enabledBlockTypes 설정 행렬(Issue #411, #412). 두 테스트 파일이
+ * 같은 상수·단언을 쓴다(G-TST-002).
+ */
+export type EnabledBlockTypes = NonNullable<
+  CreateEditorOptions["enabledBlockTypes"]
+>;
+export type DeniedType = EnabledBlockTypes["types"][number];
+
+const PARAGRAPH_BLOCKED_SETTINGS: ReadonlyArray<{
+  name: string;
+  denied: readonly DeniedType[];
+}> = [
+  { name: "paragraph", denied: ["paragraph"] },
+  {
+    name: "paragraph+heading+quote+callout",
+    denied: ["paragraph", "heading", "quote", "callout"],
+  },
+];
+
+const denyBlockTypes = (denied: readonly DeniedType[]): EnabledBlockTypes => ({
+  mode: "deny",
+  types: [...denied],
+});
+
+// 문서 어디에도 막은 타입이 없다.
+const expectNoDeniedNodes = (
+  tiptap: TiptapEditor,
+  denied: readonly DeniedType[],
+): void => {
+  tiptap.state.doc.descendants((node) => {
+    expect(denied).not.toContain(node.type.name);
+  });
+};
+
 export {
   countNodes,
+  denyBlockTypes,
+  expectNoDeniedNodes,
   expectKeyConsumedUnchanged,
   expectSchemaValid,
   mountDocument,
+  PARAGRAPH_BLOCKED_SETTINGS,
   placeCaretInLastContainer,
   pressCountingDocChanges,
 };

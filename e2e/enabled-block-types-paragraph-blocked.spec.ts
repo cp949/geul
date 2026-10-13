@@ -1,14 +1,18 @@
 /**
  * `enabledBlockTypes`가 `paragraph`를 막은 편집기에서 빈 목록 항목의 Backspace와
  * Enter가 엔진과 무관하게 같은 결과를 내는지 실제 브라우저에서 확인한다(Issue #411).
+ * 문서 끝 빈 항목의 Delete가 항목을 바꾸지 않고 키만 소비하는지도 확인한다(Issue #412).
  *
  * 브라우저가 최하위 증명 계층인 이유(ADR-0007):
  * - 키 소비 여부가 엔진 동작을 가른다. 종료 규칙이 키를 소비하지 않으면 키가
  *   Tiptap 기본 체인으로 새고, 체인이 받는 selection 해석이 엔진마다 달라 Chromium은
  *   변화 없음, Firefox는 항목을 앞 블록의 자식으로 들여쓰기했다. jsdom의 합성
  *   keydown은 Firefox 쪽 결과와 같아 이 엔진 차이를 재현하지 못한다.
+ * - Delete도 같다(Issue #412). 문서 끝에는 trailing 문단이 없어 병합 대상이 없다.
+ *   키를 소비하지 않으면 체인의 deleteCurrentNode가 빈 항목을 heading으로 바꾼다.
  * 문서 구조·selection·undo 단위의 세부 계약은 단위 테스트
  * (block-join/list-item-paragraph-blocked.test.ts,
+ * block-join/document-end-delete-paragraph-blocked.test.ts,
  * block-split-paragraph-blocked.test.ts)가 소유한다.
  *
  * showcase 예제 16의 두 번째 편집기를 쓴다. 문서는 heading 하나와 빈 bullet 둘이고
@@ -60,4 +64,26 @@ test("paragraph를 막은 편집기에서 heading 뒤 빈 bullet의 Backspace는
   await expect(blocks).toHaveCount(3);
   await expect(markers).toHaveCount(2);
   await expect(heading.locator("[data-geul-block-id]")).toHaveCount(0);
+});
+
+test("paragraph를 막은 편집기에서 문서 끝 빈 bullet의 Delete는 키만 소비하고 항목을 바꾸지 않는다 @core", async ({
+  page,
+}) => {
+  await openShowcasePage(page, "/examples/enabled-block-types");
+  const editable = page.getByRole("textbox", { name: "Editor" }).nth(1);
+  const blocks = editable.locator("[data-geul-block-id]");
+  const markers = editable.locator("[data-geul-list-marker]");
+  const lastBullet = editable.locator(`[data-geul-block-id="${BULLET_2_ID}"]`);
+
+  await expect(blocks).toHaveCount(3);
+  await expect(markers).toHaveCount(2);
+
+  // 마지막 빈 bullet이 문서 끝이다. 병합 대상이 없으니 문서가 그대로여야 한다.
+  await lastBullet.locator("> div").first().click();
+  await page.keyboard.press("Delete");
+  await yieldFrame(page);
+
+  await expect(blocks).toHaveCount(3);
+  await expect(markers).toHaveCount(2);
+  await expect(lastBullet).toHaveCount(1);
 });

@@ -30,7 +30,7 @@ import type { Editor as TiptapEditor } from "@tiptap/core";
 import { undoDepth } from "@tiptap/pm/history";
 import { describe, expect, it } from "vitest";
 
-import { createEditor, type CreateEditorOptions } from "../../src/index.js";
+import { createEditor } from "../../src/index.js";
 import { contentTextStart, dispatchKeydown } from "../block-test-support.js";
 import { blocksOf, outline } from "../clipboard-test-support.js";
 import {
@@ -45,23 +45,13 @@ import {
   sequentialIds,
 } from "../editor-controller-support.js";
 import {
+  denyBlockTypes,
   expectKeyConsumedUnchanged,
+  expectNoDeniedNodes,
+  PARAGRAPH_BLOCKED_SETTINGS,
   pressCountingDocChanges,
+  type EnabledBlockTypes,
 } from "./block-join-test-support.js";
-
-type EnabledBlockTypes = NonNullable<CreateEditorOptions["enabledBlockTypes"]>;
-type DeniedType = EnabledBlockTypes["types"][number];
-
-const SETTINGS: ReadonlyArray<{
-  name: string;
-  denied: readonly DeniedType[];
-}> = [
-  { name: "paragraph", denied: ["paragraph"] },
-  {
-    name: "paragraph+heading+quote+callout",
-    denied: ["paragraph", "heading", "quote", "callout"],
-  },
-];
 
 // 목록 4종. label은 outline 약어이고 item은 같은 모양의 항목 fixture다.
 const LIST_TYPES: ReadonlyArray<{
@@ -134,11 +124,6 @@ const POSITIONS: readonly Position[] = [
   },
 ];
 
-const deny = (denied: readonly DeniedType[]): EnabledBlockTypes => ({
-  mode: "deny",
-  types: [...denied],
-});
-
 // 문서를 마운트하고 대상 항목 "i"의 선두에 캐럿을 둔다.
 const mountAtItem = (
   blocks: Block[],
@@ -154,16 +139,6 @@ const mountAtItem = (
   editable.focus();
   tiptap.commands.setTextSelection(contentTextStart(tiptap, "i"));
   return { editor, tiptap };
-};
-
-// 문서 어디에도 막은 타입이 없다.
-const expectNoDeniedNodes = (
-  tiptap: TiptapEditor,
-  denied: readonly DeniedType[],
-): void => {
-  tiptap.state.doc.descendants((node) => {
-    expect(denied).not.toContain(node.type.name);
-  });
 };
 
 // Backspace가 문서를 바꾸지 않고 키만 소비한다. selection과 undo 깊이도 그대로다.
@@ -199,7 +174,7 @@ const expectOneUndoUnit = (
 };
 
 describe("paragraph를 막은 설정의 목록 항목 Backspace·Enter(Issue #411)", () => {
-  for (const setting of SETTINGS) {
+  for (const setting of PARAGRAPH_BLOCKED_SETTINGS) {
     describe(`${setting.name} 막음`, () => {
       for (const list of LIST_TYPES) {
         describe(`${list.name}`, () => {
@@ -215,7 +190,7 @@ describe("paragraph를 막은 설정의 목록 항목 Backspace·Enter(Issue #41
                   const editor = createEditor({
                     initialDocument: documentOf(...blocks()),
                     createId: sequentialIds("id"),
-                    enabledBlockTypes: deny(setting.denied),
+                    enabledBlockTypes: denyBlockTypes(setting.denied),
                   });
                   mountTiptapEditor(editor);
                 }).toThrow(/disabled/);
@@ -226,7 +201,7 @@ describe("paragraph를 막은 설정의 목록 항목 Backspace·Enter(Issue #41
             it(`${position.name} / Backspace: 종료 규칙을 건너뛰고 일반 규칙을 탄다`, () => {
               const { editor, tiptap } = mountAtItem(
                 blocks(),
-                deny(setting.denied),
+                denyBlockTypes(setting.denied),
               );
 
               if (position.before().length === 0) {
@@ -260,7 +235,7 @@ describe("paragraph를 막은 설정의 목록 항목 Backspace·Enter(Issue #41
             it(`${position.name} / Enter: 키를 소비하고 같은 타입의 항목을 연다`, () => {
               const { editor, tiptap } = mountAtItem(
                 blocks(),
-                deny(setting.denied),
+                denyBlockTypes(setting.denied),
               );
 
               const expectedItems = [
@@ -288,11 +263,11 @@ describe("paragraph를 막은 설정의 toggle 헤더 Backspace(Issue #411)", ()
       children: [listItemBlock("k", "bulletListItem", "kid")],
     });
 
-  for (const setting of SETTINGS) {
+  for (const setting of PARAGRAPH_BLOCKED_SETTINGS) {
     it(`${setting.name} 막음: 자식 있는 빈 헤더는 키만 소비하고 자식을 승격하지 않는다`, () => {
       const { editor, tiptap } = mountAtItem(
         [listItemBlock("a", "bulletListItem", "x"), withKid()],
-        deny(setting.denied),
+        denyBlockTypes(setting.denied),
       );
 
       expectBackspaceConsumedOnly(tiptap);
@@ -302,7 +277,10 @@ describe("paragraph를 막은 설정의 toggle 헤더 Backspace(Issue #411)", ()
     });
 
     it(`${setting.name} 막음: 문서 최선두의 자식 있는 헤더는 키만 소비한다`, () => {
-      const { editor, tiptap } = mountAtItem([withKid()], deny(setting.denied));
+      const { editor, tiptap } = mountAtItem(
+        [withKid()],
+        denyBlockTypes(setting.denied),
+      );
 
       expectBackspaceConsumedOnly(tiptap);
 
@@ -315,7 +293,7 @@ describe("paragraph를 막은 설정의 toggle 헤더 Backspace(Issue #411)", ()
           listItemBlock("a", "bulletListItem", "x"),
           listItemBlock("i", "toggleListItem", "ab"),
         ],
-        deny(setting.denied),
+        denyBlockTypes(setting.denied),
       );
 
       expectOneUndoUnit(tiptap, "Backspace", () => {
@@ -327,7 +305,7 @@ describe("paragraph를 막은 설정의 toggle 헤더 Backspace(Issue #411)", ()
 });
 
 describe("paragraph를 막은 설정의 divider 너머 코드 블록 뒤 항목 Backspace(Issue #411)", () => {
-  for (const setting of SETTINGS) {
+  for (const setting of PARAGRAPH_BLOCKED_SETTINGS) {
     it(`${setting.name} 막음: 코드 블록을 항목이 한 번에 흡수하고 divider는 제자리에 남는다`, () => {
       const { editor, tiptap } = mountAtItem(
         [
@@ -335,7 +313,7 @@ describe("paragraph를 막은 설정의 divider 너머 코드 블록 뒤 항목 
           dividerBlock("d"),
           listItemBlock("i", "bulletListItem", "ab"),
         ],
-        deny(setting.denied),
+        denyBlockTypes(setting.denied),
       );
 
       expectOneUndoUnit(tiptap, "Backspace", () => {
@@ -355,12 +333,12 @@ describe("paragraph를 막은 설정의 병합 대상 없는 빈 항목 Backspac
     { name: "표", before: () => oneCellTableBlock("t") },
   ];
 
-  for (const setting of SETTINGS) {
+  for (const setting of PARAGRAPH_BLOCKED_SETTINGS) {
     for (const atom of ATOM_BEFORE) {
       it(`${setting.name} 막음: 앞이 ${atom.name}뿐인 빈 항목은 키만 소비한다`, () => {
         const { tiptap } = mountAtItem(
           [atom.before(), listItemBlock("i", "bulletListItem", "")],
-          deny(setting.denied),
+          denyBlockTypes(setting.denied),
         );
         const before = tiptap.state.doc.toJSON();
 
