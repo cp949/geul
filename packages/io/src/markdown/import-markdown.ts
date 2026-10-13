@@ -33,6 +33,7 @@ import {
   type ImportSuccess,
   type ImportWarning,
 } from "./import-markdown-warnings.js";
+import { stripAutolinkLiterals } from "./strip-autolink-literals.js";
 
 export type {
   ImportSuccess,
@@ -79,9 +80,8 @@ export const importMarkdown = (
 
     // remark는 U+0000을 U+FFFD로 바꿔 CodeBlock source 위반을 숨긴다.
     // 같은 길이의 다른 금지 C0로 치환해 model validation까지 보존한다.
-    const root = asMarkdownRoot(
-      parseProcessor.parse(source.replace(/\0/g, "\u0001")),
-    );
+    const parsedSource = source.replace(/\0/g, "\u0001");
+    const root = asMarkdownRoot(parseProcessor.parse(parsedSource));
     if (root === undefined) {
       return {
         ok: false,
@@ -101,6 +101,12 @@ export const importMarkdown = (
     if (capMarkdownTreeDepth(root)) {
       warnings.push(deepTreeFlattenedWarning());
     }
+    // GFM autolink literal(맨몸 URL·www·이메일)을 평문으로 되돌린다
+    // (Issue #400, strip-autolink-literals.ts).
+    // - 깊이 캡 뒤에 둔다. 캡이 접은 서브트리에는 link가 없고, 패스는 유계
+    //   트리만 훑는다.
+    // - 참조 해석 앞에 둔다. 이후 단계가 literal link를 보지 않게 한다.
+    stripAutolinkLiterals(root, parsedSource);
     const definitions = definitionLookup(root);
     expandImageReferencesFromText(root, source);
     resolveReferences(root, definitions);
