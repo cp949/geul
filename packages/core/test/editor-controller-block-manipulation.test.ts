@@ -1090,7 +1090,7 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — removeBlo
   });
 
   describe("겹치는 제거 대상 거절(Issue #405)", () => {
-    // p1 > [c1, c2 > [m1]], p2, tail — 조상 p1, 자식 c2, 중손 m1을 모두 쓴다.
+    // p1 > [c1, c2 > [m1]], p2, tail — 조상 p1, 자식 c2, 손자 m1을 모두 쓴다.
     const nestedDocument = () =>
       documentOf(
         paragraphBlock("p1", "parent", [
@@ -1104,8 +1104,8 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — removeBlo
     it.each([
       { title: "조상과 자손(p1, c1)", ids: ["p1", "c1"] },
       { title: "자손을 먼저 적은 조상과 자손(c1, p1)", ids: ["c1", "p1"] },
-      { title: "조상과 중손(p1, m1)", ids: ["p1", "m1"] },
-      { title: "중손을 먼저 적은 조상과 중손(m1, p1)", ids: ["m1", "p1"] },
+      { title: "조상과 손자(p1, m1)", ids: ["p1", "m1"] },
+      { title: "손자을 먼저 적은 조상과 손자(m1, p1)", ids: ["m1", "p1"] },
       { title: "부모와 자식(c2, m1)", ids: ["c2", "m1"] },
       { title: "자식을 먼저 적은 부모와 자식(m1, c2)", ids: ["m1", "c2"] },
       {
@@ -1213,7 +1213,7 @@ describe("에디터 컨트롤러 범용 블록 조작 API(DOC-005) — removeBlo
           ),
       },
       {
-        title: "바깥 블록과 중손(p2, m1)",
+        title: "바깥 블록과 손자(p2, m1)",
         ids: ["p2", "m1"],
         expected: () =>
           documentOf(
