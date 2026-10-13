@@ -44,8 +44,9 @@ minimumReleaseAgeExclude:
   - '@tiptap/starter-kit@3.30.1'
 patchedDependencies:
   micromark-extension-gfm-table@2.1.1: patches/micromark-extension-gfm-table@2.1.1.patch
-# pnpm audit 권고 대응. 전이 의존성의 취약 범위만 패치 버전으로 올린다.
-# 선택자가 취약 범위만 잡으므로 상위 패키지가 고친 버전을 내면 override가 필요 없어진다.
+# 전이 의존성 override. pnpm audit 권고 대응과 라이브러리 결함 대응(mdast-util-to-markdown)을 함께 둔다.
+# 취약하거나 결함이 있는 범위만 고친 버전으로 올린다.
+# 선택자가 그 범위만 잡으므로 상위 패키지가 고친 버전을 내면 override가 필요 없어진다.
 # - brace-expansion <5.0.12: GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p
 # - source-map-js <1.2.2: GHSA-68fv-2mgg-jv7q
 # - shell-quote <1.11.0: GHSA-pqg4-j6r4-53mv
@@ -56,3 +57,7 @@ overrides:
   # braces <=3.0.3(GHSA-vfj7-8cjw-p6xm)는 패치 버전이 없다. micromatch를 끌어오는
   # @parcel/watcher 2.5.x 대신 picomatch 기반인 2.6.0을 쓴다(sass optionalDependencies ^2.4.1 충족).
   '@parcel/watcher@<2.6.0': 2.6.0
+  # mdast-util-to-markdown 2.1.2는 attention 앞뒤 글자를 문자 참조로 바꿀 때 마지막 UTF-16 코드
+  # 단위 하나를 읽는다. 앞이 빈 text 노드면 `&#xNAN;`, 이모지면 깨진 서로게이트가 나온다(#394).
+  # 2.2.0이 attention 처리를 다시 써서 고친다.
+  'mdast-util-to-markdown@<2.2.0': 2.2.0
