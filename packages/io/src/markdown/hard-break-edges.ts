@@ -118,7 +118,7 @@ export const hardBreakLossShape = (
   // 제목 3–6은 어느 런에든 `\n`이 있으면 대상이다.
   if (headingLevel >= 3) return "HEADING_INNER";
   // 제목 1·2는 setext로 개행을 담는다. 글자가 전부 개행뿐이면 mdast 글자가 비어
-  // ATX로 나가고 개행이 공백이 된다. 위 두 정리를 거친 content 기준이다.
+  // ATX로 나가고 개행이 공백이 된다. 위 두 정리에서 걸리지 않은 content만 여기 온다.
   const onlyNewlines = content.every(
     (item) => isTextRunItem(item) && item.text.replace(/\n/g, "") === "",
   );

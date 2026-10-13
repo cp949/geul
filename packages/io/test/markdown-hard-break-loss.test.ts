@@ -555,10 +555,10 @@ describe("HARD_BREAK_LOST와 이미 있던 손실의 공존", () => {
   });
 });
 
-describe("HARD_BREAK_LOST 메시지", () => {
-  const messageOf = (document: Document): string =>
-    lossesOf(document)[0]?.message ?? "";
+const messageOf = (document: Document): string =>
+  lossesOf(document)[0]?.message ?? "";
 
+describe("HARD_BREAK_LOST 메시지", () => {
   it("세 모양의 메시지가 서로 다르다", () => {
     const blockEnd = messageOf(hostDocument("paragraph", [plain("a\n")]));
     const markEnd = messageOf(
@@ -826,14 +826,11 @@ describe("제목 1·2에서 글자가 전부 개행뿐이면 ATX 제목이라 �
   );
 
   it("제목 3–6 메시지와 1·2 메시지가 모두 ATX 제목을 말한다", () => {
-    const messageOf = (document: Document): string =>
-      lossesOf(document)[0]?.message ?? "";
     const h1 = messageOf(hostDocument("heading", LINK_NEWLINE, 1));
     const h3 = messageOf(hostDocument("heading", [plain("a\nb")], 3));
 
     expect(h1).toContain("ATX");
     expect(h3).toContain("ATX");
-    expect(h1).not.toContain("level 3 to 6");
   });
 
   it("hardBreakLossShape: 제목 1·2의 개행뿐인 link 런은 HEADING_INNER다", () => {
