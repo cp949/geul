@@ -19,7 +19,9 @@
  * 설정 2종(paragraph 단독, paragraph+heading+quote+callout) × 대상 4종(h1, h2,
  * quote, callout) × 위치 4종 × 텍스트 2종(빈, `ab`)이다. 앞이 divider·heading인
  * 위치는 빈 블록만 다룬다. heading·quote·callout을 막은 설정에서 그 타입이
- * 필요한 조합은 문서 로드가 거절돼 그 거절만 확인한다. 대조군은
+ * 필요한 조합은 문서 로드가 거절돼 그 거절만 확인한다. 대상 4종이 모두
+ * heading·quote·callout이라 두 번째 설정은 전 조합이 이 거절 확인이다. 동작
+ * 단언은 paragraph 단독 설정만 실행한다. 대조군은
  * enabledBlockTypes를 undefined로 명시한다(기본 인자 `= deny` 패턴은
  * undefined를 deny로 치환해 대조군을 무효로 만든다).
  */
@@ -232,7 +234,7 @@ describe("paragraph를 막은 설정의 문서 첫 위치 Backspace 재현(Issue
     expect(outline(blocksOf(editor))).toEqual(["quote:", "h2:x"]);
   });
 
-  // 가설 확인용 프로브: 첫 블록이 자식을 가진 빈 텍스트 블록이어도 소비하고 자식이 그대로다.
+  // 첫 블록이 자식을 가진 빈 텍스트 블록이어도 소비하고 자식이 그대로다.
   for (const [name, build, expected] of [
     [
       "빈 quote",
