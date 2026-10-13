@@ -9,6 +9,7 @@
  * - strict·lossy 내보내기 문자열과, 재가져온 첫 블록의 글자 런을 돌려준다.
  * - 손실 목록(`lossesOf`)·손실 kind 목록(`kindsOf`)·strict 거절 손실
  *   (`strictRejectedLosses`)을 callout 고유 손실을 뺀 채 돌려준다.
+ * - 재가져온 content의 글자를 이어 붙이고(`joinedText`), mark가 달린 런만 뽑는다(`markedRuns`).
  */
 import type {
   Block,
@@ -189,3 +190,21 @@ export const strictRejectedLosses = (
     ? withoutCalloutLoss(result.error.losses)
     : [];
 };
+
+/**
+ * 재가져온 content의 글자를 이어 붙인다. 글자 런 경계는 보지 않는다.
+ */
+export const joinedText = (runs: unknown): string =>
+  (runs as InlineContent)
+    .map((item) => ("text" in item ? item.text : ""))
+    .join("");
+
+/**
+ * 재가져온 content에서 mark가 달린 런의 글자와 mark 종류만 뽑는다.
+ */
+export const markedRuns = (runs: unknown): Array<[string, string[]]> =>
+  (runs as InlineContent).flatMap((item): Array<[string, string[]]> =>
+    "text" in item && (item.marks ?? []).length > 0
+      ? [[item.text, (item.marks ?? []).map((mark) => mark.type)]]
+      : [],
+  );

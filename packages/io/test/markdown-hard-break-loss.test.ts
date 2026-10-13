@@ -33,9 +33,11 @@ import {
   type Host,
   hostDocument,
   importedRuns,
+  joinedText,
   kindsOf,
   lossesOf,
   lossyMarkdown,
+  markedRuns,
   run,
   strictRejectedLosses,
 } from "./markdown-inline-run-support.js";
@@ -68,24 +70,6 @@ const lossyHardBreakWarnings = (document: Document): MarkdownLoss[] => {
     (warning) => warning.kind === "HARD_BREAK_LOST",
   );
 };
-
-/**
- * 재가져온 content의 글자를 이어 붙인다. 글자 런 경계는 보지 않는다.
- */
-const joinedText = (runs: unknown): string =>
-  (runs as InlineContent)
-    .map((item) => ("text" in item ? item.text : ""))
-    .join("");
-
-/**
- * 재가져온 content에서 mark가 달린 런의 글자와 mark 종류만 뽑는다.
- */
-const markedRuns = (runs: unknown): Array<[string, string[]]> =>
-  (runs as InlineContent).flatMap((item): Array<[string, string[]]> =>
-    "text" in item && (item.marks ?? []).length > 0
-      ? [[item.text, (item.marks ?? []).map((mark) => mark.type)]]
-      : [],
-  );
 
 const plain = (text: string): InlineContentItem => ({ text });
 

@@ -8,6 +8,7 @@ import {
   type InlineContent,
 } from "@cp949/geul-model";
 
+import { hasCodeTablePipeLoss } from "./code-table-pipe.js";
 import { computeColumnAlignments } from "./column-align.js";
 import {
   firstChildMergesIntoOwnContent,
@@ -79,7 +80,10 @@ export type MarkdownLoss = {
     | "EMPTY_MARKED_RUN"
     // Issue #401. 블록 끝·bold/italic/strike 런 끝의 hardBreak(`\n`)와 제목 3–6의
     // 안쪽 hardBreak는 GFM이 담지 못한다. 블록당 1건이고 표 셀은 대상이 아니다.
-    | "HARD_BREAK_LOST";
+    | "HARD_BREAK_LOST"
+    // Issue #402. 표 셀 code 런의 홀수 개 백슬래시 뒤 `|`는 표 파서가 열 구분자로
+    // 읽는다. 셀당 1건이고 표 밖 code 런은 대상이 아니다.
+    | "INLINE_CODE_TABLE_PIPE";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -216,6 +220,14 @@ const collectTableLosses = (
           kind: "INLINE_CODE_NEWLINE",
           ...location,
           message: `Cell ${cell.id} contains inline code with a newline`,
+        });
+      }
+      // Issue #402. 판정은 code-table-pipe.ts가 소유한다.
+      if (hasCodeTablePipeLoss(cell.content)) {
+        losses.push({
+          kind: "INLINE_CODE_TABLE_PIPE",
+          ...location,
+          message: `Cell ${cell.id} contains inline code with a backslash before a pipe; GFM table cells cannot represent it`,
         });
       }
       if (hasEmptyMarkedRun(cell.content)) {
