@@ -30,6 +30,7 @@ import {
 } from "./gfm-container-shape.js";
 import { handleDelete } from "./gfm-strike-attention.js";
 import { handleText } from "./gfm-text-backslash.js";
+import { normalizeHardBreakEdges } from "./hard-break-edges.js";
 import { analyzeMarkdownLoss, type MarkdownLoss } from "./loss-analysis.js";
 import { mergeAdjacentInline } from "./merge-adjacent-inline.js";
 import { mergeAdjacentText } from "./merge-adjacent-text.js";
@@ -183,6 +184,13 @@ const inlineNodes = (
 ): MarkdownOutputNode[] =>
   mergeAdjacentText(mergeAdjacentInline(runNodes(content, inTableCell)));
 
+// 표 밖 블록의 content를 노드로 바꾼다. 끝 개행을 먼저 정리한다(Issue #401).
+// GFM이 블록 끝·mark 런 끝의 `\n`을 담지 못해 `a\`·`**a\&#xA;**`로 나가기 때문이다.
+// 정리는 변환 앞단(content 단계)이라 뒤의 노드 병합이 평문 런을 합친다.
+// 표 셀은 `<br>`로 왕복하므로 이 함수를 거치지 않는다.
+const blockInlineNodes = (content: InlineContent): MarkdownOutputNode[] =>
+  inlineNodes(normalizeHardBreakEdges(content), false);
+
 const tableNode = (table: TableBlock): MarkdownOutputNode => {
   const columnIndices = new Map(
     table.columns.map((column, index) => [column.id, index]),
@@ -305,7 +313,7 @@ const containerChildNodes = (
   }
   const ownParagraph: MarkdownOutputNode = {
     type: "paragraph",
-    children: inlineNodes(block.content, false),
+    children: blockInlineNodes(block.content),
   };
   return [ownParagraph, ...childNodes];
 };
@@ -435,12 +443,12 @@ const blockNode = (block: Block): MarkdownOutputNode => {
     return {
       type: "heading",
       depth: block.level,
-      children: inlineNodes(block.content, false),
+      children: blockInlineNodes(block.content),
     };
   }
   return {
     type: "paragraph",
-    children: inlineNodes(block.content, false),
+    children: blockInlineNodes(block.content),
   };
 };
 

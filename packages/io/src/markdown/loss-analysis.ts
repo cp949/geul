@@ -15,6 +15,10 @@ import {
   isCheckboxAnchorLost,
   isGfmContainerLikeBlockType,
 } from "./gfm-container-shape.js";
+import {
+  type HardBreakLossShape,
+  hardBreakLossShape,
+} from "./hard-break-edges.js";
 
 const DEFAULT_COLUMN_WIDTH = 160;
 
@@ -72,7 +76,10 @@ export type MarkdownLoss = {
     // Issue #393. bold·italic·strike·code mark가 붙은 빈 글자 런은 마커만
     // (`****` 등) 나가 재가져오기 때 divider·codeBlock·글자로 구조가 바뀔 수 있다.
     // 런이 content 어디에 있든 보고하고, 블록·셀당 1건이다.
-    | "EMPTY_MARKED_RUN";
+    | "EMPTY_MARKED_RUN"
+    // Issue #401. 블록 끝·bold/italic/strike 런 끝의 hardBreak(`\n`)와 제목 3–6의
+    // 안쪽 hardBreak는 GFM이 담지 못한다. 블록당 1건이고 표 셀은 대상이 아니다.
+    | "HARD_BREAK_LOST";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -125,6 +132,18 @@ const hasEmptyMarkedRun = (content: InlineContent): boolean =>
           mark.type === "code",
       ),
   );
+
+// HARD_BREAK_LOST 메시지를 모양별로 고른다. 종류는 하나이고 원인만 다르다.
+const hardBreakMessage = (block: Block, shape: HardBreakLossShape): string => {
+  switch (shape) {
+    case "BLOCK_END":
+      return `Block ${block.id} ends with a line break; GFM export drops it`;
+    case "MARK_RUN_END":
+      return `Block ${block.id} has a line break at the end of a bold, italic or strike run; GFM export moves it out of the formatting`;
+    case "HEADING_INNER":
+      return `Block ${block.id} is an ATX heading with a line break; GFM export cannot hold it and joins the lines with a space`;
+  }
+};
 
 const collectTableLosses = (
   block: Extract<Block, { type: "table" }>,
@@ -343,6 +362,18 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       kind: "EMPTY_MARKED_RUN",
       blockId: block.id,
       message: `Block ${block.id} contains an empty text run with bold, italic, strike or code formatting; GFM export writes only the markers`,
+    });
+  }
+  // Issue #401. 판정은 hard-break-edges.ts가 소유한다. 제목은 level이 필요하다.
+  const hardBreakShape = hardBreakLossShape(
+    block.content,
+    block.type === "heading" ? block.level : undefined,
+  );
+  if (hardBreakShape !== null) {
+    losses.push({
+      kind: "HARD_BREAK_LOST",
+      blockId: block.id,
+      message: hardBreakMessage(block, hardBreakShape),
     });
   }
   // RD-004 DELTA-03. table/divider/codeBlock은 위에서 이미 반환했으므로

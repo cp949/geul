@@ -9,6 +9,8 @@ import {
   type ToggleListItemBlock,
 } from "@cp949/geul-model";
 
+import { normalizeHardBreakEdges } from "./hard-break-edges.js";
+
 // GFM export가 컨테이너로 다루는 블록의 모양 판정을 모은다.
 // loss-analysis.ts(손실 보고)와 export-markdown.ts(출력)가 이 파일을 읽는다.
 // 손실 보고는 넓은 판정(firstChildMergesIntoOwnContent)을, 승격과 own 단락
@@ -20,8 +22,10 @@ import {
 // content는 빈 배열과 똑같이 빈 문단으로 나가기 때문이다. mark가 붙은 빈 런은
 // `****`, `[](url)` 같은 마커로 나가 빈 문단이 아니므로 비지 않은 것으로 본다.
 // 글자 런이 아닌 원소(커스텀 inline)도 비지 않은 것으로 본다.
+// 내보내기가 정리해 비게 되는 content(`\n`뿐인 content)도 빈 content로 본다
+// (normalizeHardBreakEdges, Issue #401). 출력이 빈 content와 같아야 판정이 맞다.
 export const isEmptyContent = (content: InlineContent): boolean =>
-  content.every(
+  normalizeHardBreakEdges(content).every(
     (item) =>
       isTextRunItem(item) &&
       item.text === "" &&
