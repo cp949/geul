@@ -14,6 +14,9 @@
  * 병합)가 키를 소비하고 트랜잭션을 만들지 않음을 두 파일이 같은 헬퍼로
  * 단언한다(G-TST-002).
  *
+ * Issue #410: Backspace 쪽 형제 경로도 같은 헬퍼를 쓴다. 자동 trailing 문단은
+ * blockId를 미리 알 수 없어 placeCaretInLastContainer가 위치로 캐럿을 둔다.
+ *
  * Issue #38 슬라이스 3(DELTA-05)이 더한 축: quote 블록의 Backspace join이
  * paragraph|heading 규칙을 그대로 따르고(05-C2), divider(비포장 atom)
  * 인접 Backspace/Delete가 divider를 그 자리에 그대로 두고 건너뛰어 그 너머의
@@ -117,10 +120,23 @@ const expectKeyConsumedUnchanged = (
   expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
 };
 
+/**
+ * 문서 마지막 컨테이너의 콘텐츠 노드 안 선두에 캐럿을 둔다. 자동 trailing
+ * 문단은 blockId를 미리 알 수 없어(생성 시점에 정해진다) blockId 대신 위치로
+ * 찾는다. 컨테이너 pos + 2가 콘텐츠 노드 안 텍스트 시작이다(D19).
+ */
+const placeCaretInLastContainer = (tiptap: TiptapEditor): void => {
+  const { doc } = tiptap.state;
+  const last = doc.lastChild;
+  if (last === null) throw new Error("마지막 컨테이너가 없다");
+  tiptap.commands.setTextSelection(doc.content.size - last.nodeSize + 2);
+};
+
 export {
   countNodes,
   expectKeyConsumedUnchanged,
   expectSchemaValid,
   mountDocument,
+  placeCaretInLastContainer,
   pressCountingDocChanges,
 };

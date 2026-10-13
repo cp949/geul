@@ -80,6 +80,12 @@ import { isRedundantTrailingParagraph } from "./trailing-block-extension.js";
 //   색·정렬이 붙은 trailing 문단은 지우면 속성이 사라져 실제 변화라 병합한다.
 //   판정은 isRedundantTrailingParagraph가 소유한다.
 //
+// Issue #410: Backspace의 자동 trailing 문단 병합도 같은 판정을 쓴다. 문서를
+// 바꾸지 않는 점은 같다. 다만 빈 줄에서 Backspace는 캐럿이 위로 올라가는 것이
+// 기대 동작이라 키만 소비하지 않고 selection만 바꾸는 트랜잭션 하나를 dispatch
+// 해 캐럿을 병합 접점으로 옮긴다. history에는 단위가 남지 않는다. 코드 블록
+// 흡수는 문단이 실제로 바뀌므로 대상이 아니다.
+//
 // 사용자가 직접 만든(드래그 등) 전체 표 `CellSelection`에서 Backspace/Delete
 // 로 표를 지우는 경로(deleteSelectedTable)는 이 재귀 스킵과 무관하게
 // 유지된다 — 아래 findMergeTarget/findFrom은 caret(empty selection)에서만
@@ -699,10 +705,24 @@ function joinBackwardAtBlockStart(editor: Editor): boolean {
     });
     return true;
   }
+  const removed = $from.node(containerDepth);
+  const mergePos = hiddenLabelEnd ?? $target.pos;
+  // 지워도 TrailingBlockExtension이 되붙이는 trailing 문단이면 병합하지 않고
+  // 캐럿만 병합 접점으로 옮긴다(Issue #410). 문서는 그대로고 undo 단위가
+  // 남지 않는다. 캐럿 이동은 병합 동작의 일부라 유지한다. 판정은 파생 state
+  // 기준이고 tr은 live state에서 만든다(G-EDT-002). 문서가 같아 mergePos는
+  // 두 state에서 같은 위치다. removed가 비어 있고 삭제 위치가 mergePos 뒤라
+  // 일반 병합이 두는 캐럿과도 같다.
+  if (isRedundantTrailingParagraph(state.doc, removed, containerStart)) {
+    const tr = liveState.tr;
+    tr.setSelection(TextSelection.create(tr.doc, mergePos));
+    view.dispatch(tr);
+    return true;
+  }
   mergeContainers(view, liveState, {
-    removed: $from.node(containerDepth),
+    removed,
     removedStart: containerStart,
-    mergePos: hiddenLabelEnd ?? $target.pos,
+    mergePos,
     inline: $from.parent.content,
   });
   return true;

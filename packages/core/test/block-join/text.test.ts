@@ -29,6 +29,10 @@
  * 않는다. 폴스루한 deleteCurrentNode와 지웠다 되붙는 병합이 문서는 그대로 두고
  * undo 단위만 남기던 것을 막는다.
  *
+ * Issue #410: Backspace 쪽 형제 경로다. 자동 trailing 문단 맨 앞의 Backspace가
+ * 그 문단을 지웠다 되붙이는 병합을 하지 않는다. 문서는 그대로 두고 캐럿만
+ * 병합 접점으로 옮긴다(selection만 바꾸는 트랜잭션 하나).
+ *
  * 키 소비(반환 true)는 view.someProp("handleKeyDown", ...) 실 디스패치로
  * 검증한다 — 이 커맨드는 addKeyboardShortcuts로만 등록돼 editor.commands로
  * 노출되지 않는다(G-WKS-001).
@@ -44,6 +48,7 @@ import {
   typeNativeText,
 } from "../block-test-support.js";
 import {
+  checkListItemBlock,
   codeBlockBlock,
   dividerBlock,
   documentOf,
@@ -53,6 +58,7 @@ import {
   oneCellTableBlock,
   paragraphBlock,
   tailParagraphBlock,
+  toggleBlock,
 } from "../editor-controller-support.js";
 import {
   cellJson,
@@ -64,6 +70,7 @@ import {
   expectKeyConsumedUnchanged,
   expectSchemaValid,
   mountDocument,
+  placeCaretInLastContainer,
   pressCountingDocChanges,
 } from "./block-join-test-support.js";
 
@@ -638,6 +645,201 @@ describe("문서를 바꾸지 않는 Delete는 키를 소비하고 트랜잭션�
     const result = pressCountingDocChanges(
       tiptap,
       pressDeleteAt(tiptap, "a", 3),
+    );
+
+    expect(result).toEqual({ handled: false, docChanged: 0 });
+  });
+});
+
+/*
+ * 문서를 바꾸지 않는 Backspace(Issue #410). #404 Delete의 형제 경로다.
+ * 마지막 블록이 문단이 아니면 빈 문단이 문서 끝에 붙어 있다. 그 문단 맨 앞의
+ * Backspace가 문단을 지우면 TrailingBlockExtension이 같은 dispatch 안에서 새
+ * blockId로 되붙인다. 문서는 그대로고 undo 단위만 남는다.
+ * 기대 동작은 키를 소비하고 문서를 바꾸지 않으며 캐럿만 병합 접점으로 옮기는
+ * 것이다. 캐럿 위치는 일반 병합이 두는 위치와 같다. 통제 케이스는 실제로
+ * 문서가 바뀌는 Backspace가 그대로임을 고정한다.
+ */
+describe("문서를 바꾸지 않는 Backspace는 캐럿만 병합 접점으로 옮긴다(Issue #410)", () => {
+  /** 마지막 컨테이너 선두에서 Backspace를 누른다. */
+  const pressBackspaceInLast = (tiptap: TiptapEditor) => {
+    placeCaretInLastContainer(tiptap);
+    return () => dispatchKeydown(tiptap, "Backspace");
+  };
+
+  it("마지막 heading 뒤 trailing 문단의 Backspace는 문서를 바꾸지 않고 캐럿을 heading 끝으로 옮긴다", () => {
+    const { tiptap } = mountDocument(documentOf(headingBlock("h", 1, "x")));
+    let transactions = 0;
+    tiptap.on("transaction", () => {
+      transactions += 1;
+    });
+
+    expectKeyConsumedUnchanged(tiptap, pressBackspaceInLast(tiptap));
+
+    expect(tiptap.state.selection.from).toBe(3);
+    expect(tiptap.state.selection.empty).toBe(true);
+    // 장면 준비의 selection 이동 1개 + Backspace의 selection 전용 트랜잭션 1개.
+    expect(transactions).toBe(2);
+  });
+
+  it("빈 heading 뒤 trailing 문단의 Backspace는 캐럿을 빈 heading 안으로 옮긴다", () => {
+    const { tiptap } = mountDocument(documentOf(headingBlock("h", 1, "")));
+
+    expectKeyConsumedUnchanged(tiptap, pressBackspaceInLast(tiptap));
+
+    expect(tiptap.state.selection.from).toBe(2);
+  });
+
+  it("checkList 항목 뒤 trailing 문단의 Backspace는 문서를 바꾸지 않고 캐럿을 항목 끝으로 옮긴다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(checkListItemBlock("c", "abc", false)),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressBackspaceInLast(tiptap));
+
+    expect(tiptap.state.selection.from).toBe(contentTextStart(tiptap, "c") + 3);
+  });
+
+  it("자식 딸린 문단 뒤 trailing 문단의 Backspace는 캐럿을 마지막 자손 끝으로 옮긴다", () => {
+    const { tiptap } = mountDocument(
+      documentOf({
+        id: "p",
+        type: "paragraph",
+        content: [{ text: "x" }],
+        children: [paragraphBlock("c", "y")],
+      }),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressBackspaceInLast(tiptap));
+
+    expect(tiptap.state.selection.from).toBe(contentTextStart(tiptap, "c") + 1);
+    expect(tiptap.state.selection.from).toBe(8);
+  });
+
+  it("열린 toggle 뒤 trailing 문단의 Backspace는 캐럿을 마지막 자손 끝으로 옮긴다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(
+        toggleBlock("t", "라벨", { children: [paragraphBlock("c", "자식")] }),
+      ),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressBackspaceInLast(tiptap));
+
+    expect(tiptap.state.selection.from).toBe(contentTextStart(tiptap, "c") + 2);
+  });
+
+  it("접힌 toggle 뒤 trailing 문단의 Backspace는 숨은 자손이 아니라 라벨 끝으로 캐럿을 옮긴다(#253)", () => {
+    const { tiptap } = mountDocument(
+      documentOf(
+        toggleBlock("t", "라벨", {
+          collapsed: true,
+          children: [paragraphBlock("c", "숨은")],
+        }),
+      ),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressBackspaceInLast(tiptap));
+
+    expect(tiptap.state.selection.from).toBe(contentTextStart(tiptap, "t") + 2);
+  });
+
+  it("divider 뒤 trailing 문단의 Backspace는 divider를 건너뛰어 앞 문단 끝으로 캐럿을 옮긴다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("a", "abc"), dividerBlock("d")),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressBackspaceInLast(tiptap));
+
+    expect(tiptap.state.selection.from).toBe(contentTextStart(tiptap, "a") + 3);
+  });
+
+  it("표 뒤 trailing 문단의 Backspace는 표를 건너뛰어 앞 문단 끝으로 캐럿을 옮긴다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("a", "abc"), oneCellTableBlock("table-1")),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressBackspaceInLast(tiptap));
+
+    expect(tiptap.state.selection.from).toBe(contentTextStart(tiptap, "a") + 3);
+  });
+
+  it("trailing 문단의 Backspace 뒤 undo 한 번은 직전 입력을 되돌린다", () => {
+    const { tiptap } = mountDocument(documentOf(headingBlock("h", 1, "x")));
+    const initialJson = tiptap.state.doc.toJSON();
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "h") + 1);
+    typeNativeText(tiptap, "Y");
+    expect(tiptap.state.doc.child(0).textContent).toBe("xY");
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressBackspaceInLast(tiptap),
+    );
+    expect(result).toEqual({ handled: true, docChanged: 0 });
+
+    // 빈 undo 단위가 남았다면 이 undo는 입력한 글자를 되돌리지 못한다.
+    tiptap.commands.undo();
+    expect(tiptap.state.doc.toJSON()).toEqual(initialJson);
+  });
+
+  it("통제: 색·정렬이 붙은 마지막 빈 문단은 Backspace가 병합해 속성을 지운다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(headingBlock("h", 1, "x"), {
+        id: "t",
+        type: "paragraph",
+        content: [],
+        backgroundColor: "#112233",
+        textAlignment: "center",
+      }),
+    );
+    expect(tiptap.state.doc.lastChild?.attrs.backgroundColor).toBe("#112233");
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressBackspaceInLast(tiptap),
+    );
+
+    expect(result).toEqual({ handled: true, docChanged: 1 });
+    expect(tiptap.state.doc.lastChild?.attrs.backgroundColor).toBeNull();
+    expect(tiptap.state.doc.lastChild?.attrs.textAlignment).toBeNull();
+  });
+
+  it("통제: 앞 블록이 자식 없는 문단이면 빈 마지막 문단은 Backspace로 지워진다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("a", "abc"), paragraphBlock("b", "")),
+    );
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressBackspaceInLast(tiptap),
+    );
+
+    expect(result).toEqual({ handled: true, docChanged: 1 });
+    expect(tiptap.state.doc.childCount).toBe(1);
+    expect(tiptap.state.doc.child(0).attrs.blockId).toBe("a");
+    expect(tiptap.state.doc.child(0).textContent).toBe("abc");
+  });
+
+  it("통제: 마지막 코드 블록 뒤 trailing 문단의 Backspace는 코드 블록을 문단으로 흡수한다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("x", "x"), codeBlockBlock("k", "foo")),
+    );
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressBackspaceInLast(tiptap),
+    );
+
+    expect(result).toEqual({ handled: true, docChanged: 1 });
+    expect(countNodes(tiptap, "codeBlock")).toBe(0);
+    expect(tiptap.state.doc.lastChild?.textContent).toBe("foo");
+  });
+
+  it("통제: 문단 하나뿐인 문서의 Backspace는 키를 소비하지 않는다", () => {
+    const { tiptap } = mountDocument(documentOf(paragraphBlock("only", "")));
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressBackspaceInLast(tiptap),
     );
 
     expect(result).toEqual({ handled: false, docChanged: 0 });

@@ -19,6 +19,9 @@
  * Issue #404: 빈 마지막 문단의 Mod-Delete도 Delete처럼 키를 소비하고 문서를
  * 바꾸는 트랜잭션을 만들지 않는다.
  *
+ * Issue #410: 자동 trailing 문단 선두의 Mod-Backspace·Shift-Backspace도
+ * Backspace처럼 문서를 바꾸지 않고 캐럿만 병합 접점으로 옮긴다.
+ *
  * 키 소비는 view.someProp("handleKeyDown", ...) 실 디스패치로 검증한다. 실제
  * Mac 브라우저 동작은 이 파일 범위 밖이고 바인딩 존재만 증명한다.
  */
@@ -36,11 +39,15 @@ import {
   dividerBlock,
   documentOf,
   editorState,
+  headingBlock,
   mounted,
   paragraphBlock,
   toggleBlock,
 } from "../editor-controller-support.js";
-import { expectKeyConsumedUnchanged } from "./block-join-test-support.js";
+import {
+  expectKeyConsumedUnchanged,
+  placeCaretInLastContainer,
+} from "./block-join-test-support.js";
 
 type Modifiers = Parameters<typeof dispatchModifiedKeydown>[2];
 type Direction = "backward" | "forward";
@@ -529,4 +536,33 @@ describe("빈 마지막 문단의 Mod-Delete는 Delete와 같이 아무것도 �
       dispatchModifiedKeydown(tiptap, MOD_DELETE.key, MOD_DELETE.modifiers),
     );
   });
+});
+
+describe("자동 trailing 문단 선두의 수식 Backspace는 Backspace와 같이 아무것도 바꾸지 않는다(Issue #410)", () => {
+  const pressInTrailing = (
+    key: string,
+    modifiers: Modifiers,
+    useDispatchKeydown: boolean,
+  ) => {
+    const { editor, tiptap } = mounted(documentOf(headingBlock("h", 1, "x")));
+    placeCaretInLastContainer(tiptap);
+    const before = editorState(editor, tiptap);
+    expectKeyConsumedUnchanged(tiptap, () =>
+      useDispatchKeydown
+        ? dispatchKeydown(tiptap, key)
+        : dispatchModifiedKeydown(tiptap, key, modifiers),
+    );
+    return { before, state: editorState(editor, tiptap), tiptap };
+  };
+
+  it.each([SHIFT_BACKSPACE, MOD_BACKSPACE])(
+    "$label: 키를 소비하고 문서를 바꾸지 않으며 캐럿을 heading 끝으로 옮긴다",
+    (keyCase) => {
+      const base = pressInTrailing("Backspace", undefined, true);
+      const actual = pressInTrailing(keyCase.key, keyCase.modifiers, false);
+
+      expect(actual.tiptap.state.selection.from).toBe(3);
+      expect(actual.state).toEqual(base.state);
+    },
+  );
 });
