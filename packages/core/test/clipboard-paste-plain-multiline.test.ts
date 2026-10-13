@@ -44,7 +44,9 @@ import {
   outline,
   pasteData,
   runsOf,
+  setupPasteSelection,
   textOf,
+  withUnhandledErrorTracking,
 } from "./clipboard-test-support.js";
 import {
   codeBlockBlock,
@@ -189,6 +191,23 @@ describe("여러 줄 평문 붙여넣기 배치(Issue #284)", () => {
       plainPaste(editable, "X\nY");
 
       expect(outline(blocksOf(editor))).toEqual(["h2:abcdX", "p:Y", "p:tail"]);
+    });
+
+    it("paragraph를 막은 설정에서 heading 끝에 붙여도 던지지 않고 같은 level heading 둘이 된다(Issue #406)", () => {
+      const { editor, editable } = setupPasteSelection(
+        [headingBlock("h1", 2, "ab")],
+        { id: "h1", offset: 2 },
+        { id: "h1", offset: 2 },
+        { enabledBlockTypes: { mode: "deny", types: ["paragraph"] } },
+      );
+
+      withUnhandledErrorTracking((errors) => {
+        plainPaste(editable, "x\ny");
+
+        expect(errors).toEqual([]);
+      });
+
+      expect(outline(blocksOf(editor))).toEqual(["h2:abx", "h2:y"]);
     });
 
     it("목록 항목 중간에 붙이면 같은 목록 타입 항목이 이어진다", () => {

@@ -245,13 +245,16 @@ export function splitAtCaret(
   // 복제하지 않고 본문 문단을 여는 흐름의 복원이다. 중간·시작 split은
   // 기존대로 원본 타입·attrs를 복사한다. quote도 같은 규칙이다 — 끝 Enter는
   // 인용을 닫고 문단을 열며, 중간 Enter는 앞뒤 모두 quote로 남는다.
+  // 예외: enabledBlockTypes가 paragraph를 막아 스키마에 paragraph가 없으면
+  // 끝 split도 중간 split처럼 원본 타입·attrs·마크를 복사한다(Issue #406).
+  const paragraphType = contentNode.type.schema.nodes.paragraph;
   const newContentNode = isListItemContent(contentNode)
     ? // 목록은 캐럿 뒤가 비어도 같은 목록 타입을 유지한다. numbered의
       // startNumber는 명시 시작점이므로 파생된 새 항목에 복제하지 않고
       // schema 기본값(null)을 쓴다(spec §4.4/§5.1).
       contentNode.type.create(null, afterContent, contentNode.marks)
-    : afterContent.size === 0
-      ? contentNode.type.schema.nodes.paragraph!.create()
+    : afterContent.size === 0 && paragraphType !== undefined
+      ? paragraphType.create()
       : contentNode.type.create(
           contentNode.attrs,
           afterContent,
