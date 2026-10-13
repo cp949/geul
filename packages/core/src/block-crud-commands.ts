@@ -13,6 +13,7 @@ import { findBlockPosition } from "./block-position.js";
 import { deleteBlockRange } from "./delete-block-range.js";
 import { findBlockInTree, findSiblingContext } from "./block-tree.js";
 import {
+  hasOverlappingRemovalTargets,
   insertSiblingsInTree,
   removeBlockNodesFromTree,
   removeBlocksFromTree,
@@ -318,17 +319,11 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       removedBlocks.push(found);
     }
     // 중복 id와 조상+자손 동시 제거는 삽입 전에 거절한다(G-EDT-001) — 원래
-    // 노드 기준 제거는 이 둘을 스스로 걸러내지 못한다. 서브트리 안에 든
-    // 제거 대상은 removeBlockNodesFromTree가 수집하지 않으므로 수집 수가
-    // 모자라면 조상+자손이다.
-    const removeNodeSet = new Set<DocumentBlock>(removedBlocks);
-    if (
-      new Set(blockIdsToRemove).size !== blockIdsToRemove.length ||
-      removeBlockNodesFromTree(currentDocument.blocks, removeNodeSet).removed
-        .length !== removeNodeSet.size
-    ) {
+    // 노드 기준 제거는 이 둘을 스스로 걸러내지 못한다.
+    if (hasOverlappingRemovalTargets(currentDocument.blocks, removedBlocks)) {
       return commandNotApplicable("replaceBlocks");
     }
+    const removeNodeSet = new Set<DocumentBlock>(removedBlocks);
 
     const withIds = blocksToInsert.map(
       (block) => ({ ...block, id: block.id ?? session.createId() }) as Block,
@@ -441,8 +436,11 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
   // 범용 조작 API(spec §3.2, DOC-005, RD-002-DELTA-03). replaceBlocksImpl의
   // "삽입" 절반이 없는 부분집합이다 — blockIds 전부를 자신의 children
   // 서브트리와 함께 제거한다(같은 설계 결정 상속, RD-002-DELTA-02
-  // "## 계획"). 신규 트리 유틸리티 없이 removeBlocksFromTree·
-  // validateCandidateDocument를 그대로 재사용한다.
+  // "## 계획"). removeBlocksFromTree·validateCandidateDocument를 그대로
+  // 재사용한다. 제거 대상 id가 중복이거나 한 대상이 다른 대상의 서브트리
+  // 안에 있으면(조상+자손) 인자 순서와 무관하게 transaction 전에
+  // COMMAND_NOT_APPLICABLE로 거절한다(Issue #405). 거절 순서는
+  // BLOCK_NOT_FOUND → 겹침 → 후보 문서 검증이다.
   const removeBlocksImpl = (
     blockIds: string[],
   ): Result<Block[], EditorError> => {
@@ -460,6 +458,11 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       }
       removedBlocks.push(found);
     }
+    // 중복 id와 조상+자손 동시 제거는 transaction 전에 거절한다(Issue #405,
+    // G-EDT-001) — 인자 순서와 무관하다. replaceBlocks와 같은 판정을 쓴다.
+    if (hasOverlappingRemovalTargets(currentDocument.blocks, removedBlocks)) {
+      return commandNotApplicable("removeBlocks");
+    }
 
     const { blocks: nextBlocks } = removeBlocksFromTree(
       currentDocument.blocks,
@@ -472,9 +475,9 @@ export const createBlockCrudCommands = (session: ProductionEditorSession) => {
       let transaction = session.editor.state.tr;
       // replaceBlocksImpl의 제거 루프와 동일 — 인자 순서로 순회하며 매번
       // transaction.doc에서 위치를 다시 조회한다(매 삭제 뒤 남은 블록
-      // 위치가 바뀐다). 조상·자손이 함께 들어오면 자손이 이미 사라져
-      // findBlockPosition이 null을 반환하고, 명령 전체를 거절한다(dispatch
-      // 전이라 부분 적용 없음).
+      // 위치가 바뀐다). 조상·자손과 중복 id는 모델 단계가 이미 거절했으므로
+      // findBlockPosition이 null을 반환하는 경로는 도달 불가 방어선이다
+      // (dispatch 전이라 부분 적용 없음).
       for (const id of blockIds) {
         const position = findBlockPosition(transaction.doc, id);
         if (position === null) return false;

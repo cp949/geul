@@ -164,3 +164,21 @@ export const removeBlockNodesFromTree = (
   nodesToRemove: ReadonlySet<DocumentBlock>,
 ): { blocks: DocumentBlock[]; removed: DocumentBlock[] } =>
   removeFromTree(blocks, (block) => nodesToRemove.has(block));
+
+// targets(현재 트리에서 읽은 원래 노드 참조)가 함께 제거될 수 없는 조합이면
+// true다 — 같은 노드를 두 번 담았거나(중복 id), 한 대상이 다른 대상의
+// 서브트리 안에 든 경우(조상+자손)다. 서브트리 안에 든 대상은
+// removeBlockNodesFromTree가 수집하지 않으므로 수집 수가 모자라면
+// 조상+자손이다. removeBlocks·replaceBlocks가 transaction 전에 거절하는
+// 판정을 공유한다(Issue #405).
+export const hasOverlappingRemovalTargets = (
+  blocks: readonly DocumentBlock[],
+  targets: readonly DocumentBlock[],
+): boolean => {
+  const targetSet = new Set<DocumentBlock>(targets);
+  if (targetSet.size !== targets.length) return true;
+  return (
+    removeBlockNodesFromTree(blocks, targetSet).removed.length !==
+    targetSet.size
+  );
+};
