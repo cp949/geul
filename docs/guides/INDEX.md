@@ -30,6 +30,7 @@
 | [`G-CNV-002`](./G-CNV-002-preserve-imported-meaning.md) | 외부 입력 의미 보존 | HTML·GFM importer·sanitize·warning 변경 |
 | [`G-TBL-001`](./G-TBL-001-use-logical-table-grid.md) | 논리 table 격자 | table model·변환·command·selection·overlay 변경 |
 | [`G-PRC-001`](./G-PRC-001-keep-scratch-work-outside-the-repository.md) | 임시 조사 파일 관리 | 재현·분석용 일회성 script 생성 |
+| [`G-PRC-002`](./G-PRC-002-record-and-skip-explored-input-spaces.md) | 조사 입력 공간 기록과 재실행 금지 | 변환·직렬화 변경의 전수·무작위 조사 또는 수정 전후 퇴행 탐색을 직접 하거나 다른 에이전트에 위임 |
 
 ## 카테고리
 

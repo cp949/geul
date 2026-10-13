@@ -174,6 +174,7 @@ qq-workflow가 작업 적합성을 판정하고, roadmap-workflow가 RD 내 DELT
 - 정지 조건은 subagent에도 그대로 적용된다. push, GitHub 쓰기, `dev` 병합과 재그룹화 금지를 프롬프트에 명시한다.
 - subagent 보고는 근거와 함께 받는다 — 파일 경로와 줄 번호, 테스트 제목, 실행한 명령과 출력. 근거 없는 "고쳤다"는 받아들이지 않고 메인 세션이 직접 확인한다.
 - 사용자 결정이 필요한 지점은 subagent가 추측하지 않고 그대로 올린다. 사용자에게 묻는 것은 메인 세션이다.
+- 전수·무작위 입력 조사를 맡기면 프롬프트에 이미 돈 입력 공간과 재실행 금지, 새 공간과 상한을 적는다. subagent는 메모리와 `_works/`를 읽지 못한다. 규칙은 [`G-PRC-002`](../guides/G-PRC-002-record-and-skip-explored-input-spaces.md)가 소유한다.
 
 ## 리뷰 산출물 형식
 
