@@ -120,6 +120,60 @@ describe("heading/quote native shorthand exact 변환", () => {
     },
   );
 
+  it.each([
+    ["heading 중간(offset 2)에서", 2, " ", "## 리말"],
+    ["heading 시작에서", 0, "# ", "# 리말"],
+  ] as const)(
+    "%s 다음 문단 중간까지 범위 선택하고 marker를 입력하면 예외 없이 규칙을 건너뛰고 선택 구간을 평문으로 대체한다",
+    (_label, headingOffset, text, replaced) => {
+      // "# " 두 글자 입력은 IME·자동완성처럼 여러 글자를 한 번에 넣는 경로다.
+      // 한 글자씩 치면 첫 글자가 선택을 먼저 대체해 캐럿이 된다.
+      const { editor, tiptap } = mounted(
+        documentOf(
+          headingBlock("target", 1, "##x"),
+          paragraphBlock("tail", "꼬리말"),
+        ),
+      );
+      tiptap.commands.setTextSelection({
+        from: contentTextStart(tiptap, "target") + headingOffset,
+        to: contentTextStart(tiptap, "tail") + 1,
+      });
+
+      expect(dispatchTextInput(tiptap, text)).toBe(false);
+      expect(editor.getDocument().blocks).toEqual([
+        headingBlock("target", 1, "##x"),
+        paragraphBlock("tail", "꼬리말"),
+      ]);
+
+      expect(typeNativeText(tiptap, text)).toBe(false);
+      // 첫 heading이 level·blockId를 유지하고 마지막 문단의 남은 글자가
+      // 이어 붙는다. 문서 끝이 heading이 되어 trailing 빈 문단이 붙는다.
+      expect(editor.getDocument().blocks).toEqual([
+        headingBlock("target", 1, replaced),
+        expect.objectContaining({ type: "paragraph", content: [] }),
+      ]);
+    },
+  );
+
+  it("heading 안에 머무는 범위 선택 위 marker 입력은 규칙을 건너뛰고 문서를 바꾸지 않는다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        headingBlock("target", 1, "##x"),
+        paragraphBlock("tail", "꼬리말"),
+      ),
+    );
+    tiptap.commands.setTextSelection({
+      from: contentTextStart(tiptap, "target") + 2,
+      to: contentTextStart(tiptap, "target") + 3,
+    });
+
+    expect(dispatchTextInput(tiptap, " ")).toBe(false);
+    expect(editor.getDocument().blocks).toEqual([
+      headingBlock("target", 1, "##x"),
+      paragraphBlock("tail", "꼬리말"),
+    ]);
+  });
+
   it("문장 중간 > 뒤 native space는 quote로 변환하지 않는다", () => {
     const { editor, tiptap } = mounted(
       documentOf(
