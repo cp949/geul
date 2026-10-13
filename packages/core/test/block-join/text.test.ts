@@ -24,17 +24,31 @@
  * tableEditing({ allowTableNodeSelection: false })의 normalizeSelection이
  * 같은 dispatch 안에서 표 전체 CellSelection으로 정규화한다.
  *
+ * Issue #404: 병합 대상이 없는 빈 마지막 문단과, 지워도 TrailingBlockExtension이
+ * 되붙이는 자동 trailing 문단 병합의 Delete는 키를 소비하고 트랜잭션을 만들지
+ * 않는다. 폴스루한 deleteCurrentNode와 지웠다 되붙는 병합이 문서는 그대로 두고
+ * undo 단위만 남기던 것을 막는다.
+ *
  * 키 소비(반환 true)는 view.someProp("handleKeyDown", ...) 실 디스패치로
  * 검증한다 — 이 커맨드는 addKeyboardShortcuts로만 등록돼 editor.commands로
  * 노출되지 않는다(G-WKS-001).
  */
+import type { Editor as TiptapEditor } from "@tiptap/core";
 import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, it, vi } from "vitest";
 
 import { BlockJoinExtension } from "../../src/block-join-extension.js";
-import { contentTextStart, dispatchKeydown } from "../block-test-support.js";
 import {
+  contentTextStart,
+  dispatchKeydown,
+  typeNativeText,
+} from "../block-test-support.js";
+import {
+  codeBlockBlock,
+  dividerBlock,
   documentOf,
+  headingBlock,
+  listItemBlock,
   nestedParagraphDocument,
   oneCellTableBlock,
   paragraphBlock,
@@ -47,8 +61,10 @@ import {
 } from "../table-test-support.js";
 import {
   countNodes,
+  expectKeyConsumedUnchanged,
   expectSchemaValid,
   mountDocument,
+  pressCountingDocChanges,
 } from "./block-join-test-support.js";
 
 describe("블록 선두 Backspace는 앞 텍스트블록과 병합한다", () => {
@@ -447,6 +463,184 @@ describe("텍스트 끝 Delete는 다음 텍스트블록을 끌어와 병합한�
 
     tiptap.commands.undo();
     expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+  });
+});
+
+/*
+ * 문서를 바꾸지 않는 Delete(Issue #404). 두 원인이 있다.
+ * - 폴스루: 병합 대상이 없는 빈 마지막 문단에서 false를 돌려주면 Tiptap
+ *   deleteCurrentNode가 같은 문단으로 되채운다.
+ * - 자동 trailing 문단 병합: 마지막 블록이 문단이 아니면 빈 문단이 문서 끝에
+ *   붙어 있다. 그 문단을 지워도 TrailingBlockExtension이 새 blockId로
+ *   되붙인다. 일반 병합과 코드 블록 흡수가 같은 증상이다.
+ * 두 경로 모두 키를 소비하고 트랜잭션을 만들지 않아야 한다. 통제 케이스는
+ * 실제로 문서가 바뀌는 Delete가 그대로임을 고정한다.
+ */
+describe("문서를 바꾸지 않는 Delete는 키를 소비하고 트랜잭션을 만들지 않는다(Issue #404)", () => {
+  /** 캐럿을 두고 Delete를 누르는 동작을 돌려준다. 키는 돌려받은 함수를 부를 때 눌린다. */
+  const pressDeleteAt = (
+    tiptap: TiptapEditor,
+    blockId: string,
+    offset: number,
+  ) => {
+    tiptap.commands.setTextSelection(
+      contentTextStart(tiptap, blockId) + offset,
+    );
+    return () => dispatchKeydown(tiptap, "Delete");
+  };
+
+  it("빈 마지막 문단의 Delete는 앞 문단이 있어도 아무것도 바꾸지 않는다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("a", "abc"), paragraphBlock("b", "")),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressDeleteAt(tiptap, "b", 0));
+  });
+
+  it("문단 하나뿐인 빈 문서의 Delete는 아무것도 바꾸지 않는다", () => {
+    const { tiptap } = mountDocument(documentOf(paragraphBlock("only", "")));
+
+    expectKeyConsumedUnchanged(tiptap, pressDeleteAt(tiptap, "only", 0));
+  });
+
+  it("마지막 heading 끝의 Delete는 자동 trailing 문단을 지웠다 되붙이지 않는다", () => {
+    const { tiptap } = mountDocument(documentOf(headingBlock("h", 1, "x")));
+
+    expectKeyConsumedUnchanged(tiptap, pressDeleteAt(tiptap, "h", 1));
+  });
+
+  it("마지막 bullet 항목 끝의 Delete는 자동 trailing 문단을 지웠다 되붙이지 않는다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(listItemBlock("li", "bulletListItem", "x")),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressDeleteAt(tiptap, "li", 1));
+  });
+
+  it("divider 앞 문단 끝의 Delete는 divider 너머 자동 trailing 문단을 지웠다 되붙이지 않는다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("a", "abc"), dividerBlock("d")),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressDeleteAt(tiptap, "a", 3));
+  });
+
+  it("표 앞 문단 끝의 Delete는 표 너머 자동 trailing 문단을 지웠다 되붙이지 않는다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("a", "abc"), oneCellTableBlock("table-1")),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressDeleteAt(tiptap, "a", 3));
+  });
+
+  it("색·정렬이 붙은 마지막 빈 문단은 Delete가 병합해 속성을 지운다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(headingBlock("h", 1, "x"), {
+        id: "t",
+        type: "paragraph",
+        content: [],
+        backgroundColor: "#112233",
+        textAlignment: "center",
+      }),
+    );
+    const containerAttrs = () => {
+      const last = tiptap.state.doc.lastChild;
+      return last === null ? null : last.attrs;
+    };
+    expect(containerAttrs()?.backgroundColor).toBe("#112233");
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressDeleteAt(tiptap, "h", 1),
+    );
+
+    expect(result.handled).toBe(true);
+    expect(result.docChanged).toBe(1);
+    expect(containerAttrs()?.backgroundColor).toBeNull();
+    expect(containerAttrs()?.textAlignment).toBeNull();
+  });
+
+  it("자식 문단의 마지막 빈 자식 Delete는 자동 trailing 문단을 지웠다 되붙이지 않는다", () => {
+    const { tiptap } = mountDocument(
+      documentOf({
+        id: "p",
+        type: "paragraph",
+        content: [{ text: "x" }],
+        children: [{ id: "c", type: "paragraph", content: [] }],
+      }),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressDeleteAt(tiptap, "c", 0));
+  });
+
+  it("마지막 코드 블록 끝의 Delete는 자동 trailing 문단을 지웠다 되붙이지 않는다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("x", "x"), codeBlockBlock("k", "foo")),
+    );
+
+    expectKeyConsumedUnchanged(tiptap, pressDeleteAt(tiptap, "k", 3));
+  });
+
+  it("빈 마지막 문단의 Delete 뒤 undo 한 번은 직전 입력을 되돌린다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("a", "abc"), paragraphBlock("b", "")),
+    );
+    const initialJson = tiptap.state.doc.toJSON();
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "a") + 3);
+    typeNativeText(tiptap, "X");
+    expect(tiptap.state.doc.child(0).textContent).toBe("abcX");
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressDeleteAt(tiptap, "b", 0),
+    );
+    expect(result).toEqual({ handled: true, docChanged: 0 });
+
+    // 빈 undo 단위가 남았다면 이 undo는 문서를 바꾸지 못한다.
+    tiptap.commands.undo();
+    expect(tiptap.state.doc.toJSON()).toEqual(initialJson);
+  });
+
+  it("통제: 앞 문단이 있는 빈 마지막 문단은 앞 문단 끝 Delete로 실제 삭제된다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(paragraphBlock("a", "abc"), paragraphBlock("b", "")),
+    );
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressDeleteAt(tiptap, "a", 3),
+    );
+
+    expect(result).toEqual({ handled: true, docChanged: 1 });
+    expect(tiptap.state.doc.childCount).toBe(1);
+    expect(tiptap.state.doc.child(0).attrs.blockId).toBe("a");
+    expect(tiptap.state.doc.child(0).textContent).toBe("abc");
+  });
+
+  it("통제: 비어 있지 않은 trailing 문단은 heading 끝 Delete로 병합된다", () => {
+    const { tiptap } = mountDocument(
+      documentOf(headingBlock("h", 1, "x"), paragraphBlock("y", "y")),
+    );
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressDeleteAt(tiptap, "h", 1),
+    );
+
+    expect(result).toEqual({ handled: true, docChanged: 1 });
+    expect(tiptap.state.doc.child(0).attrs.blockId).toBe("h");
+    expect(tiptap.state.doc.child(0).textContent).toBe("xy");
+  });
+
+  it("통제: 비어 있지 않은 마지막 문단 끝의 Delete는 키를 소비하지 않는다", () => {
+    const { tiptap } = mountDocument(documentOf(paragraphBlock("a", "abc")));
+
+    const result = pressCountingDocChanges(
+      tiptap,
+      pressDeleteAt(tiptap, "a", 3),
+    );
+
+    expect(result).toEqual({ handled: false, docChanged: 0 });
   });
 });
 

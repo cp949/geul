@@ -260,7 +260,7 @@ describe("빈 codeBlock Delete 삭제", () => {
     ]);
   });
 
-  it("codeBlock이 비어 있지 않으면 이 확장은 물러나고 block-join-extension.ts가 다음 블록을 흡수한다(RD-001-DELTA-02)", () => {
+  it("codeBlock이 비어 있지 않으면 이 확장은 물러나고 block-join-extension.ts가 처리한다. 다음 블록이 trailing 빈 문단이면 흡수하지 않고 키만 소비한다(RD-001-DELTA-02, Issue #404)", () => {
     const { editor, tiptap } = mounted(
       documentOf(codeBlockBlock("target", "code"), paragraphBlock("tail", "")),
     );
@@ -269,12 +269,13 @@ describe("빈 codeBlock Delete 삭제", () => {
     );
 
     expect(dispatchKeydown(tiptap, "Delete")).toBe(true);
-    // "tail"(빈 paragraph)이 codeBlock에 흡수돼 소멸하고, codeBlock이 문서
-    // 최상위 마지막 블록이 돼 TrailingBlockExtension이 새 맨몸 paragraph를
-    // 자동으로 붙인다(위 파일 머리말 참고).
+    // 흡수할 내용이 없는 빈 마지막 paragraph "tail"은 지워도 codeBlock이
+    // 문서 최상위 마지막 블록이 돼 TrailingBlockExtension이 되붙인다(위
+    // 파일 머리말 참고). 지웠다 되붙이면 문서는 같고 undo 단위만 남아
+    // 키만 소비하고 문서를 그대로 둔다(Issue #404).
     expect(editor.getDocument().blocks).toEqual([
       codeBlockBlock("target", "code"),
-      paragraphBlock("id-1", ""),
+      paragraphBlock("tail", ""),
     ]);
   });
 });

@@ -7,13 +7,19 @@
  * 히스토리 밖에서 끝나고(R-11), 편집이 트리거한 추가는 그 편집과 한 커밋·
  * 한 히스토리 이벤트가 된다(R-8). 자동 추가 paragraph의 blockId는
  * BlockIdExtension 경로로 문서 전체에서 유일하다(계획 완료 조건 5~8·10).
+ *
+ * Issue #404가 더한 축: isRedundantTrailingParagraph는 병합이 지울 컨테이너가
+ * "지워도 되붙는 trailing 문단"인지 판정한다. endsWithChildlessParagraph와 같은
+ * 불변식을 공유하므로 한 곳이 바뀌면 이 판정이 어긋나지 않음을 단위로 고정한다.
  */
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import { createEditor, type DocumentChangeEvent } from "../src/index.js";
+import { isRedundantTrailingParagraph } from "../src/trailing-block-extension.js";
 import {
   dividerD1,
   documentOf,
+  liveSchema,
   nestedParagraphDocument,
   okResult,
   oneCellTableBlock,
@@ -291,5 +297,117 @@ describe("편집 시점 trailing paragraph", () => {
 
     expect(editor.commands.undo()).toEqual(okResult);
     expect(editor.getDocument().blocks).toEqual(tailDocument.blocks);
+  });
+});
+
+/*
+ * isRedundantTrailingParagraph(Issue #404). 참이 되려면 조건 셋을 모두 만족해야
+ * 한다. 각 조건을 하나씩 거짓으로 만든 입력과 참 입력을 고정한다.
+ * - 1: 지울 컨테이너가 문서의 마지막 자식이다.
+ * - 2: 그 컨테이너가 자식 없는 빈 paragraph이고 blockId 말고는 기본 속성이다.
+ * - 3: 그 컨테이너를 뺀 문서가 자식 없는 paragraph로 끝나지 않는다.
+ * 문서는 프로덕션 스키마로 직접 만든다. 판정은 순수 함수라 마운트가 필요 없다.
+ */
+describe("isRedundantTrailingParagraph", () => {
+  const schema = liveSchema();
+
+  /** 자식 없는 paragraph 컨테이너 JSON. text가 비면 빈 문단이다. */
+  const paragraphContainer = (text: string) => ({
+    type: "blockContainer",
+    content: [
+      {
+        type: "paragraph",
+        content: text === "" ? [] : [{ type: "text", text }],
+      },
+    ],
+  });
+  const headingContainer = (text: string) => ({
+    type: "blockContainer",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 1 },
+        content: text === "" ? [] : [{ type: "text", text }],
+      },
+    ],
+  });
+  /** 빈 자식 문단 하나를 가진 paragraph 컨테이너 JSON. */
+  const emptyParagraphWithChild = () => ({
+    type: "blockContainer",
+    content: [
+      { type: "paragraph" },
+      { type: "blockGroup", content: [paragraphContainer("")] },
+    ],
+  });
+  const docOf = (...children: object[]) =>
+    schema.nodeFromJSON({ type: "doc", content: children });
+
+  /** 마지막 자식을 지울 컨테이너로 판정한다. */
+  const judgeLast = (doc: ReturnType<typeof docOf>): boolean => {
+    const removed = doc.lastChild;
+    if (removed === null) throw new Error("마지막 자식 없음");
+    return isRedundantTrailingParagraph(
+      doc,
+      removed,
+      doc.content.size - removed.nodeSize,
+    );
+  };
+
+  it("heading 뒤 빈 마지막 문단은 지워도 되붙으므로 참이다", () => {
+    expect(
+      judgeLast(docOf(headingContainer("x"), paragraphContainer(""))),
+    ).toBe(true);
+  });
+
+  it("자식 딸린 문단 뒤 빈 마지막 문단도 참이다", () => {
+    expect(
+      judgeLast(docOf(emptyParagraphWithChild(), paragraphContainer(""))),
+    ).toBe(true);
+  });
+
+  it("조건 2: 색이 붙은 빈 마지막 문단은 지우면 속성이 사라져 거짓이다", () => {
+    const colored = {
+      ...paragraphContainer(""),
+      attrs: { backgroundColor: "#112233" },
+    };
+
+    expect(judgeLast(docOf(headingContainer("x"), colored))).toBe(false);
+  });
+
+  it("조건 1: 마지막 자식이 아니면 거짓이다", () => {
+    const doc = docOf(
+      headingContainer("x"),
+      paragraphContainer(""),
+      paragraphContainer("y"),
+    );
+    const removed = doc.child(1);
+
+    expect(
+      isRedundantTrailingParagraph(doc, removed, doc.child(0).nodeSize),
+    ).toBe(false);
+  });
+
+  it("조건 2: 비어 있지 않은 마지막 문단은 거짓이다", () => {
+    expect(
+      judgeLast(docOf(headingContainer("x"), paragraphContainer("y"))),
+    ).toBe(false);
+  });
+
+  it("조건 2: 자식이 있는 마지막 문단은 거짓이다", () => {
+    expect(
+      judgeLast(docOf(headingContainer("x"), emptyParagraphWithChild())),
+    ).toBe(false);
+  });
+
+  it("조건 2: 빈 마지막 heading은 paragraph가 아니므로 거짓이다", () => {
+    expect(
+      judgeLast(docOf(paragraphContainer("x"), headingContainer(""))),
+    ).toBe(false);
+  });
+
+  it("조건 3: 앞 블록이 자식 없는 문단이면 빈 문단 삭제는 실제 변화라 거짓이다", () => {
+    expect(
+      judgeLast(docOf(paragraphContainer("abc"), paragraphContainer(""))),
+    ).toBe(false);
   });
 });

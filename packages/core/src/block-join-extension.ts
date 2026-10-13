@@ -20,6 +20,7 @@ import {
   isCrossCellRangeInSameTable,
 } from "./table-boundary-range.js";
 import { collapsedToggleLabelEnd } from "./toggle-collapse-hidden.js";
+import { isRedundantTrailingParagraph } from "./trailing-block-extension.js";
 
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
 // block-container-extension.ts). PM joinBackward의 deleteBarrier는 이
@@ -68,6 +69,16 @@ import { collapsedToggleLabelEnd } from "./toggle-collapse-hidden.js";
 // 지운다. 표 안은 셀 텍스트만 지워 구조를 유지하고 표 밖은 일반 삭제한다.
 // 판정과 삭제는 table-boundary-range.ts가 소유한다. 두 핸들러가 맨 앞에서
 // 이 경로를 먼저 탄다.
+//
+// Issue #404: Delete가 문서를 바꾸지 않는데 undo 단위를 남기는 경우를 막는다.
+// 키는 소비하고 트랜잭션은 만들지 않는다(Issue #317과 같은 방식).
+// - 병합 대상이 없는 빈 마지막 문단: false로 폴스루하면 Tiptap
+//   deleteCurrentNode가 같은 문단으로 되채운다.
+// - 자동 trailing 문단 병합: 마지막 블록이 문단이 아니면 빈 문단이 문서 끝에
+//   붙어 있다. 앞 블록 끝의 Delete가 그 문단을 지우면 TrailingBlockExtension이
+//   새 blockId로 되붙인다. 일반 병합과 코드 블록 흡수가 같은 증상이다.
+//   색·정렬이 붙은 trailing 문단은 지우면 속성이 사라져 실제 변화라 병합한다.
+//   판정은 isRedundantTrailingParagraph가 소유한다.
 //
 // 사용자가 직접 만든(드래그 등) 전체 표 `CellSelection`에서 Backspace/Delete
 // 로 표를 지우는 경로(deleteSelectedTable)는 이 재귀 스킵과 무관하게
@@ -399,6 +410,10 @@ function mergeCodeBlockIntoText(
 // mergePos는 CodeBlock 자신의 끝 위치이고 삽입 방향은 기존 3개 호출부와
 // 같은 "append"라 caretAt 기본값("before")을 그대로 쓴다 — 새 파라미터가
 // 필요 없다.
+//
+// 반환값: 다음 블록이 지워도 되붙는 trailing 문단이면(Issue #404) 병합 없이
+// true를 돌려준다. 호출부(handleCodeBlockBoundary)는 반환값을 쓰지 않고 항상
+// true를 돌려주므로 키 소비 계약은 그대로다.
 function mergeNextBlockIntoCodeBlock(
   view: EditorView,
   liveState: EditorState,
@@ -416,6 +431,14 @@ function mergeNextBlockIntoCodeBlock(
     adjacent,
   );
   if (container.type.name !== "blockContainer") return false;
+
+  // 지워도 TrailingBlockExtension이 되붙이는 trailing 문단이면 병합하지 않는다
+  // (Issue #404). 문서는 그대로고 undo 단위만 남는다.
+  if (
+    isRedundantTrailingParagraph(codeBlockFrom.doc, container, containerStart)
+  ) {
+    return true;
+  }
 
   const inline = inlineToCodeSource(
     codeBlockFrom.parent.type.schema,
@@ -731,6 +754,14 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
   // 편입한다(RD-003).
   const next = findMergeTarget(state.doc, $from.after(), 1);
   if (next === null) {
+    // 빈 마지막 문단이면 소비한다(Issue #404). false로 폴스루하면 Tiptap
+    // deleteCurrentNode가 같은 문단으로 되채워 undo 단위만 남는다.
+    if (
+      $from.parent.type.name === "paragraph" &&
+      $from.parent.content.size === 0
+    ) {
+      return true;
+    }
     return selectionIsStale && isJoinBoundary(liveState, "forward");
   }
 
@@ -743,12 +774,20 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
   if (nextContainer.type.name !== "blockContainer") {
     return selectionIsStale && isJoinBoundary(liveState, "forward");
   }
+  const nextContainerStart = $next.before(nextContainerDepth);
+  // 지워도 TrailingBlockExtension이 되붙이는 trailing 문단이면 병합하지 않고
+  // 키만 소비한다(Issue #404). 문서는 그대로고 undo 단위만 남는다.
+  if (
+    isRedundantTrailingParagraph(state.doc, nextContainer, nextContainerStart)
+  ) {
+    return true;
+  }
 
   // atom 너머 대상이 CodeBlock이면 리터럴 `\n`을 hardBreak로 바꿔 붙인다
   // (Issue #281). 방향(현재 블록이 남음)은 그대로다.
   mergeContainers(view, liveState, {
     removed: nextContainer,
-    removedStart: $next.before(nextContainerDepth),
+    removedStart: nextContainerStart,
     mergePos: $from.pos,
     inline:
       $next.parent.type.name === "codeBlock"

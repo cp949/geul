@@ -10,6 +10,10 @@
  * 병합·빈 블록 제거·표 인접 NodeSelection — 을 복원함을 고정한다.
  * 병합은 단일 dispatch(undo 1회 단위, G-EDT-001)여야 한다.
  *
+ * Issue #404: 문서를 바꾸지 않는 Delete(빈 마지막 문단, 자동 trailing 문단
+ * 병합)가 키를 소비하고 트랜잭션을 만들지 않음을 두 파일이 같은 헬퍼로
+ * 단언한다(G-TST-002).
+ *
  * Issue #38 슬라이스 3(DELTA-05)이 더한 축: quote 블록의 Backspace join이
  * paragraph|heading 규칙을 그대로 따르고(05-C2), divider(비포장 atom)
  * 인접 Backspace/Delete가 divider를 그 자리에 그대로 두고 건너뛰어 그 너머의
@@ -71,4 +75,52 @@ const expectSchemaValid = (tiptap: TiptapEditor): void => {
   ).not.toThrow();
 };
 
-export { countNodes, expectSchemaValid, mountDocument };
+/**
+ * 키 입력 동안 문서를 바꾼 트랜잭션 수를 센다. 키 소비 여부와 함께 돌려준다.
+ * 구독은 입력이 끝나면 해제한다.
+ */
+const pressCountingDocChanges = (
+  tiptap: TiptapEditor,
+  press: () => boolean,
+): { handled: boolean; docChanged: number } => {
+  let docChanged = 0;
+  const onTransaction = ({
+    transaction,
+  }: {
+    transaction: { docChanged: boolean };
+  }): void => {
+    if (transaction.docChanged) docChanged += 1;
+  };
+  tiptap.on("transaction", onTransaction);
+  try {
+    const handled = press();
+    return { handled, docChanged };
+  } finally {
+    tiptap.off("transaction", onTransaction);
+  }
+};
+
+/**
+ * 키를 소비하고 아무것도 바꾸지 않음을 단언한다 — 소비(true), 문서를 바꾼
+ * 트랜잭션 0개, blockId 포함 문서 JSON 불변. 문서 JSON만 비교하면 blockId가
+ * 바뀌는 "지웠다 되붙는" 변경을 놓치지 않도록 id까지 비교한다.
+ */
+const expectKeyConsumedUnchanged = (
+  tiptap: TiptapEditor,
+  press: () => boolean,
+): void => {
+  const beforeJson = tiptap.state.doc.toJSON();
+  const result = pressCountingDocChanges(tiptap, press);
+
+  expect(result.handled).toBe(true);
+  expect(result.docChanged).toBe(0);
+  expect(tiptap.state.doc.toJSON()).toEqual(beforeJson);
+};
+
+export {
+  countNodes,
+  expectKeyConsumedUnchanged,
+  expectSchemaValid,
+  mountDocument,
+  pressCountingDocChanges,
+};

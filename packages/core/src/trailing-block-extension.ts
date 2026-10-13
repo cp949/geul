@@ -9,7 +9,7 @@ import { type EditorState, Plugin, type Transaction } from "@tiptap/pm/state";
 // paragraph/heading/quote를 가른다. table·divider는 컨테이너로 감싸이지
 // 않아(D19) 첫 분기에서 걸러진다 — divider로 끝나는 문서에도 trailing
 // paragraph가 붙는다.
-const endsWithChildlessParagraph = (doc: ProseMirrorNode): boolean => {
+export const endsWithChildlessParagraph = (doc: ProseMirrorNode): boolean => {
   const lastBlock = doc.lastChild;
   return (
     lastBlock !== null &&
@@ -17,6 +17,42 @@ const endsWithChildlessParagraph = (doc: ProseMirrorNode): boolean => {
     lastBlock.childCount === 1 &&
     lastBlock.firstChild?.type.name === "paragraph"
   );
+};
+
+// 병합이 지울 컨테이너가 "지워도 TrailingBlockExtension이 되붙이는 trailing
+// 문단"인지 판정한다(Issue #404). 그런 병합은 문서를 그대로 두고 undo 단위만
+// 남긴다 — 지운 문단이 새 blockId로 되붙기 때문이다. 호출부는 참이면
+// 트랜잭션을 만들지 않고 키만 소비한다.
+//
+// 조건 셋을 모두 만족해야 참이다.
+// 1. removed가 문서의 마지막 자식이다.
+// 2. removed가 자식 없는 빈 paragraph이고 blockId 말고는 기본 속성이다. 색·정렬이
+//    붙은 문단은 지우고 되붙이면 속성이 사라져 문서가 실제로 바뀐다.
+// 3. removed를 뺀 문서가 자식 없는 paragraph로 끝나지 않는다. 앞 블록이 자식
+//    없는 문단이면 지워도 되붙지 않아 실제 삭제다. 이때는 거짓이라 기존
+//    병합을 유지한다.
+//
+// 조건 3은 endsWithChildlessParagraph를 그대로 쓴다. 불변식이 한 곳에만 있어야
+// 판정 기준이 바뀔 때 이 함수가 조용히 어긋나지 않는다.
+export const isRedundantTrailingParagraph = (
+  doc: ProseMirrorNode,
+  removed: ProseMirrorNode,
+  removedStart: number,
+): boolean => {
+  if (removedStart + removed.nodeSize !== doc.content.size) return false;
+  if (
+    removed.type.name !== "blockContainer" ||
+    removed.childCount !== 1 ||
+    removed.firstChild?.type.name !== "paragraph" ||
+    removed.firstChild.content.size !== 0
+  ) {
+    return false;
+  }
+  const defaultContainer = removed.type.create({
+    blockId: removed.attrs.blockId,
+  });
+  if (!defaultContainer.sameMarkup(removed)) return false;
+  return !endsWithChildlessParagraph(doc.cut(0, removedStart));
 };
 
 // 문서 끝에 맨몸 paragraph를 넣는 transaction을 만든다(불필요하면 null).

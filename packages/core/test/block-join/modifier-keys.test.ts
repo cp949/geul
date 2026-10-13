@@ -16,6 +16,9 @@
  * backward 동등, 문단 끝 Mod-Delete 동등, 블록 중간·범위 선택 게이트, Mac
  * 전용 키 동등, 비Mac에서 Mac 전용 키 미소비.
  *
+ * Issue #404: 빈 마지막 문단의 Mod-Delete도 Delete처럼 키를 소비하고 문서를
+ * 바꾸는 트랜잭션을 만들지 않는다.
+ *
  * 키 소비는 view.someProp("handleKeyDown", ...) 실 디스패치로 검증한다. 실제
  * Mac 브라우저 동작은 이 파일 범위 밖이고 바인딩 존재만 증명한다.
  */
@@ -37,6 +40,7 @@ import {
   paragraphBlock,
   toggleBlock,
 } from "../editor-controller-support.js";
+import { expectKeyConsumedUnchanged } from "./block-join-test-support.js";
 
 type Modifiers = Parameters<typeof dispatchModifiedKeydown>[2];
 type Direction = "backward" | "forward";
@@ -511,5 +515,18 @@ describe("빈 codeBlock의 수식 Delete는 Delete와 같이 블록을 삭제한
 
     expect(actual.handled).toBe(base.handled);
     expect(actual.blocks).toEqual(base.blocks);
+  });
+});
+
+describe("빈 마지막 문단의 Mod-Delete는 Delete와 같이 아무것도 바꾸지 않는다(Issue #404)", () => {
+  it("Mod-Delete: 키를 소비하고 트랜잭션을 만들지 않는다", () => {
+    const { tiptap } = mounted(
+      documentOf(paragraphBlock("a", "abc"), paragraphBlock("b", "")),
+    );
+    tiptap.commands.setTextSelection(contentTextStart(tiptap, "b"));
+
+    expectKeyConsumedUnchanged(tiptap, () =>
+      dispatchModifiedKeydown(tiptap, MOD_DELETE.key, MOD_DELETE.modifiers),
+    );
   });
 });
