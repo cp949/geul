@@ -19,7 +19,10 @@ import {
   findTableBoundaryRange,
   isCrossCellRangeInSameTable,
 } from "./table-boundary-range.js";
-import { collapsedToggleLabelEnd } from "./toggle-collapse-hidden.js";
+import {
+  collapsedToggleLabelEnd,
+  isCollapsedToggleContent,
+} from "./toggle-collapse-hidden.js";
 import { isRedundantTrailingParagraph } from "./trailing-block-extension.js";
 
 // blockContainer의 content model은 "blockContent blockGroup?"다(D19,
@@ -395,6 +398,24 @@ function mergeCodeBlockIntoText(
   return true;
 }
 
+// Delete가 "시각적으로 다음" 블록을 찾기 시작할 위치다(Issue #419). 캐럿 블록이
+// 숨은 그룹을 가진 접힌 toggle 라벨이면 그 컨테이너 뒤에서 시작한다. 라벨 바로
+// 뒤에서 시작하면 숨은 첫 자식이 대상이 돼 숨은 글자가 라벨로 빨려 들거나
+// 숨은 codeBlock이 흡수된다. 숨은 그룹은 화면에 없어 다음 블록이 아니다.
+// Backspace가 병합 위치를 라벨 끝으로 보정하는 것(#253)의 정방향 대칭이다.
+// 캐럿이 라벨에 있으므로 이 컨테이너는 숨은 그룹 밖이다. 그 외는 기존대로
+// 콘텐츠 노드 바로 뒤다.
+function forwardSearchStart(
+  $from: ResolvedPos,
+  containerDepth: number,
+): number {
+  const container = $from.node(containerDepth);
+  if (isCollapsedToggleContent($from.parent) && container.childCount > 1) {
+    return $from.after(containerDepth);
+  }
+  return $from.after();
+}
+
 // CodeBlock 끝 Delete가 인접한 다음 블록을 CodeBlock에 흡수한다(#202 스펙
 // 표 행3, RD-001-DELTA-02) — mergeCodeBlockIntoText와 반대로 CodeBlock이
 // 항상 살아남는 쪽이고 다음 블록이 소멸한다. 병합 대상은 codeBlock 또는
@@ -479,7 +500,7 @@ function adjacentCodeBlockAtTextBoundary(
   const adjacent =
     direction === "backward"
       ? leafBefore(state.doc, $from.before(containerDepth))
-      : leafAfter(state.doc, $from.after());
+      : leafAfter(state.doc, forwardSearchStart($from, containerDepth));
   return adjacent?.node.type.name === "codeBlock" ? adjacent : null;
 }
 
@@ -800,7 +821,7 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
       (selectionIsStale && isJoinBoundary(liveState, "forward"))
     );
   }
-  const { $from } = context;
+  const { $from, containerDepth } = context;
   if ($from.parentOffset !== $from.parent.content.size) {
     return selectionIsStale && isJoinBoundary(liveState, "forward");
   }
@@ -812,8 +833,13 @@ function joinForwardAtTextEnd(editor: Editor): boolean {
   // 없으면 다음 형제/조상의 다음에 닿는다. 없으면 문서 끝이다. textOnly=true라
   // atom(divider·media)은 무조건 건너뛴다(findSelectionIn, Issue #202
   // RD-002). table도 findMergeTarget이 표 경계 밖으로 재귀해 같은 재귀에
-  // 편입한다(RD-003).
-  const next = findMergeTarget(state.doc, $from.after(), 1);
+  // 편입한다(RD-003). 접힌 toggle 라벨이면 숨은 자식 대신 컨테이너 뒤에서
+  // 시작한다(Issue #419).
+  const next = findMergeTarget(
+    state.doc,
+    forwardSearchStart($from, containerDepth),
+    1,
+  );
   if (next === null) {
     // 병합 대상 없는 문서 끝이면 키만 소비한다. false로 폴스루하면 Tiptap
     // deleteCurrentNode가 빈 블록을 되채운다.
