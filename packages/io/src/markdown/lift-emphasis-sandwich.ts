@@ -9,16 +9,12 @@
 // - 라이브러리 버전은 2.2.0이 최신이라 패치를 기다릴 수 없다.
 // - 샌드위치를 emphasis 하나로 감싸면 라이브러리가 푸는 모양이 된다. 글자와 mark 범위는 그대로다.
 //
-// 적용 조건(모두 만족해야 한다):
+// 적용 조건:
 // - 인접 형제가 emphasis, strong(자식이 emphasis 정확히 하나), emphasis 순서다. 모양만 본다.
 //   - 앞 형제의 유무·종류와 경계 글자는 보지 않는다.
 //   - 앞 형제가 없거나 strong이 아니거나 영숫자로 끝나도 끌어올린다.
 //   - 경계 글자로 거르면 걸러진 쪽에 깨지는 입력이 남는다. 구두점 판정이 라이브러리 동작을 흉내 내야 한다(#415).
-// - 앞 형제, head, strong, tail, 뒤 형제 어디에도 astral 글자(U+10000 이상)가 없다. 있으면 끌어올리지 않는다.
-//   - 끌어올리면 astral 글자가 구분자 옆에 놓여 문자 참조(`&#x1F600;`)로 나간다.
-//   - 그 옆 `_`는 이스케이프되지 않는다(#414). 수정 전에는 왕복이 맞던 입력이 깨진다.
-//   - 끌어올리지 않으면 수정 전과 같은 출력이다. #414가 고쳐지면 이 조건을 뺄 수 있다.
-//   - 가드 창 밖의 astral은 보지 않는다. 앞쪽을 끌어올리면 astral이 든 뒤쪽 샌드위치의 구분자 배치가 바뀌어 깨질 수 있다.
+//   - astral 글자(U+10000 이상)가 든 샌드위치도 끌어올린다(#414).
 //
 // 고정점 반복:
 // - 끌어올린 emphasis 뒤에 `strong[emphasis] · emphasis`가 이어지면 새 샌드위치가 생긴다.
@@ -86,6 +82,12 @@
 //   - 원인은 #414다. 앞쪽 샌드위치를 끌어올리면 가드 창 밖 astral이 든 뒤쪽 샌드위치의 구분자 배치가 바뀐다.
 //   - 가드 창을 형제 전체나 뒤쪽 전체로 넓히면 퇴행이 늘어서(그릴링 측정, 10만 건당 현재 창 10건, 형제 전체 80건, 뒤쪽 전체 45건) 창을 그대로 뒀다.
 //
+// #414 조사:
+// - `handleText`가 astral 글자를 U+E000으로 바꿔 `state.safe`에 넘겨(`gfm-text-backslash.ts`) 구분자 옆 astral 글자 뒤 `_`가 이스케이프된다.
+// - 원인이 해소돼 astral 가드(`hasAstralCodePoint`와 적용 조건의 astral 항목)를 뺐다.
+// - 조사 입력 공간과 결과는 `gfm-text-backslash.ts` 헤더의 "#414 조사 입력 공간"에 있다. 가드를 뺀 뒤 astral 공간의 실패는 0건이다.
+// - 위 #415·#416 조사의 astral 서술(수정 전후 같은 실패 160·48·222건, 무작위 퇴행 27·28건)은 가드가 있던 때의 기록이다.
+//
 // 함정:
 // - `mergeAdjacentInline` 뒤에 적용한다. 병합이 끝나야 샌드위치 모양이 나타난다.
 // - `mergeAdjacentText` 앞에 적용한다. 끌어올린 뒤 자식 사이에 인접 text가 생길 수 있다.
@@ -97,15 +99,6 @@ type InlineNode<T> = {
   value?: string;
   children?: T[];
 };
-
-const ASTRAL = /[\u{10000}-\u{10FFFF}]/u;
-
-/**
- * 노드 안에 astral 글자(U+10000 이상)가 있는지 판정한다.
- */
-const hasAstralCodePoint = <T extends InlineNode<T>>(node: T): boolean =>
-  (node.value !== undefined && ASTRAL.test(node.value)) ||
-  (node.children?.some(hasAstralCodePoint) ?? false);
 
 /**
  * 자식이 emphasis 정확히 하나인 strong인지 판정한다.
@@ -154,7 +147,6 @@ const liftOnce = <T extends InlineNode<T>>(
   });
   const lifted: T[] = [];
   for (let index = 0; index < recursed.length; index++) {
-    const previous = recursed[index - 1];
     const head = recursed[index];
     const middle = recursed[index + 1];
     const tail = recursed[index + 2];
@@ -164,10 +156,7 @@ const liftOnce = <T extends InlineNode<T>>(
       tail !== undefined &&
       head.type === "emphasis" &&
       isStrongOfOneEmphasis(middle) &&
-      tail.type === "emphasis" &&
-      ![previous, head, middle, tail, recursed[index + 3]].some(
-        (node) => node !== undefined && hasAstralCodePoint(node),
-      )
+      tail.type === "emphasis"
     ) {
       lifted.push(liftSandwich(head, middle, tail));
       changed = true;

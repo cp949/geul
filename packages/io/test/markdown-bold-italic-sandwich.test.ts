@@ -6,21 +6,21 @@
  * - 구분자 `*`이 연달아 붙어 재가져오기에서 닫는 구분자가 글자로 샌다.
  * - 앞 strong이 없는 `I X I X I`(#416 재현 B1)도 `*.****a****a****a****a*`로 나갔다.
  * `inlineNodes`가 `emphasis · strong[emphasis] · emphasis`를 `emphasis[…, strong[…], …]`로 끌어올려 해소한다.
- * 적용 조건은 둘이다. 모두 만족해야 한다.
+ * 적용 조건은 하나다.
  * - 인접 형제가 emphasis, strong(자식이 emphasis 하나), emphasis다. 앞 형제의 종류와 경계 글자는 보지 않는다.
  *   - 앞 형제가 없거나 strong이 아니거나 영숫자로 끝나도 끌어올린다.
  *   - 영숫자 경계 입력(`**a***a*__*a*__*1*`)도 끌어올린 출력으로 나간다. 왕복은 같다.
- * - 샌드위치와 그 이웃 노드에 astral 글자(U+10000 이상)가 없다. 있으면 끌어올리지 않는다.
- *   - 끌어올리면 astral 글자가 문자 참조(`&#x1F600;`)로 바뀌며 앞 `_`가 이스케이프되지 않는다(#414).
- *   - 수정 전에는 `_`로 닫는 emphasis가 astral 글자 뒤에 있어 왕복이 맞았다. 그 출력을 그대로 둔다.
+ * astral 글자(U+10000 이상)가 든 샌드위치도 끌어올린다(#414).
+ * - 끌어올리면 astral 글자가 문자 참조(`&#x1F600;`)로 바뀐다. 그 옆 `_`가 이스케이프되지 않아 왕복이 깨지던 결함이었다.
+ * - `handleText`가 astral 글자를 U+E000으로 바꿔 `state.safe`에 넘겨 해소했다. 그래서 astral 가드를 뺐다.
  * 끌어올린 emphasis 뒤에 `strong[emphasis] · emphasis`가 이어지면 새 샌드위치가 생긴다.
  * 그래서 변화가 없을 때까지 끌어올림을 반복한다(고정점).
  * 단언은 다섯 가지다.
  * - strict 내보내기가 성공하고 재가져온 글자 런이 원본과 글자·mark 모두 같다.
  * - 정확한 출력 문자열을 몇 건 고정한다.
  * - 표 셀 안에서도 왕복이 같다.
- * - 불변 입력은 출력 문자열이 같다. 모양 밖 입력과 가드 창 안에 astral 글자가 든 샌드위치다.
- * - 가드 창 밖 astral 때문에 깨지는 알려진 입력은 `it.fails`로 둔다(#414). #414를 고치면 이 케이스가 실패해 제거 시점을 알린다.
+ * - 불변 입력은 출력 문자열이 같다. 모양 밖 입력이다.
+ * - astral 글자가 든 샌드위치는 끌어올리고 왕복이 같다(#414). #415·#416 댓글의 입력 둘을 포함한다.
  * 끌어올림 함수(`liftEmphasisSandwich`)는 노드 수준에서도 검증한다.
  * - 앞 형제가 없거나 strong이 아니거나 어떤 잎으로 끝나도 끌어올린다. 빈 children에서도 던지지 않는다.
  * - 겹친 샌드위치는 한 번에 모두 끌어올린다.
@@ -183,12 +183,29 @@ const CHAIN_CASES: readonly Case[] = [
   ],
 ];
 
-// 샌드위치 text에 astral 글자가 있다. 끌어올리면 `_`가 이스케이프되지 않아(#414) 왕복이 깨진다.
+// 샌드위치 text에 astral 글자가 있다. 끌어올려도 `_`가 `\_`로 이스케이프돼(#414) 왕복이 같다.
+// #415 댓글 입력이다. 수정 전에는 끌어올리지 않아 `**.**_ab_😀_**_!_***!*`로 나갔다.
 const ASTRAL_CASES: readonly OutputCase[] = [
   [
     "B(`.`) I(`ab_😀`) X(`!`) I(`!`)",
     [bold("."), italic("ab_😀"), boldItalic("!"), italic("!")],
-    "**.**_ab_😀_**_!_***!*\n",
+    "**.**_ab\\_&#x1F600;**!**!_\n",
+  ],
+];
+
+// #416 정정 댓글의 7런 `I X I X I X I` 입력이다. 앞쪽 샌드위치를 끌어올려도 astral이 든 뒤쪽 샌드위치가 깨지지 않는다.
+const SEVEN_RUN_ASTRAL_CASES: readonly Case[] = [
+  [
+    "I(`!`) X(`a`) I(`한.`) X(`a`) I(`😀`) X(`😀`) I(`𝐚`)",
+    [
+      italic("!"),
+      boldItalic("a"),
+      italic("한."),
+      boldItalic("a"),
+      italic("😀"),
+      boldItalic("😀"),
+      italic("𝐚"),
+    ],
   ],
 ];
 
@@ -387,9 +404,9 @@ describe("bold·italic 연쇄 샌드위치의 직렬화", () => {
     },
   );
 
-  describe("불변 입력: 샌드위치에 astral 글자가 있으면 출력이 바뀌지 않는다", () => {
+  describe("astral 글자가 든 샌드위치도 끌어올리고 왕복이 같다", () => {
     it.each(ASTRAL_CASES)(
-      "%s의 출력은 수정 전과 같고 재가져오기가 글자와 mark를 보존한다",
+      "%s의 출력을 고정하고 재가져오기가 글자와 mark를 보존한다",
       (_label, content, expected) => {
         const markdown = strictMarkdown(paragraphDocument(content));
 
@@ -399,27 +416,32 @@ describe("bold·italic 연쇄 샌드위치의 직렬화", () => {
     );
   });
 
-  // 앞쪽 샌드위치(런 0–2)는 가드 창에 astral이 없어 끌어올려진다. 그 뒤 후보 `[끌어올린 노드, X(3), I(4: 𝐚)]`와
-  // `[I(4), X(5), I(6: 😀)]`는 astral 때문에 막힌다. 앞쪽을 끌어올린 탓에 구분자 배치가 바뀌어
-  // `_`가 이스케이프되지 않는다(#414). 수정 전에는 왕복이 맞았다.
-  // #414를 고치면 이 케이스가 실패해 `it.fails`를 `it`으로 바꿀 시점을 알린다.
-  it.fails(
-    "가드 창 밖 astral이 든 뒤쪽 샌드위치가 있으면 왕복이 깨진다(#414)",
-    () => {
-      const content: InlineContent = [
-        italic("_"),
-        boldItalic("."),
-        italic("a"),
-        boldItalic("a_"),
-        italic("𝐚"),
-        boldItalic("a_"),
-        italic("😀"),
-      ];
+  it.each(SEVEN_RUN_ASTRAL_CASES)(
+    "문단의 7런 %s는 재가져오기가 글자와 mark를 보존한다",
+    (_label, content) => {
       const markdown = strictMarkdown(paragraphDocument(content));
 
       expect(importedRuns(markdown)).toEqual(content);
     },
   );
+
+  // 앞쪽 샌드위치(런 0–2)를 끌어올린 뒤 astral이 든 뒤쪽 샌드위치 `[끌어올린 노드, X(3), I(4: 𝐚)]`와
+  // `[I(4), X(5), I(6: 😀)]`가 이어진다. 수정 전에는 가드 창 밖 astral 때문에 구분자 배치가 바뀌어
+  // `_`가 이스케이프되지 않아 왕복이 깨졌다(#414). 이제 왕복이 같다.
+  it("가드 창 밖 astral이 든 뒤쪽 샌드위치가 있어도 왕복이 같다(#414)", () => {
+    const content: InlineContent = [
+      italic("_"),
+      boldItalic("."),
+      italic("a"),
+      boldItalic("a_"),
+      italic("𝐚"),
+      boldItalic("a_"),
+      italic("😀"),
+    ];
+    const markdown = strictMarkdown(paragraphDocument(content));
+
+    expect(importedRuns(markdown)).toEqual(content);
+  });
 
   it.each(CODE_CASES)(
     "문단의 앞 strong이 inlineCode로 끝나는 %s는 재가져오기가 글자와 mark를 보존한다",
@@ -596,43 +618,69 @@ describe("bold·italic 연쇄 샌드위치의 직렬화", () => {
       }
     });
 
-    it("샌드위치나 앞 strong, 뒤 형제에 astral 글자가 있으면 적용하지 않는다", () => {
+    it("샌드위치나 앞 strong, 뒤 형제에 astral 글자가 있어도 적용한다", () => {
       const astral = text("😀");
-      const cases = [
-        [node("strong", text(".")), node("emphasis", astral)],
-        [node("strong", text(".")), node("emphasis", text("a"))],
-      ];
-      const [headCase, bodyCase] = cases as [Node[], Node[]];
-      const withHead = [
-        ...headCase,
-        node("strong", node("emphasis", text("b"))),
-        node("emphasis", text("c")),
-      ];
-      const withStrong = [
-        ...bodyCase,
-        node("strong", node("emphasis", astral)),
-        node("emphasis", text("c")),
-      ];
-      const withTail = [
-        ...bodyCase,
-        node("strong", node("emphasis", text("b"))),
-        node("emphasis", astral),
-      ];
-      const withPrevious = [
-        node("strong", astral, text(".")),
-        ...sandwichNodes(),
-      ];
-      const withNext = [node("strong", text(".")), ...sandwichNodes(), astral];
+      const strongDot = node("strong", text("."));
+      const plain = (value: string): Node => node("emphasis", text(value));
+      const middle = node("strong", node("emphasis", text("b")));
+      const liftedAround = (head: Node, strong: Node, tail: Node): Node =>
+        node(
+          "emphasis",
+          ...(head.children ?? []),
+          strong,
+          ...(tail.children ?? []),
+        );
 
-      for (const nodes of [
-        withHead,
-        withStrong,
-        withTail,
-        withPrevious,
-        withNext,
-      ]) {
-        expect(liftEmphasisSandwich(nodes)).toEqual(nodes);
-      }
+      expect(
+        liftEmphasisSandwich([
+          strongDot,
+          node("emphasis", astral),
+          middle,
+          plain("c"),
+        ]),
+      ).toEqual([
+        strongDot,
+        liftedAround(
+          node("emphasis", astral),
+          node("strong", text("b")),
+          plain("c"),
+        ),
+      ]);
+      expect(
+        liftEmphasisSandwich([
+          strongDot,
+          plain("a"),
+          node("strong", node("emphasis", astral)),
+          plain("c"),
+        ]),
+      ).toEqual([
+        strongDot,
+        liftedAround(plain("a"), node("strong", astral), plain("c")),
+      ]);
+      expect(
+        liftEmphasisSandwich([
+          strongDot,
+          plain("a"),
+          middle,
+          node("emphasis", astral),
+        ]),
+      ).toEqual([
+        strongDot,
+        liftedAround(
+          plain("a"),
+          node("strong", text("b")),
+          node("emphasis", astral),
+        ),
+      ]);
+      expect(
+        liftEmphasisSandwich([
+          node("strong", astral, text(".")),
+          ...sandwichNodes(),
+        ]),
+      ).toEqual([node("strong", astral, text(".")), liftedNode()]);
+      expect(
+        liftEmphasisSandwich([strongDot, ...sandwichNodes(), astral]),
+      ).toEqual([strongDot, liftedNode(), astral]);
     });
 
     it("끌어올린 emphasis 뒤에 샌드위치가 또 생기면 고정점까지 끌어올린다", () => {

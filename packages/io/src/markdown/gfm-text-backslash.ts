@@ -44,13 +44,45 @@ import type { Options } from "remark-stringify";
 //   - 라이브러리 기본 패턴은 `[\r\n]`·`\]`·`\d+`를 본다.
 //   - remark-gfm autolink literal 패턴은 `[+\-.\w]`·`[Ww]`·`[ps]`를 본다.
 // - 첫·끝 글자가 문자 참조로 안 바뀌는 `~~a~~b_c`도 `b\_c`로 나간다. 재가져오기는 같다.
-// - 알려진 한계(가설: 라이브러리의 UTF-16 가정):
-//   - 첫 글자가 astral(`𝐚_b`, `😀_b`)이면 `_`가 이스케이프되지 않는다.
-//   - 라이브러리 `position - 1 === offset`이 UTF-16 한 단위를 가정한다.
-//   - strike 고유 문제가 아니다. bold·italic 앞에서도 같다. 이 파일은 고치지 않는다.
+//
+// astral 글자 옆 `_` 이스케이프(Issue #414):
+// - 위 intraword `_` 예외는 `position - 1 === offset`(앞쪽)과 `sequenceEnd === end - 1`(뒤쪽)로 판정한다.
+// - 두 인덱스가 UTF-16 코드 유닛이다. astral 글자(U+10000 이상)는 2유닛이다.
+// - astral 글자가 text의 첫·끝에 오면 예외 판정을 비껴가 `_`가 이스케이프되지 않는다.
+//   - `~~)~~&#x1D41A;_b.**_(_**`에서 `;_b`의 `_`가 여는 구분자로 읽힌다. 재가져오기에서 글자와 mark가 달라진다.
+//   - 거울 방향도 같다. `**_xa_&#x1D41B;~~\~~~_**`에서 `a_&`의 `_`가 닫는 구분자로 읽힌다.
+// - `state.safe`에 넘기는 값의 astral 글자를 BMP 사설 영역 글자 U+E000으로 바꾼다.
+//   - 결과에서 U+E000을 원래 astral 글자로 순서대로 되돌린다. 글자는 바뀌지 않는다.
+//   - U+E000은 micromark `classifyCharacter`에서 서로게이트 코드 유닛과 같다. 구두점도 공백도 아니다.
+//   - `safe`의 판정이 BMP 글자와 같아진다. 예외가 맞게 적용돼 `_`가 `\_`로 나간다.
+//   - 치환은 `state.safe` 호출 안에서만 한다. 되돌린 뒤에 위 `\` 보정을 적용한다.
+// - 한계: 입력에 U+E000이 있으면 치환을 건너뛴다.
+//   - 되돌릴 때 원래 U+E000과 치환한 글자를 구분하지 못하기 때문이다.
+//   - 이 text는 #414가 남는다. U+E000과 구분자 옆 astral 뒤 `_`가 겹치는 글은 드물어 받아들였다.
+//
+// #414 조사 입력 공간(G-PRC-002):
+// - 공통: 수정 전(9944688e)과 수정 후를 비교했다. 판정은 strict 내보내기 뒤 재가져온 글자·mark가 원본과 같은지다.
+//   인접 같은 종류는 제외한다. 호스트 p는 문단이다. 수정 전에 맞던 입력이 수정 후 깨지는 경우는 아래 모든 공간에서 0건이다.
+//   mark 약어는 N(mark 없음), B(bold), I(italic), X(bold·italic), S(strike), C(code)다. 4개를 병렬로 돌려 약 370초 걸렸다.
+// - 전수: 런 수 1~4개다. 런마다 아래 글자 집합의 원소 정확히 하나와 mark 종류 하나를 고른다. 모든 조합을 센다.
+//   | 호스트 | 최대 런 수 | 글자 | mark 종류 | 건수 | 실패 전→후 | 출력 변경 |
+//   | p | 4 | `ab` `.a` `a.` `a_` `한` `😀` | N B I X | 148,200 | 160→0 | 4,117 |
+//   | p | 4 | `a` `.` `_` `😀` `!` | N B I X | 72,320 | 48→0 | 2,275 |
+//   | p | 4 | `.` `a` `😀` | N B I X S계 4종 C계 4종 | 1,334,160 | 222→0 | 42,633 |
+//   | p | 4 | `𝐚` `😀` `a` `_` `.` | N B I X | 72,320 | 84→0 | 3,362 |
+//   S계는 B·I·X에 strike를 더한 4종, C계는 code를 더한 4종이다. 마지막 공간이 구분자 옆 astral의 앞쪽·뒤쪽을 모두 덮는다.
+// - 무작위: 수정 전후 각 20만 건 × 시드 2개(1, 2)다. 약 100초 걸렸다. 호스트는 문단 75%, 표 셀 25%다.
+//   런 글자는 집합에서 1~2개를 이은 것이다. 글자는 `a` `.` `_` `!` `😀` `한` `ab_😀` `a.` `𝐚`다.
+//   mark 종류는 N B I X S BS IS XS C BC IC XC L BL IL XL(L은 link) 16종이다.
+//   - 샌드위치 편향 75%: 60% 확률로 mark 종류 하나를 앞에 두고(런 0–1개), `I X I`를 1~3번 반복한다. 반복 안 각 자리는 15% 확률로 16종 중 아무 종류가 된다. 런은 3~10개다.
+//   - 균등 25%: 런 2~10개이고 종류는 16종에서 고른다.
+//   - 인접 같은 종류는 건너뛴다. 시드는 선형 합동 생성기(곱 1664525, 더 1013904223)에 1, 2를 넣었다.
+//   - 실패: 수정 전 10,229건·10,243건이 수정 후 0건·0건이다. 퇴행 0건이다.
+//   - #416이 남긴 가드 창 밖 astral 퇴행(27·28건)과 7런 `I X I` 연쇄도 같이 해소됐다.
+// - 출력이 바뀌는 입력은 구분자 옆 astral 글자 뒤·앞 `_`가 이스케이프되는 입력이다. 샌드위치 가드 제거로 끌어올림이 늘어난 입력도 있다.
 //
 // 본문 출처: mdast-util-to-markdown@2.2.0 `handle/text.js`. `state.safe` 호출을 옮겼다.
-// 달라진 점은 `before`·`after` 치환(#403) 둘이다.
+// 달라진 점은 `before`·`after` 치환(#403)과 astral 글자 치환(#414) 둘이다.
 // io의 직접 의존이 아니라 import하지 않았다.
 //
 // 라이브러리 업그레이드 시 확인할 것:
@@ -59,6 +91,8 @@ import type { Options } from "remark-stringify";
 // - 라이브러리 `text` 핸들러 본문이 바뀌었으면 이 복사본을 맞춘다.
 // - 새 버전의 intraword `_` 예외가 `~`를 포함하면 `~`->`*` 치환(before·after 둘 다)을 지운다.
 // - `markdown-strike-char-reference-underscore.test.ts`가 치환 없이 통과하는지 본다.
+// - 새 버전의 `safe`가 코드 포인트 단위로 판정하면 astral 치환을 지운다.
+// - `markdown-astral-underscore.test.ts`가 치환 없이 통과하는지 본다.
 //
 // 연결: remark-stringify의 `handlers`는 확장 핸들러보다 뒤에 적용된다.
 // `use` 순서와 무관하게 이 핸들러가 라이브러리 것을 덮어쓴다.
@@ -74,9 +108,36 @@ const TRAILING_BACKSLASH_CHAR = /(\\+)([^\\])$/u;
 // ASCII 구두점이다. `\`+구두점은 이미 이스케이프라 보정하지 않는다.
 const ASCII_PUNCTUATION = /^[!-/:-@[-`{-~]$/u;
 
+// astral 글자(U+10000 이상) 하나다. 전역 플래그라 `match`·`replace`에만 쓴다.
+const ASTRAL = /[\u{10000}-\u{10FFFF}]/gu;
+
+// astral 글자를 대신하는 BMP 사설 영역 글자다(#414).
+const PLACEHOLDER = "\uE000";
+const PLACEHOLDER_PATTERN = /\uE000/gu;
+
+type State = Parameters<Handle>[2];
+
+/**
+ * `state.safe`를 부른다. astral 글자는 U+E000으로 바꿔 넘기고 결과에서 원래 글자로 되돌린다(#414).
+ * astral 글자가 없거나 입력에 U+E000이 이미 있으면 바꾸지 않는다.
+ */
+const safeKeepingAstral = (
+  state: State,
+  value: string,
+  config: Parameters<State["safe"]>[1],
+): string => {
+  const astrals = value.match(ASTRAL) ?? [];
+  if (astrals.length === 0 || value.includes(PLACEHOLDER)) {
+    return state.safe(value, config);
+  }
+  const result = state.safe(value.replace(ASTRAL, PLACEHOLDER), config);
+  return result.replace(PLACEHOLDER_PATTERN, () => astrals.shift() ?? "");
+};
+
 /**
  * text를 직렬화한다. 구분자 앞에서 `\`+글자로 끝나면 `\`를 하나 더한다.
  * strike 옆 text는 `_` 이스케이프 판정에서 `~`를 `*`로 취급한다.
+ * astral 글자는 `state.safe` 안에서만 U+E000으로 바꿔 구분자 옆 `_`를 이스케이프하게 한다.
  */
 export const handleText = (
   node: Parameters<Handle>[0],
@@ -86,7 +147,7 @@ export const handleText = (
 ): string => {
   const siblings = parent ? parent.children : [];
   const index = siblings.indexOf(node);
-  const safe = state.safe(node.value, {
+  const safe = safeKeepingAstral(state, node.value, {
     ...info,
     before: info.before === "~" ? "*" : info.before,
     after: info.after === "~" ? "*" : info.after,
