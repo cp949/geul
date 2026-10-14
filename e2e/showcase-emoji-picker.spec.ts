@@ -273,3 +273,32 @@ test(":sm에서 Enter는 강조된 이모지로 블록을 바꾼다 (Issue #258)
   await expect(editable.locator("p")).toHaveText(char ?? "");
   await expect(editable).toBeFocused();
 });
+
+// Issue #409: 강조 옵션을 보조 기술에 알린다. 속성은 wrapper가 아니라 실제
+// contenteditable(`editable`)에 있어야 하며, jsdom이 아니라 실제 브라우저에서
+// 옵션 id와 일치하는지 확인한다(slash-menu.spec.ts의 같은 단언과 짝).
+test("aria-activedescendant가 강조된 이모지를 가리키고 방향키로 갱신되며 닫히면 지워진다 (Issue #409)", async ({
+  page,
+}) => {
+  const { editable, menu } = await openEmojiPickerExample(page);
+  await editable.click();
+  await yieldFrame(page);
+  await page.keyboard.type(":smi");
+  await expect(menu).toBeVisible();
+
+  const options = menu.getByRole("option");
+  await expect(editable).toHaveAttribute(
+    "aria-activedescendant",
+    await options.nth(0).evaluate((element) => element.id),
+  );
+
+  await page.keyboard.press("ArrowRight");
+  await expect(editable).toHaveAttribute(
+    "aria-activedescendant",
+    await options.nth(1).evaluate((element) => element.id),
+  );
+
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(editable).not.toHaveAttribute("aria-activedescendant", /.+/);
+});
