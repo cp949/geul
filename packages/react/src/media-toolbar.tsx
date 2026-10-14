@@ -508,30 +508,72 @@ export const MediaToolbar = ({
       ? canUploadMedia(editor, toolbarState.kind)
       : false;
 
+  // outer 컨테이너(rename/caption/replacing이 view와 같은 코너에서 그대로
+  // 펼치는 shell)를 블록 우상단에 앵커링한다(Issue #203 RD-004 DELTA-02,
+  // 01-계획.md 6절 "선례 패턴" — code-block-language-combobox.tsx outer
+  // toolbar의 topRight variant). `_media-toolbar.scss`의
+  // `transform: translateX(-100%)`가 렌더된 박스를 왼쪽으로 밀어 우상단이
+  // 이 좌표와 일치하게 만든다.
+  //
+  // 앵커는 `blockId`로 찾은 블록 DOM의 우상단이다. 열린 동안 렌더마다 다시 읽는다.
+  // 어느 mode에서도 스크롤·resize를 따라간다. 편집 중에는 `updateFromSelection`이
+  // `editingRef`로 막히지만 위치는 그 경로에 의존하지 않는다. 리사이즈가 끝나
+  // 툴바가 다시 렌더되는 커밋도 같은 훅이 새 블록 rect로 수렴시킨다.
+  const blockId = toolbarState.mode === "closed" ? null : toolbarState.blockId;
+  // 툴바는 position: fixed로 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가
+  // 잘라내지 못한다. 블록 우상단 앵커와 툴바 박스가 모두 컨테이너의 보이는
+  // 영역 안일 때만 보인다(`clipBox`, Issue #267). 박스만 보면 viewport clamp가
+  // 박스를 영역 안으로 끌어와 영역 밖 블록의 툴바가 남는다.
+  // - 면제: 열린 more 메뉴(`clipExempt`), 툴바 안 요소의 포커스. 숨기면 편집 중
+  //   입력이 포커스를 잃는다. 포커스는 mode와 무관하게 본다(rename·caption·replace
+  //   입력, more 버튼).
+  // - 판정과 면제, 포커스 이탈 시 재판정은 `useClipVisibility`가 소유한다.
+  //   `useFixedPlacement`가 그 훅을 부른다.
+  // - mode·입력 상태는 건드리지 않고 `visibility`만 갱신한다. draft가 남는다.
+  const { menuRef, style } = useFixedPlacement({
+    open: blockId !== null,
+    element,
+    readAnchor: () =>
+      element === null || blockId === null
+        ? null
+        : (readBlockTopRightBounds(element, blockId) ??
+          FALLBACK_BLOCK_POSITION),
+    clampAnchor: "topRight",
+    clip: true,
+    clipBox: true,
+    clipExempt: moreMenuOpen,
+  });
+  const focusEditor = useFocusEditor(element);
+  // finishReplacing·startReplaceUpload가 menuRef·focusEditor를 deps로 읽는다.
+  // 그 두 콜백보다 앞에서 선언해야 deps 배열이 TDZ 오류를 내지 않는다(Issue #408).
+
   // Upload 성공(pending null)·Embed URL 적용 성공 공용 — url/name이 실제로
   // 바뀌었으므로 finishEditing처럼 로컬 캐시 값을 재사용하지 않고 core를
   // 다시 조회해 "view"로 돌아간다(RD-003-DELTA-03.md "결정"). 대기 중 이미
   // 다른 상태로 나갔으면(Cancel 등) 손대지 않는다 — updateFromSelection과
   // 같은 판정을 여기 인라인한다(updateFromSelection을 setState 콜백 안에서
   // 부르면 안 돼 직접 푼다).
+  // 다음 상태는 업데이터 밖에서 계산한다(Issue #408). 호출부가 반환값(view로
+  // 돌아갔는가)으로 초점 이동을 정한다. 업데이터는 core를 읽지 않고 미리 계산한
+  // 값을 고를 뿐이다(editingRef 해제만 예외다). 미디어 블록이 사라져 closed가
+  // 되면 false다. 돌아갈 편집 위치가 없어 초점을 옮기지 않는다.
+  // 호출부는 mode가 replacing이고 blockId가 같을 때만 부른다. 업데이터의 같은
+  // 판정은 렌더 사이 경합을 막는 이중 안전장치다.
   const finishReplacing = useCallback(
-    (blockId: string) => {
+    (blockId: string): boolean => {
+      const media = element === null ? null : editor.getSelectionMediaBlock();
+      // updateFromSelection과 같은 이유로 단순 spread(+url 재대입) — media는
+      // 잉여 필드가 없는 fresh MediaInfo다.
+      const next: ToolbarState =
+        media === null || media.url === null || media.blockId !== blockId
+          ? { mode: "closed" }
+          : { mode: "view", ...media, url: media.url };
       setToolbarState((prev) => {
         if (prev.mode !== "replacing" || prev.blockId !== blockId) return prev;
         editingRef.current = false;
-        if (element === null) return { mode: "closed" };
-        const media = editor.getSelectionMediaBlock();
-        if (media === null || media.url === null || media.blockId !== blockId) {
-          return { mode: "closed" };
-        }
-        // updateFromSelection과 같은 이유로 단순 spread(+url 재대입) — media는
-        // 잉여 필드가 없는 fresh MediaInfo다.
-        return {
-          mode: "view",
-          ...media,
-          url: media.url,
-        };
+        return next;
       });
+      return next.mode === "view";
     },
     [editor, element],
   );
@@ -581,9 +623,31 @@ export const MediaToolbar = ({
         );
         return;
       }
-      finishReplacing(blockId);
+      // 대기 중 바깥 클릭·selection 이동으로 교체 모드를 벗어났으면 상태도 초점도
+      // 건드리지 않는다(Issue #408). 업로드 성공 때만 초점 가드를 건다. 사용자가
+      // 기다리는 동안 다른 입력으로 옮겨 갔으면 그 초점을 빼앗지 않는다.
+      if (
+        toolbarModeRef.current !== "replacing" ||
+        viewBlockIdRef.current !== blockId
+      ) {
+        return;
+      }
+      const ownerDocument = element?.ownerDocument;
+      const active = ownerDocument?.activeElement ?? null;
+      const focusIdle =
+        active === null ||
+        active === ownerDocument?.body ||
+        (menuRef.current?.contains(active) ?? false);
+      if (finishReplacing(blockId) && focusIdle) focusEditor();
     },
-    [editor, dictionary.status.uploadCouldNotStart, finishReplacing],
+    [
+      editor,
+      element,
+      dictionary.status.uploadCouldNotStart,
+      finishReplacing,
+      menuRef,
+      focusEditor,
+    ],
   );
 
   const startReplacing = () => {
@@ -653,7 +717,9 @@ export const MediaToolbar = ({
       );
       return;
     }
-    finishReplacing(blockId);
+    // 저장 성공은 사용자가 툴바에서 직접 낸 결정이라 초점 가드 없이 편집기로
+    // 돌려보낸다(Issue #408). 미디어가 사라져 closed가 되면 옮기지 않는다.
+    if (finishReplacing(blockId)) focusEditor();
   };
 
   // uploading 중이면 먼저 abort하고, 상태와 무관하게 교체 전 값(로컬에
@@ -665,6 +731,9 @@ export const MediaToolbar = ({
       editor.commands.cancelMediaUpload(toolbarState.blockId);
     }
     editingRef.current = true;
+    // finishEditing과 같은 순서다. 초점 이동이 만드는 selectionchange가 재조회와
+    // 경합하지 않게 editingRef를 세운 뒤 옮긴다(Issue #408).
+    focusEditor();
     // moreMenu는 "replacing" 진입 시점에 이미 위 감시 useEffect로 닫혀
     // 있었고(더보기 트리거가 view 모드에서만 렌더돼 그 사이 다시 열릴 수
     // 없다) view로 돌아오는 지금 다시 부를 필요가 없다(01-계획.md).
@@ -673,43 +742,6 @@ export const MediaToolbar = ({
       editingRef.current = false;
     });
   };
-
-  // outer 컨테이너(rename/caption/replacing이 view와 같은 코너에서 그대로
-  // 펼치는 shell)를 블록 우상단에 앵커링한다(Issue #203 RD-004 DELTA-02,
-  // 01-계획.md 6절 "선례 패턴" — code-block-language-combobox.tsx outer
-  // toolbar의 topRight variant). `_media-toolbar.scss`의
-  // `transform: translateX(-100%)`가 렌더된 박스를 왼쪽으로 밀어 우상단이
-  // 이 좌표와 일치하게 만든다.
-  //
-  // 앵커는 `blockId`로 찾은 블록 DOM의 우상단이다. 열린 동안 렌더마다 다시 읽는다.
-  // 어느 mode에서도 스크롤·resize를 따라간다. 편집 중에는 `updateFromSelection`이
-  // `editingRef`로 막히지만 위치는 그 경로에 의존하지 않는다. 리사이즈가 끝나
-  // 툴바가 다시 렌더되는 커밋도 같은 훅이 새 블록 rect로 수렴시킨다.
-  const blockId = toolbarState.mode === "closed" ? null : toolbarState.blockId;
-  // 툴바는 position: fixed로 에디터 바깥에 그려져 안쪽 스크롤 컨테이너가
-  // 잘라내지 못한다. 블록 우상단 앵커와 툴바 박스가 모두 컨테이너의 보이는
-  // 영역 안일 때만 보인다(`clipBox`, Issue #267). 박스만 보면 viewport clamp가
-  // 박스를 영역 안으로 끌어와 영역 밖 블록의 툴바가 남는다.
-  // - 면제: 열린 more 메뉴(`clipExempt`), 툴바 안 요소의 포커스. 숨기면 편집 중
-  //   입력이 포커스를 잃는다. 포커스는 mode와 무관하게 본다(rename·caption·replace
-  //   입력, more 버튼).
-  // - 판정과 면제, 포커스 이탈 시 재판정은 `useClipVisibility`가 소유한다.
-  //   `useFixedPlacement`가 그 훅을 부른다.
-  // - mode·입력 상태는 건드리지 않고 `visibility`만 갱신한다. draft가 남는다.
-  const { menuRef, style } = useFixedPlacement({
-    open: blockId !== null,
-    element,
-    readAnchor: () =>
-      element === null || blockId === null
-        ? null
-        : (readBlockTopRightBounds(element, blockId) ??
-          FALLBACK_BLOCK_POSITION),
-    clampAnchor: "topRight",
-    clip: true,
-    clipBox: true,
-    clipExempt: moreMenuOpen,
-  });
-  const focusEditor = useFocusEditor(element);
 
   // more-menu는 outer 컨테이너와 독립된 앵커를 쓴다 — view 모드에서 outer
   // 컨테이너 자체가 `⋯` 트리거 하나뿐이라 그 트리거의 렌더된 rect가 곧

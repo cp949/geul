@@ -13,6 +13,10 @@
  *   같은 블록이면 교체 모드가 유지된다.
  * - 닫은 블록 B의 재오픈 억제는 다른 블록 A의 교체 모드를 남기지 않는다(Issue
  *   #259). A의 교체 모드에서 B로 selection을 옮기면 B의 view가 열린다.
+ * - 교체 모드를 저장·취소·업로드 성공으로 빠져나오면 초점이 편집기로 돌아온다
+ *   (Issue #408). 업로드 성공은 초점이 툴바 안이거나 body일 때만 옮기고, 툴바·편집기
+ *   밖 입력에 있으면 그대로 둔다. 바깥 클릭으로 닫힌 뒤 끝난 업로드와 미디어 블록이
+ *   사라진 닫힘은 초점을 옮기지 않는다.
  * - 편집 모드(rename·caption)의 닫힘은 media-toolbar-dismiss.test.tsx가 소유한다.
  * 기존 media-toolbar.test.tsx 단언은 이전 후에도 수정 없이 통과한다.
  */
@@ -73,6 +77,13 @@ const fakeController = (
   destroy: vi.fn(),
   getDocument: vi.fn(),
   getSelectionMediaBlock: vi.fn(() => filledImageBlock),
+  // applyMediaUrl이 현재 블록 url을 읽는다. 같은 URL 재저장 판정에 쓴다.
+  getBlock: vi.fn(() => ({
+    id: "media-1",
+    type: "image",
+    url: filledImageBlock.url,
+    name: filledImageBlock.name,
+  })),
   isUploadEnabled: vi.fn(() => true),
   getMediaUploadState: vi.fn(() => null),
   getDictionary: vi.fn(() => DEFAULT_DICTIONARY),
@@ -394,5 +405,203 @@ describe("닫은 블록의 재오픈 억제가 다른 블록의 교체 모드를
     expect(toolbarVisible()).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "More media options" }));
     expect(moreMenuBlockId()).toBe("media-1");
+  });
+});
+
+/** 업로드 Promise를 직접 끝낼 수 있는 fake controller와 끝내는 함수를 만든다. */
+const deferredUploadController = () => {
+  let finishUpload: () => void = () => {};
+  const controller = fakeController(
+    () =>
+      new Promise((resolve) => {
+        finishUpload = () => resolve({ ok: true, value: undefined });
+      }),
+  );
+  return {
+    controller,
+    finishUpload: () =>
+      act(async () => {
+        finishUpload();
+      }),
+  };
+};
+
+/**
+ * 초점을 body로 되돌린다. jsdom은 disabled 입력의 `blur()`를 무시한다(업로드 중
+ * 파일 입력이 disabled다). 임시 입력에 초점을 줬다 놓아 `activeElement`를 비운다.
+ */
+const focusBody = () => {
+  const probe = createOutsideInput();
+  probe.focus();
+  probe.blur();
+  probe.remove();
+  expect(document.activeElement).toBe(document.body);
+};
+
+/** 교체 모드 Embed 탭의 URL 입력에 값을 넣고 입력을 돌려준다. 입력에 초점이 있다. */
+const typeEmbedUrl = (value: string) => {
+  fireEvent.click(screen.getByRole("tab", { name: "Embed" }));
+  const input = screen.getByRole<HTMLInputElement>("textbox", { name: /URL/ });
+  fireEvent.change(input, { target: { value } });
+  expect(document.activeElement).toBe(input);
+  return input;
+};
+
+describe("교체 모드를 빠져나오면 초점이 편집기로 돌아온다(Issue #408)", () => {
+  it("Embed 탭 URL 입력에서 Enter로 저장하면 초점이 편집기로 돌아온다", () => {
+    const { editable } = enterReplacing();
+    const input = typeEmbedUrl("https://example.com/new.png");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(replacingVisible()).toBe(false);
+    expect(toolbarVisible()).toBe(true);
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("Embed 탭 저장 버튼을 누르면 초점이 편집기로 돌아온다", () => {
+    const { editable } = enterReplacing();
+    typeEmbedUrl("https://example.com/new.png");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(replacingVisible()).toBe(false);
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("현재 URL과 같은 URL을 재저장해도 초점이 편집기로 돌아온다 (#384·#388)", () => {
+    const controller = fakeController(() => new Promise<never>(() => {}));
+    controller.commands.setMediaBlockUrl.mockReturnValue({
+      ok: false,
+      error: { code: "COMMAND_NOT_APPLICABLE", message: "same value" },
+    } as never);
+    const { editable } = enterReplacing(controller);
+    typeEmbedUrl(filledImageBlock.url ?? "");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save URL" }));
+
+    expect(controller.commands.setMediaBlockUrl).toHaveBeenCalled();
+    expect(replacingVisible()).toBe(false);
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("거절된 URL은 교체 모드를 유지하고 초점을 옮기지 않는다", () => {
+    const controller = fakeController(() => new Promise<never>(() => {}));
+    controller.commands.setMediaBlockUrl.mockReturnValue({
+      ok: false,
+      error: { code: "INVALID_ARGUMENT", message: "bad url" },
+    } as never);
+    const { editable } = enterReplacing(controller);
+    const input = typeEmbedUrl("not a url");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(replacingVisible()).toBe(true);
+    expect(document.activeElement).toBe(input);
+    expect(document.activeElement).not.toBe(editable);
+  });
+
+  it("Cancel 버튼을 누르면 초점이 편집기로 돌아온다", () => {
+    const { editable } = enterReplacing();
+    screen.getByRole("tab", { name: "Embed" }).focus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(replacingVisible()).toBe(false);
+    expect(toolbarVisible()).toBe(true);
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("업로드가 성공할 때 초점이 툴바 안이면 편집기로 돌아온다", async () => {
+    const { controller, finishUpload } = deferredUploadController();
+    const { editable } = enterReplacing(controller);
+    startUpload();
+    const tab = screen.getByRole("tab", { name: "Embed" });
+    tab.focus();
+    expect(document.activeElement).toBe(tab);
+
+    await finishUpload();
+
+    expect(replacingVisible()).toBe(false);
+    expect(toolbarVisible()).toBe(true);
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("업로드가 성공할 때 초점이 body에 있으면 편집기로 돌아온다", async () => {
+    const { controller, finishUpload } = deferredUploadController();
+    const { editable } = enterReplacing(controller);
+    startUpload();
+    focusBody();
+
+    await finishUpload();
+
+    expect(replacingVisible()).toBe(false);
+    expect(document.activeElement).toBe(editable);
+  });
+
+  it("업로드가 성공할 때 초점이 툴바·편집기 밖 입력에 있으면 그대로 둔다", async () => {
+    const { controller, finishUpload } = deferredUploadController();
+    enterReplacing(controller);
+    startUpload();
+    const outside = createOutsideInput();
+    try {
+      outside.focus();
+      expect(document.activeElement).toBe(outside);
+
+      await finishUpload();
+
+      expect(replacingVisible()).toBe(false);
+      expect(toolbarVisible()).toBe(true);
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("바깥 클릭으로 닫힌 뒤 업로드가 끝나도 초점을 옮기지 않고 toolbar를 다시 열지 않는다", async () => {
+    const { controller, finishUpload } = deferredUploadController();
+    const { editable } = enterReplacing(controller);
+    startUpload();
+    const outside = createOutsideInput();
+    try {
+      // 실제 클릭처럼 초점이 바깥 요소로 간 뒤 비어 있는 곳으로 옮겨 간다.
+      outside.focus();
+      fireEvent.pointerDown(outside);
+      outside.blur();
+      expect(toolbarVisible()).toBe(false);
+      expect(document.activeElement).toBe(document.body);
+
+      await finishUpload();
+
+      expect(toolbarVisible()).toBe(false);
+      expect(document.activeElement).not.toBe(editable);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("저장할 때 미디어 블록이 사라져 toolbar가 닫히면 초점을 옮기지 않는다", () => {
+    const controller = fakeController(() => new Promise<never>(() => {}));
+    const { editable } = enterReplacing(controller);
+    const input = typeEmbedUrl("https://example.com/new.png");
+    controller.getSelectionMediaBlock.mockReturnValue(null as never);
+
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(toolbarVisible()).toBe(false);
+    expect(document.activeElement).not.toBe(editable);
+  });
+
+  it("업로드가 끝날 때 미디어 블록이 사라져 toolbar가 닫히면 초점을 옮기지 않는다", async () => {
+    const { controller, finishUpload } = deferredUploadController();
+    const { editable } = enterReplacing(controller);
+    startUpload();
+    focusBody();
+    controller.getSelectionMediaBlock.mockReturnValue(null as never);
+
+    await finishUpload();
+
+    expect(toolbarVisible()).toBe(false);
+    expect(document.activeElement).not.toBe(editable);
   });
 });
