@@ -36,6 +36,7 @@ const SAMPLES: ReadonlyArray<readonly [string, string]> = [
   ["인라인 html", "a <span>x\ny</span> b\n"],
   ["블록 html", "<div>\nx\n</div>\n"],
   ["맨몸 URL 뒤 줄바꿈", "see https://a.com\nnext\n"],
+  ["줄바꿈 뒤 명시 링크", "a\nb\n\n[t](https://b.com)\n<https://c.com>\n"],
   ["이미지 alt", "![a\nb](https://example.com/a.png)\n"],
   ["참조 이미지 정의", "![a\nb][pic]\n\n[pic]: https://example.com/a.png\n"],
   ["끊어진 참조 이미지", "앞 문단\n\n![그림][missing]\n"],
