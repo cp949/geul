@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { createPortal } from "react-dom";
 
 import { type MenuPosition, readCaretBounds } from "./caret-bounds.js";
 import { EmojiGrid } from "./emoji-grid.js";
 import { EMOJI_OPTIONS, type EmojiOption } from "./emoji-picker-options.js";
 import { useFixedPlacement } from "./fixed-placement.js";
+import { useActiveDescendant } from "./use-active-descendant.js";
 import { useCaretTriggerPopup } from "./use-caret-trigger-popup.js";
 import { useEditor, useEditorMount } from "./use-editor.js";
 import { useFocusEditor } from "./use-focus-editor.js";
@@ -96,6 +97,7 @@ export type EmojiPickerProps = {
 export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
   const editor = useEditor();
   const { element } = useEditorMount();
+  const menuId = useId();
   const focusEditor = useFocusEditor(element);
   // 열림 판정·재오픈 억제·keydown 배선·닫기는 useCaretTriggerPopup이 소유한다.
   const popup = useCaretTriggerPopup({
@@ -151,6 +153,17 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
     [query],
   );
 
+  // 강조 옵션 id. 옵션 버튼 id(EmojiGrid `idPrefix`)와 같은 menuId에서 파생해
+  // 접두사가 어긋나지 않는다. 후보가 없으면 undefined라 속성을 달지 않는다.
+  const highlightedItem =
+    menuState === null ? undefined : items[menuState.highlightedIndex];
+  useActiveDescendant(
+    element,
+    highlightedItem === undefined
+      ? undefined
+      : `${menuId}-${highlightedItem.id}`,
+  );
+
   const selectItem = (item: EmojiOption, current: { blockId: string }) => {
     // 트리거가 블록 텍스트 전체와 일치할 때만 메뉴가 열리므로(parseEmojiQuery)
     // "블록 재작성"이 곧 "트리거 치환"이다(DELTA-01이 확정한 방식).
@@ -166,6 +179,7 @@ export const EmojiPicker = ({ portalTarget = null }: EmojiPickerProps = {}) => {
         ariaLabel="Emoji picker"
         emptyMessage="No matches"
         highlightedIndex={menuState.highlightedIndex}
+        idPrefix={menuId}
         items={items}
         menuRef={menuRef}
         onSelect={(item) => selectItem(item, menuState)}

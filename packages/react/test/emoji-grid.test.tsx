@@ -34,13 +34,18 @@ const countingItem = (id: string, label: string) => {
 /** `EmojiGrid`를 렌더하고 `rerender`를 돌려준다. `left`로 style을 바꿔 다시 그릴 수 있다. */
 const renderGrid = (
   items: readonly EmojiOption[],
-  props: { onSelect?: (item: EmojiOption) => void; left?: number } = {},
+  props: {
+    onSelect?: (item: EmojiOption) => void;
+    left?: number;
+    idPrefix?: string;
+  } = {},
 ) => {
   const element = (onSelect: (item: EmojiOption) => void, left: number) => (
     <EmojiGrid
       ariaLabel="Grid"
       emptyMessage="No matches"
       highlightedIndex={-1}
+      {...(props.idPrefix === undefined ? {} : { idPrefix: props.idPrefix })}
       items={items}
       onSelect={onSelect}
       style={{ left, top: 0 }}
@@ -78,5 +83,28 @@ describe("EmojiGrid 재렌더", () => {
 
     expect(first).not.toHaveBeenCalled();
     expect(latest).toHaveBeenCalledWith(item);
+  });
+});
+
+describe("EmojiGrid 옵션 id(Issue #409)", () => {
+  it("idPrefix가 있으면 옵션에 `${idPrefix}-${item.id}` id를 단다", () => {
+    const first = countingItem("a", "Grinning").item;
+    const second = countingItem("b", "Smiley").item;
+    renderGrid([first, second], { idPrefix: "picker" });
+
+    expect(
+      screen.getByRole("option", { name: "Grinning" }).getAttribute("id"),
+    ).toBe("picker-a");
+    expect(
+      screen.getByRole("option", { name: "Smiley" }).getAttribute("id"),
+    ).toBe("picker-b");
+  });
+
+  it("idPrefix가 없으면 옵션에 id 속성이 없다", () => {
+    renderGrid([countingItem("a", "Grinning").item]);
+
+    expect(
+      screen.getByRole("option", { name: "Grinning" }).hasAttribute("id"),
+    ).toBe(false);
   });
 });

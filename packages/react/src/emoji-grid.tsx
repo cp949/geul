@@ -15,6 +15,11 @@ export type EmojiGridProps = {
   highlightedIndex: number;
   emptyMessage: string;
   onSelect: (item: EmojiOption) => void;
+  /**
+   * 있으면 옵션 버튼에 `${idPrefix}-${item.id}` id를 단다. 호출부가
+   * `aria-activedescendant`로 강조 옵션을 가리킬 때만 넘긴다. 없으면 id를 달지 않는다.
+   */
+  idPrefix?: string;
   menuRef?: RefObject<HTMLDivElement | null>;
   style?: CSSProperties;
 };
@@ -36,6 +41,7 @@ export const EmojiGrid = ({
   highlightedIndex,
   emptyMessage,
   onSelect,
+  idPrefix,
   menuRef,
   style,
 }: EmojiGridProps) => {
@@ -56,6 +62,7 @@ export const EmojiGrid = ({
           aria-label={item.label}
           aria-selected={index === highlightedIndex}
           className="geul-emoji-picker__item"
+          id={idPrefix === undefined ? undefined : `${idPrefix}-${item.id}`}
           key={item.id}
           onClick={() => onSelectRef.current(item)}
           onPointerDown={(event) => event.preventDefault()}
@@ -65,7 +72,7 @@ export const EmojiGrid = ({
           {item.char}
         </button>
       )),
-    [items, highlightedIndex],
+    [items, highlightedIndex, idPrefix],
   );
 
   return (

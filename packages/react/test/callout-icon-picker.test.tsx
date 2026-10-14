@@ -221,6 +221,24 @@ describe("그리드 닫힘이 useDismissibleOverlay 규칙을 따른다(Issue #2
   });
 });
 
+describe("접근성 속성(Issue #409)", () => {
+  it("선택기를 열어도 옵션에 id가 없고 편집기에 aria-activedescendant가 없다", () => {
+    const { calloutElement, editable } = renderCalloutPicker();
+    fireEvent.pointerMove(calloutElement);
+    fireEvent.click(screen.getByLabelText("Change callout icon"));
+
+    const listbox = screen.getByRole("listbox", {
+      name: "Callout icon picker",
+    });
+    const options = listbox.querySelectorAll('[role="option"]');
+    expect(options.length).toBeGreaterThan(0);
+    for (const option of options) {
+      expect(option.hasAttribute("id")).toBe(false);
+    }
+    expect(editable.hasAttribute("aria-activedescendant")).toBe(false);
+  });
+});
+
 describe("안쪽 스크롤 추종과 clip(Issue #235)", () => {
   const triggerLabel = "Change callout icon";
 

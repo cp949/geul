@@ -208,6 +208,71 @@ describe("EmojiPicker(`:` 트리거 팝업)", () => {
   });
 });
 
+describe("EmojiPicker aria-activedescendant(Issue #409)", () => {
+  it(":smi 입력 직후 편집 가능 요소가 첫 옵션 id를 가리킨다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":smi");
+
+    const options = screen.getAllByRole("option");
+    const firstOption = options[0];
+    if (firstOption === undefined) throw new Error("fixture 준비 실패");
+    expect(firstOption.id).not.toBe("");
+    expect(rendered.editable.getAttribute("aria-activedescendant")).toBe(
+      firstOption.id,
+    );
+  });
+
+  it("방향키로 강조가 바뀌면 속성이 새 옵션 id로 바뀌고 옵션 id는 서로 다르다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":smi");
+    const options = screen.getAllByRole("option");
+    expect(options.length).toBeGreaterThan(9);
+    expect(new Set(options.map((option) => option.id)).size).toBe(
+      options.length,
+    );
+
+    expect(fireEvent.keyDown(rendered.host, { key: "ArrowRight" })).toBe(false);
+    expect(rendered.editable.getAttribute("aria-activedescendant")).toBe(
+      options[1]?.id,
+    );
+
+    expect(fireEvent.keyDown(rendered.host, { key: "ArrowDown" })).toBe(false);
+    expect(rendered.editable.getAttribute("aria-activedescendant")).toBe(
+      options[9]?.id,
+    );
+  });
+
+  it("Escape로 닫히면 속성을 지운다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":smi");
+    expect(rendered.editable.hasAttribute("aria-activedescendant")).toBe(true);
+
+    fireEvent.keyDown(rendered.host, { key: "Escape" });
+
+    expect(screen.queryByRole("listbox", { name: listboxName })).toBeNull();
+    expect(rendered.editable.hasAttribute("aria-activedescendant")).toBe(false);
+  });
+
+  it("옵션을 선택해 닫히면 속성을 지운다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":smi");
+    expect(rendered.editable.hasAttribute("aria-activedescendant")).toBe(true);
+
+    fireEvent.keyDown(rendered.host, { key: "Enter" });
+
+    expect(screen.queryByRole("listbox", { name: listboxName })).toBeNull();
+    expect(rendered.editable.hasAttribute("aria-activedescendant")).toBe(false);
+  });
+
+  it("후보가 0건이면 속성이 없다", () => {
+    const rendered = renderCaretBlocks();
+    typeIntoBlock(rendered, ":zzzznomatch");
+
+    expect(screen.getByRole("listbox", { name: listboxName })).not.toBeNull();
+    expect(rendered.editable.hasAttribute("aria-activedescendant")).toBe(false);
+  });
+});
+
 /** 강조된(`aria-selected="true"`) 옵션의 label을 돌려준다. 없으면 null이다. */
 const highlightedLabel = (): string | null =>
   screen
