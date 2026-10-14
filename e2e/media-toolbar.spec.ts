@@ -1367,3 +1367,60 @@ test("교체 모드에서 현재 URL과 같은 Embed URL을 저장해도 초점�
 
   await expectSelectionStaysOnMedia(page, editable);
 });
+
+// Issue #420 — rename·caption 입력을 클릭하면 DOM selection이 입력에 남는다. 이 상태로
+// 편집을 끝내면 focus()가 캐럿을 미디어 다음 문단 첫 위치로 옮겨 NodeSelection이
+// TextSelection으로 바뀌고 toolbar가 닫혔다(#417과 같은 원인). 입력 값을 바꿔 Enter·Save가
+// 저장 성공 경로를 타게 한다.
+type FinishAction = {
+  title: string;
+  run: (page: Page, input: Locator, saveName: string) => Promise<void>;
+};
+
+const FINISH_ACTIONS: readonly FinishAction[] = [
+  {
+    title: "Enter",
+    run: (_page, input) => input.press("Enter", { delay: 120 }),
+  },
+  {
+    title: "Escape",
+    run: (page) => page.keyboard.press("Escape", { delay: 120 }),
+  },
+  {
+    title: "Cancel 버튼",
+    run: (page) => page.getByRole("button", { name: "Cancel" }).click(),
+  },
+  {
+    title: "Save 버튼",
+    run: (page, _input, saveName) =>
+      page.getByRole("button", { name: saveName }).click(),
+  },
+];
+
+const EDIT_INPUT_MODES = EDIT_MODES.filter(
+  (item) => item.title !== "replacing",
+);
+
+for (const mode of EDIT_INPUT_MODES) {
+  for (const action of FINISH_ACTIONS) {
+    test(`${mode.title} 입력을 클릭한 뒤 끝내도(${action.title}) 초점이 편집기에 있고 toolbar가 남는다 (#420)`, async ({
+      page,
+    }) => {
+      const { editable } = await openDemo(page);
+      await insertFilledImage(page, editable);
+      await openMoreMenu(page);
+      await page.getByRole("menuitem", { name: mode.menuItem }).click();
+      const input = mode.marker(page);
+      await input.click();
+      await input.fill(`edited-${mode.title}`);
+
+      await action.run(
+        page,
+        input,
+        mode.title === "rename" ? "Save name" : "Save caption",
+      );
+
+      await expectSelectionStaysOnMedia(page, editable);
+    });
+  }
+}
