@@ -749,7 +749,12 @@ export const MediaToolbar = ({
     // 툴바가 닫힌다(실측). 적용 전에는 PM이 포커스된 채 selection을 DOM에 쓴다.
     // replacing 중 editingRef는 이미 true라 이 이동의 selectionchange가 재조회하지 않는다.
     // 미디어 블록이 이미 사라졌으면(selection 이탈) 돌아갈 편집 위치가 없어 옮기지 않는다.
-    if (editor.getSelectionMediaBlock()?.blockId === blockId) focusEditor();
+    // 같은 URL 저장은 문서가 바뀌지 않아 PM이 DOM selection을 다시 쓰지 않는다. 입력에
+    // 남은 DOM selection을 미리 되돌려 둔다(Issue #417).
+    if (editor.getSelectionMediaBlock()?.blockId === blockId) {
+      selectMediaBlockInDom(blockId);
+      focusEditor();
+    }
     const result = applyMediaUrl(editor, { blockId, kind, draft }, dictionary);
     if (!result.ok) {
       const { rejectedMessage } = result;

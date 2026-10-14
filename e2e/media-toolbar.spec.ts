@@ -1238,39 +1238,12 @@ const startReplaceUpload = async (page: Page) => {
 };
 
 /**
- * 업로드 성공 뒤 초점·선택·toolbar를 확인한다(Issue #417). 사람 속도 keyup이
- * 닫힘을 드러내므로 대기 뒤 Shift를 누른다. DOM selection이 편집기 안에 있는지도
- * 본다 — 툴바 입력에 남아 있던 selection이 결함의 원인이다.
+ * 교체 모드를 빠져나온 뒤 초점·선택·toolbar를 확인한다(Issue #417). 사람 속도
+ * keyup이 닫힘을 드러내므로 대기 뒤 Shift를 누른다. DOM selection이 편집기 안에
+ * 있는지도 본다 — 툴바 입력에 남아 있던 selection이 결함의 원인이다. 교체 모드가
+ * 끝나 `More media options`가 다시 보이면 view로 돌아온 것이다.
  */
 const expectSelectionStaysOnMedia = async (page: Page, editable: Locator) => {
-  await expect(editable.locator("img")).toHaveAttribute(
-    "src",
-    "https://example.com/uploads/new.png",
-  );
-  await expect(editable).toBeFocused();
-  await page.waitForTimeout(400);
-  await page.keyboard.press("Shift");
-  await page.waitForTimeout(300);
-  await expect(
-    page.getByRole("toolbar", { name: "Media toolbar" }),
-  ).toBeVisible();
-  await expect(editable).toBeFocused();
-  const anchorInEditor = await editable.evaluate((node) => {
-    const anchor = node.ownerDocument.getSelection()?.anchorNode ?? null;
-    return anchor !== null && node.contains(anchor);
-  });
-  expect(anchorInEditor).toBe(true);
-};
-
-/**
- * 교체 취소 뒤 초점·선택·toolbar를 확인한다(Issue #417). 사람 속도 keyup이
- * 닫힘을 드러내므로 대기 뒤 Shift를 누른다. 교체 모드가 끝나 `More media options`가
- * 다시 보이면 view로 돌아온 것이다.
- */
-const expectSelectionStaysOnMediaAfterCancel = async (
-  page: Page,
-  editable: Locator,
-) => {
   await expect(editable).toBeFocused();
   await page.waitForTimeout(400);
   await page.keyboard.press("Shift");
@@ -1289,6 +1262,18 @@ const expectSelectionStaysOnMediaAfterCancel = async (
   expect(anchorInEditor).toBe(true);
 };
 
+/** 업로드 성공(`img` src 교체)을 기다린 뒤 {@link expectSelectionStaysOnMedia}를 건다. */
+const expectSelectionStaysOnMediaAfterUpload = async (
+  page: Page,
+  editable: Locator,
+) => {
+  await expect(editable.locator("img")).toHaveAttribute(
+    "src",
+    "https://example.com/uploads/new.png",
+  );
+  await expectSelectionStaysOnMedia(page, editable);
+};
+
 // Issue #417 — 업로드 대기 중 Embed 탭 URL 입력을 클릭하면 DOM selection이 입력에
 // 남는다. 성공 뒤 focus()가 캐럿을 미디어 다음 문단 첫 위치로 옮겨 NodeSelection이
 // TextSelection으로 바뀌고 툴바가 닫혔다. 사람 속도 keyup이 닫힘을 드러낸다.
@@ -1302,7 +1287,7 @@ test("교체 업로드 대기 중 Embed URL 입력을 클릭해도 성공 뒤 to
   await page.getByRole("tab", { name: "Embed" }).click();
   await page.getByRole("textbox", { name: /URL/ }).click();
 
-  await expectSelectionStaysOnMedia(page, editable);
+  await expectSelectionStaysOnMediaAfterUpload(page, editable);
 });
 
 test("Embed 입력을 클릭한 뒤 Upload 탭으로 돌아와도 업로드 성공 뒤 toolbar가 남는다 (#417)", async ({
@@ -1316,7 +1301,7 @@ test("Embed 입력을 클릭한 뒤 Upload 탭으로 돌아와도 업로드 성�
   await page.getByRole("textbox", { name: /URL/ }).click();
   await page.getByRole("tab", { name: "Upload" }).click();
 
-  await expectSelectionStaysOnMedia(page, editable);
+  await expectSelectionStaysOnMediaAfterUpload(page, editable);
 });
 
 test("교체 업로드 대기 중 초점이 body에 있어도 성공 뒤 toolbar가 남는다 (#417)", async ({
@@ -1326,7 +1311,7 @@ test("교체 업로드 대기 중 초점이 body에 있어도 성공 뒤 toolbar
   await insertFilledImage(page, editable);
   await startReplaceUpload(page);
 
-  await expectSelectionStaysOnMedia(page, editable);
+  await expectSelectionStaysOnMediaAfterUpload(page, editable);
 });
 
 // Issue #417 — Embed 입력을 클릭하면 DOM selection이 입력에 남는다. 이 상태로 Cancel
@@ -1344,7 +1329,7 @@ test("Embed 입력을 클릭한 뒤 Cancel 버튼으로 취소해도 초점이 �
 
   await page.getByRole("button", { name: "Cancel" }).click();
 
-  await expectSelectionStaysOnMediaAfterCancel(page, editable);
+  await expectSelectionStaysOnMedia(page, editable);
 });
 
 test("Embed 입력을 클릭한 뒤 Escape로 취소해도 초점이 편집기에 있고 toolbar가 남는다 (#417)", async ({
@@ -1359,5 +1344,26 @@ test("Embed 입력을 클릭한 뒤 Escape로 취소해도 초점이 편집기�
 
   await page.keyboard.press("Escape", { delay: 120 });
 
-  await expectSelectionStaysOnMediaAfterCancel(page, editable);
+  await expectSelectionStaysOnMedia(page, editable);
+});
+
+// Issue #417 — 현재 URL과 같은 URL을 저장하면 core가 문서를 바꾸지 않아 PM이 DOM
+// selection을 다시 쓰지 않는다. 입력에 남은 DOM selection에서 focus()가 캐럿을
+// 미디어 다음 문단 첫 위치로 옮겨 NodeSelection이 TextSelection으로 바뀌고 toolbar가
+// 닫혔다.
+test("교체 모드에서 현재 URL과 같은 Embed URL을 저장해도 초점이 편집기에 있고 toolbar가 남는다 (#417)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  const url = "https://example.com/dir/photo.png";
+  await insertFilledImage(page, editable, url);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
+  const input = page.getByRole("textbox", { name: /URL/ });
+  await input.fill(url);
+
+  await input.press("Enter", { delay: 120 });
+
+  await expectSelectionStaysOnMedia(page, editable);
 });
