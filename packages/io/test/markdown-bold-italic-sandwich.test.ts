@@ -1,34 +1,28 @@
 /**
- * 구두점으로 끝나는 bold 뒤 italic · bold·italic · italic 샌드위치의 왕복을 검증한다(Issue #415).
+ * bold·italic 런이 이어질 때 `emphasis · strong[emphasis] · emphasis` 샌드위치의 왕복을 검증한다(Issue #415, #416).
  * 입력 `.`(bold) `a`(italic) `a`(bold·italic) `1`(italic)은 `**.***a****a****1*`로 나갔다.
  * - mdast는 strong[.], emphasis[a], strong[emphasis[a]], emphasis[1]이다.
  * - `mdast-util-to-markdown` 2.2.0의 탐욕 탐색이 `***` 연쇄를 못 푼다.
  * - 구분자 `*`이 연달아 붙어 재가져오기에서 닫는 구분자가 글자로 샌다.
+ * - 앞 strong이 없는 `I X I X I`(#416 재현 B1)도 `*.****a****a****a****a*`로 나갔다.
  * `inlineNodes`가 `emphasis · strong[emphasis] · emphasis`를 `emphasis[…, strong[…], …]`로 끌어올려 해소한다.
- * 적용 조건은 넷이다. 모두 만족해야 한다.
- * - 인접 형제가 emphasis, strong(자식이 emphasis 하나), emphasis다.
- * - 이 emphasis 바로 앞 형제가 strong이다.
- * - 앞 strong이 구두점으로 끝나거나 head emphasis가 구두점으로 시작한다. 한쪽이면 된다.
- *   - 둘 다 영숫자 경계면 수정 전 출력(`**a***a*__*a*__*1*`)이 이미 맞아서 건드리지 않는다.
- *   - head가 구두점으로 시작하는데 앞 strong이 영숫자로 끝나면 `**a***.a****a****a*`로 나가 같은 결함이다(#416 재현 A).
- *   - 첫 샌드위치를 끌어올리면 뒤 샌드위치의 구분자 배치가 바뀐다. 이 모양이 그 뒤 샌드위치에서 드러난다(8런 입력).
+ * 적용 조건은 둘이다. 모두 만족해야 한다.
+ * - 인접 형제가 emphasis, strong(자식이 emphasis 하나), emphasis다. 앞 형제의 종류와 경계 글자는 보지 않는다.
+ *   - 앞 형제가 없거나 strong이 아니거나 영숫자로 끝나도 끌어올린다.
+ *   - 영숫자 경계 입력(`**a***a*__*a*__*1*`)도 끌어올린 출력으로 나간다. 왕복은 같다.
  * - 샌드위치와 그 이웃 노드에 astral 글자(U+10000 이상)가 없다. 있으면 끌어올리지 않는다.
  *   - 끌어올리면 astral 글자가 문자 참조(`&#x1F600;`)로 바뀌며 앞 `_`가 이스케이프되지 않는다(#414).
  *   - 수정 전에는 `_`로 닫는 emphasis가 astral 글자 뒤에 있어 왕복이 맞았다. 그 출력을 그대로 둔다.
- * 앞 strong의 끝 글자 판정은 다음과 같다.
- * - 앞 strong의 마지막 잎 text가 구두점·기호·공백으로 끝난다.
- *   - strong의 마지막 자식이 `delete`이면 영숫자로 끝나는 text도 구두점으로 본다. 실제 직전 글자가 닫는 `~~`다.
- *   - 예: `strong[delete[a]]` 뒤 샌드위치는 `**~~a~~***a****a****1*`로 나가 같은 결함이었다.
- *   - 마지막 잎이 `inlineCode`(닫는 백틱)나 `html`(표 셀 `<br>`의 `>`)이어도 구두점으로 본다.
  * 끌어올린 emphasis 뒤에 `strong[emphasis] · emphasis`가 이어지면 새 샌드위치가 생긴다.
  * 그래서 변화가 없을 때까지 끌어올림을 반복한다(고정점).
  * 단언은 네 가지다.
  * - strict 내보내기가 성공하고 재가져온 글자 런이 원본과 글자·mark 모두 같다.
- * - 정확한 출력 문자열을 한 건 고정한다.
+ * - 정확한 출력 문자열을 몇 건 고정한다.
  * - 표 셀 안에서도 왕복이 같다.
- * - 불변 입력은 수정 전과 출력 문자열이 같다. 영숫자·한글로 끝나는 앞 strong, 앞이 strong이 아닌 샌드위치, 모양 밖 입력이다.
+ * - 불변 입력은 출력 문자열이 같다. 모양 밖 입력과 가드 창 안에 astral 글자가 든 샌드위치다.
+ * - 가드 창 밖 astral 때문에 깨지는 알려진 입력은 `it.fails`로 둔다(#414). #414를 고치면 이 케이스가 실패해 제거 시점을 알린다.
  * 끌어올림 함수(`liftEmphasisSandwich`)는 노드 수준에서도 검증한다.
- * - 앞 strong의 마지막 잎이 `break`이거나 text 값이 비어 있으면 적용하지 않는다. 빈 children에서도 던지지 않는다.
+ * - 앞 형제가 없거나 strong이 아니거나 어떤 잎으로 끝나도 끌어올린다. 빈 children에서도 던지지 않는다.
  * - 겹친 샌드위치는 한 번에 모두 끌어올린다.
  * - 입력 노드를 변경하지 않는다.
  * 문자 약어는 B(bold), I(italic), X(bold·italic), N(mark 없음), S(strike)다. `BS`는 bold·strike다.
@@ -172,6 +166,23 @@ const HEAD_PUNCTUATION_CASES: readonly Case[] = [
   ],
 ];
 
+// 앞 strong 조건 없이 모양만 맞는 샌드위치다(#416). 구분자 `*`이 연달아 붙어 재가져오기가 깨졌다.
+const CHAIN_CASES: readonly Case[] = [
+  [
+    "재현 B1 I(`.`) X I X I",
+    [italic("."), boldItalic("a"), italic("a"), boldItalic("a"), italic("a")],
+  ],
+  [
+    "재현 B2 X(`.`) B I X I",
+    [boldItalic("."), bold("a"), italic("a"), boldItalic("a"), italic("a")],
+  ],
+  ["앞 런이 없는 I X I", [italic("a"), boldItalic("a"), italic("a")]],
+  [
+    "앞이 평문인 N I X I",
+    [{ text: "." }, italic("a"), boldItalic("a"), italic("a")],
+  ],
+];
+
 // 샌드위치 text에 astral 글자가 있다. 끌어올리면 `_`가 이스케이프되지 않아(#414) 왕복이 깨진다.
 const ASTRAL_CASES: readonly OutputCase[] = [
   [
@@ -206,6 +217,12 @@ const HTML_BREAK_CASES: readonly Case[] = [
 ];
 
 const OUTPUT_CASES: readonly OutputCase[] = [
+  ["재현 B1 I(`.`) X I X I", CHAIN_CASES[0]?.[1] ?? [], "*.**a**a**a**a*\n"],
+  [
+    "재현 B2 X(`.`) B I X I",
+    CHAIN_CASES[1]?.[1] ?? [],
+    "***.*&#x61;***&#x61;__&#x61;__&#x61;*\n",
+  ],
   [
     "bold(`.`) + italic(`a`) + bold·italic(`a`) + italic(`1`)",
     sandwich("."),
@@ -233,15 +250,16 @@ const OUTPUT_CASES: readonly OutputCase[] = [
   ],
 ];
 
-// 앞 strong의 끝 글자가 영숫자·한글이면 수정 전과 출력이 같다.
+// 앞 strong의 끝 글자가 영숫자·한글이어도 모양이 맞으면 끌어올린다.
+// 수정 전 출력은 `**a***a*__*a*__*1*`이었다.
 const ALNUM_CASES: readonly OutputCase[] = [
-  ["첫 런 `a`", sandwich("a"), "**a***a*__*a*__*1*\n"],
-  ["첫 런 `가`", sandwich("가"), "**가***a*__*a*__*1*\n"],
-  ["첫 런 `1`", sandwich("1"), "**1***a*__*a*__*1*\n"],
+  ["첫 런 `a`", sandwich("a"), "**a***a**a**1*\n"],
+  ["첫 런 `가`", sandwich("가"), "**가***a**a**1*\n"],
+  ["첫 런 `1`", sandwich("1"), "**1***a**a**1*\n"],
 ];
 
-// 앞 strong의 마지막 자식이 delete가 아니면 영숫자 끝이라 수정 전과 출력이 같다.
-const STRIKE_UNCHANGED_CASES: readonly OutputCase[] = [
+// 앞 strong의 마지막 자식이 delete가 아니거나 앞 strong이 없어도 모양이 맞으면 끌어올린다.
+const STRIKE_LIFTED_CASES: readonly OutputCase[] = [
   [
     "delete가 마지막 자식이 아닌 BS B I X I",
     [
@@ -251,7 +269,7 @@ const STRIKE_UNCHANGED_CASES: readonly OutputCase[] = [
       boldItalic("a"),
       italic("1"),
     ],
-    "**~~a~~b***a*__*a*__*1*\n",
+    "**~~a~~b***a**a**1*\n",
   ],
   [
     "delete가 emphasis 안인 XS I X I",
@@ -261,22 +279,26 @@ const STRIKE_UNCHANGED_CASES: readonly OutputCase[] = [
       boldItalic("a"),
       italic("1"),
     ],
-    "__*~~a~~*__*a*__*a*__*1*\n",
+    "__*~~a~~*__*a**a**1*\n",
   ],
   [
     "bold가 없는 S I X I",
     [run("a", [STRIKE]), italic("a"), boldItalic("a"), italic("1")],
-    "~~a~~*a*__*a*__*1*\n",
+    "~~a~~*a**a**1*\n",
   ],
 ];
 
-// 앞이 strong이 아니거나 모양 밖이면 수정 전과 출력이 같다.
-const OUTSIDE_SHAPE_CASES: readonly OutputCase[] = [
+// 앞이 strong이 아니어도 모양이 맞으면 끌어올린다. 수정 전 출력은 `.*a*__*a*__*1*`이었다.
+const PLAIN_PREVIOUS_CASES: readonly OutputCase[] = [
   [
     "앞이 평문 `.`인 N I X I",
     [{ text: "." }, italic("a"), boldItalic("a"), italic("1")],
-    ".*a*__*a*__*1*\n",
+    ".*a**a**1*\n",
   ],
+];
+
+// 모양 밖이면 수정 전과 출력이 같다.
+const OUTSIDE_SHAPE_CASES: readonly OutputCase[] = [
   [
     "뒤 italic이 없는 B I X",
     [bold("."), italic("a"), boldItalic("a")],
@@ -294,7 +316,7 @@ const OUTSIDE_SHAPE_CASES: readonly OutputCase[] = [
   ],
 ];
 
-describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드위치의 직렬화", () => {
+describe("bold·italic 연쇄 샌드위치의 직렬화", () => {
   it.each(BROKEN_CASES)(
     "문단의 %s는 strict 내보내기가 성공하고 재가져오기가 글자와 mark를 보존한다",
     (_label, content) => {
@@ -347,6 +369,24 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
     },
   );
 
+  it.each(CHAIN_CASES)(
+    "문단의 앞 strong 없는 샌드위치 %s는 재가져오기가 글자와 mark를 보존한다",
+    (_label, content) => {
+      const markdown = strictMarkdown(paragraphDocument(content));
+
+      expect(importedRuns(markdown)).toEqual(content);
+    },
+  );
+
+  it.each(CHAIN_CASES.slice(0, 2))(
+    "표 셀의 앞 strong 없는 샌드위치 %s도 글자와 mark를 보존한다",
+    (_label, content) => {
+      const markdown = strictMarkdown(tableCellDocument(content));
+
+      expect(importedRuns(markdown)).toEqual(content);
+    },
+  );
+
   describe("불변 입력: 샌드위치에 astral 글자가 있으면 출력이 바뀌지 않는다", () => {
     it.each(ASTRAL_CASES)(
       "%s의 출력은 수정 전과 같고 재가져오기가 글자와 mark를 보존한다",
@@ -358,6 +398,27 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
       },
     );
   });
+
+  // 앞쪽 샌드위치(0–2)는 가드 창에 astral이 없어 끌어올려진다. astral이 든 뒤쪽 샌드위치(3–5, 6)는
+  // 구분자 배치가 바뀌어 `_`가 이스케이프되지 않는다(#414). 수정 전에는 왕복이 맞았다.
+  // #414를 고치면 이 케이스가 실패해 `it.fails`를 `it`으로 바꿀 시점을 알린다.
+  it.fails(
+    "가드 창 밖 astral이 든 뒤쪽 샌드위치가 있으면 왕복이 깨진다(#414)",
+    () => {
+      const content: InlineContent = [
+        italic("_"),
+        boldItalic("."),
+        italic("a"),
+        boldItalic("a_"),
+        italic("𝐚"),
+        boldItalic("a_"),
+        italic("😀"),
+      ];
+      const markdown = strictMarkdown(paragraphDocument(content));
+
+      expect(importedRuns(markdown)).toEqual(content);
+    },
+  );
 
   it.each(CODE_CASES)(
     "문단의 앞 strong이 inlineCode로 끝나는 %s는 재가져오기가 글자와 mark를 보존한다",
@@ -391,9 +452,9 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
     },
   );
 
-  describe("불변 입력: 앞 strong이 영숫자·한글로 끝나면 출력이 바뀌지 않는다", () => {
+  describe("앞 strong이 영숫자·한글로 끝나도 끌어올린 출력으로 나간다", () => {
     it.each(ALNUM_CASES)(
-      "%s의 출력은 수정 전과 같다",
+      "%s의 출력을 고정하고 재가져오기가 글자와 mark를 보존한다",
       (_label, content, expected) => {
         const markdown = strictMarkdown(paragraphDocument(content));
 
@@ -403,9 +464,9 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
     );
   });
 
-  describe("불변 입력: 앞 strong의 마지막 자식이 delete가 아니면 출력이 바뀌지 않는다", () => {
-    it.each(STRIKE_UNCHANGED_CASES)(
-      "%s의 출력은 수정 전과 같다",
+  describe("앞 strong의 마지막 자식이 delete가 아니거나 앞 strong이 없어도 끌어올린 출력으로 나간다", () => {
+    it.each(STRIKE_LIFTED_CASES)(
+      "%s의 출력을 고정하고 재가져오기가 글자와 mark를 보존한다",
       (_label, content, expected) => {
         const markdown = strictMarkdown(paragraphDocument(content));
 
@@ -415,7 +476,19 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
     );
   });
 
-  describe("불변 입력: 앞이 strong이 아니거나 모양 밖이면 출력이 바뀌지 않는다", () => {
+  describe("앞이 strong이 아니어도 끌어올린 출력으로 나간다", () => {
+    it.each(PLAIN_PREVIOUS_CASES)(
+      "%s의 출력을 고정하고 재가져오기가 글자와 mark를 보존한다",
+      (_label, content, expected) => {
+        const markdown = strictMarkdown(paragraphDocument(content));
+
+        expect(markdown).toBe(expected);
+        expect(importedRuns(markdown)).toEqual(content);
+      },
+    );
+  });
+
+  describe("불변 입력: 모양 밖이면 출력이 바뀌지 않는다", () => {
     it.each(OUTSIDE_SHAPE_CASES)(
       "%s의 출력은 수정 전과 같다",
       (_label, content, expected) => {
@@ -456,98 +529,70 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
       node("emphasis", text("c")),
     ];
 
-    it("앞 strong이 구두점 text로 끝나면 emphasis 하나로 끌어올린다", () => {
-      const nodes = [node("strong", text(".")), ...sandwichNodes()];
+    /**
+     * 끌어올린 결과 emphasis 노드를 만든다.
+     */
+    const liftedNode = (): Node =>
+      node("emphasis", text("a"), node("strong", text("b")), text("c"));
 
-      expect(liftEmphasisSandwich(nodes)).toEqual([
-        node("strong", text(".")),
-        node("emphasis", text("a"), node("strong", text("b")), text("c")),
-      ]);
+    it("앞 형제가 없어도 emphasis 하나로 끌어올린다", () => {
+      expect(liftEmphasisSandwich(sandwichNodes())).toEqual([liftedNode()]);
     });
 
-    it("앞 strong의 마지막 자식이 delete이면 영숫자 text여도 끌어올린다", () => {
-      const nodes = [
-        node("strong", node("delete", text("a"))),
-        ...sandwichNodes(),
-      ];
-
-      expect(liftEmphasisSandwich(nodes)).toEqual([
-        node("strong", node("delete", text("a"))),
-        node("emphasis", text("a"), node("strong", text("b")), text("c")),
-      ]);
-    });
-
-    it("delete가 emphasis 안에 있거나 값이 비어 있으면 영숫자 끝으로 본다", () => {
-      const inEmphasis = [
-        node("strong", node("emphasis", node("delete", text("a")))),
-        ...sandwichNodes(),
-      ];
-      const emptyValue = [
-        node("strong", node("delete", text(""))),
-        ...sandwichNodes(),
-      ];
-
-      expect(liftEmphasisSandwich(inEmphasis)).toEqual(inEmphasis);
-      expect(liftEmphasisSandwich(emptyValue)).toEqual(emptyValue);
-    });
-
-    it("앞 strong의 마지막 잎이 inlineCode이면 닫는 백틱이 끝 글자라서 끌어올린다", () => {
-      const lifted = node(
-        "emphasis",
-        text("a"),
-        node("strong", text("b")),
-        text("c"),
-      );
-
-      for (const leaf of [
-        { type: "inlineCode", value: "a" },
-        { type: "inlineCode", value: "." },
+    it("앞 형제가 strong이 아닌 노드여도 끌어올린다", () => {
+      for (const previous of [
+        text("."),
+        node("emphasis", text("x")),
+        node("delete", text("x")),
+        { type: "inlineCode", value: "x" },
       ]) {
-        const previous = node("strong", leaf);
-
         expect(liftEmphasisSandwich([previous, ...sandwichNodes()])).toEqual([
           previous,
-          lifted,
+          liftedNode(),
         ]);
       }
-      const inDelete = node(
-        "strong",
-        node("delete", {
-          type: "inlineCode",
-          value: "a",
-        }),
-      );
-
-      expect(liftEmphasisSandwich([inDelete, ...sandwichNodes()])).toEqual([
-        inDelete,
-        lifted,
-      ]);
     });
 
-    it("앞 strong의 마지막 잎이 html `<br>`이면 닫는 `>`가 끝 글자라서 끌어올린다", () => {
-      const previous = node("strong", text("a"), {
-        type: "html",
-        value: "<br>",
-      });
-
-      expect(liftEmphasisSandwich([previous, ...sandwichNodes()])).toEqual([
-        previous,
-        node("emphasis", text("a"), node("strong", text("b")), text("c")),
-      ]);
-    });
-
-    it("head가 구두점 text로 시작하면 앞 strong이 영숫자로 끝나도 끌어올린다", () => {
-      const nodes = [
+    it("앞 strong의 끝 글자와 head의 첫 글자를 보지 않고 끌어올린다", () => {
+      const previousStrongs = [
+        node("strong", text(".")),
         node("strong", text("a")),
-        node("emphasis", text(".a")),
-        node("strong", node("emphasis", text("b"))),
-        node("emphasis", text("c")),
+        node("strong", node("delete", text("a"))),
+        node("strong", node("emphasis", node("delete", text("a")))),
+        node("strong", { type: "inlineCode", value: "a" }),
+        node("strong", text("a"), { type: "html", value: "<br>" }),
       ];
 
-      expect(liftEmphasisSandwich(nodes)).toEqual([
+      for (const previous of previousStrongs) {
+        expect(liftEmphasisSandwich([previous, ...sandwichNodes()])).toEqual([
+          previous,
+          liftedNode(),
+        ]);
+      }
+      expect(
+        liftEmphasisSandwich([
+          node("strong", text("a")),
+          node("emphasis", text(".a")),
+          node("strong", node("emphasis", text("b"))),
+          node("emphasis", text("c")),
+        ]),
+      ).toEqual([
         node("strong", text("a")),
         node("emphasis", text(".a"), node("strong", text("b")), text("c")),
       ]);
+    });
+
+    it("앞 strong의 마지막 잎이 break이거나 빈 text여도 끌어올린다", () => {
+      for (const previous of [
+        node("strong", text("a"), { type: "break" }),
+        node("strong", text("")),
+        node("strong", node("delete", text(""))),
+      ]) {
+        expect(liftEmphasisSandwich([previous, ...sandwichNodes()])).toEqual([
+          previous,
+          liftedNode(),
+        ]);
+      }
     });
 
     it("샌드위치나 앞 strong, 뒤 형제에 astral 글자가 있으면 적용하지 않는다", () => {
@@ -589,15 +634,6 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
       }
     });
 
-    it("앞 strong의 마지막 잎이 break이면 적용하지 않는다", () => {
-      const nodes = [
-        node("strong", text("a"), { type: "break" }),
-        ...sandwichNodes(),
-      ];
-
-      expect(liftEmphasisSandwich(nodes)).toEqual(nodes);
-    });
-
     it("끌어올린 emphasis 뒤에 샌드위치가 또 생기면 고정점까지 끌어올린다", () => {
       const nodes = [
         node("strong", text(".")),
@@ -619,21 +655,35 @@ describe("구두점으로 끝나는 bold 뒤 italic·bold·italic·italic 샌드
       ]);
     });
 
-    it("앞 strong의 마지막 text 값이 비어 있으면 적용하지 않는다", () => {
-      const nodes = [node("strong", text("")), ...sandwichNodes()];
+    it("앞 strong의 children이 빈 배열이어도 던지지 않고 끌어올린다", () => {
+      const previous = node("strong");
 
-      expect(liftEmphasisSandwich(nodes)).toEqual(nodes);
+      expect(liftEmphasisSandwich([previous, ...sandwichNodes()])).toEqual([
+        previous,
+        liftedNode(),
+      ]);
     });
 
-    it("앞 strong의 children이 빈 배열이어도 던지지 않고 적용하지 않는다", () => {
-      const nodes = [node("strong"), ...sandwichNodes()];
+    it("빈 배열과 모양 밖 배열은 던지지 않고 그대로 돌려준다", () => {
+      const outside = [
+        node("emphasis", text("a")),
+        node("strong", node("emphasis", text("b"))),
+      ];
 
-      expect(liftEmphasisSandwich(nodes)).toEqual(nodes);
-    });
-
-    it("빈 배열과 샌드위치 앞에 노드가 없는 경우도 던지지 않는다", () => {
       expect(liftEmphasisSandwich([])).toEqual([]);
-      expect(liftEmphasisSandwich(sandwichNodes())).toEqual(sandwichNodes());
+      expect(liftEmphasisSandwich(outside)).toEqual(outside);
+    });
+
+    it("빈 children과 빈 값 text로 된 샌드위치도 던지지 않는다", () => {
+      const nodes = [
+        node("emphasis"),
+        node("strong", node("emphasis")),
+        node("emphasis", text("")),
+      ];
+
+      expect(liftEmphasisSandwich(nodes)).toEqual([
+        node("emphasis", node("strong"), text("")),
+      ]);
     });
 
     it("입력 노드를 변경하지 않는다", () => {
