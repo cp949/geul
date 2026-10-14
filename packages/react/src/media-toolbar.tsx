@@ -933,6 +933,9 @@ export const MediaToolbar = ({
       return;
     }
     editingRef.current = true;
+    // 입력을 클릭했다면 DOM selection이 입력에 남아 있다. focus() 전에 미디어
+    // 블록으로 돌려 선택과 툴바를 지킨다(Issue #420, cancelReplacing과 같다).
+    selectMediaBlockInDom(toolbarState.blockId);
     focusEditor();
     viewBlockIdRef.current = toolbarState.blockId;
     // moreMenu는 editingName/editingCaption 진입 시점에 이미 위 감시
