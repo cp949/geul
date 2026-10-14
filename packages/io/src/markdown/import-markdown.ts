@@ -80,7 +80,13 @@ export const importMarkdown = (
 
     // remark는 U+0000을 U+FFFD로 바꿔 CodeBlock source 위반을 숨긴다.
     // 같은 길이의 다른 금지 C0로 치환해 model validation까지 보존한다.
-    const parsedSource = source.replace(/\0/g, "\u0001");
+    // CR·CRLF는 LF로 바꾼다(Issue #418).
+    // - CommonMark는 CR·CRLF·LF를 모두 줄 끝으로 정의한다.
+    // - model은 LF 외 줄바꿈을 거절한다. 노드별 후처리는 빠뜨리기 쉽다.
+    // - 길이가 바뀐다. offset을 읽는 후처리는 이 문자열을 받아야 한다.
+    const parsedSource = source
+      .replace(/\0/g, "\u0001")
+      .replace(/\r\n?/g, "\n");
     const root = asMarkdownRoot(parseProcessor.parse(parsedSource));
     if (root === undefined) {
       return {
@@ -108,7 +114,7 @@ export const importMarkdown = (
     // - 참조 해석 앞에 둔다. 이후 단계가 literal link를 보지 않게 한다.
     stripAutolinkLiterals(root, parsedSource);
     const definitions = definitionLookup(root);
-    expandImageReferencesFromText(root, source);
+    expandImageReferencesFromText(root, parsedSource);
     resolveReferences(root, definitions);
     const document = documentFromRoot(
       root,

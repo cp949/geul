@@ -290,7 +290,7 @@ function blocksFromNode(
 
   if (node.type === "code") {
     const id = createId();
-    const source = (node.value ?? "").replace(/\r\n?/g, "\n");
+    const source = node.value ?? "";
     if (node.meta !== undefined && node.meta !== null && node.meta.length > 0) {
       warnings.push({
         kind: "CODE_BLOCK_META_DROPPED",
