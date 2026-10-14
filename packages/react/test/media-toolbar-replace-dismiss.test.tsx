@@ -459,6 +459,24 @@ describe("교체 모드를 빠져나오면 초점이 편집기로 돌아온다(I
     expect(document.activeElement).toBe(editable);
   });
 
+  it("Embed 탭 저장은 문서를 바꾸기 전에 초점을 편집기로 옮긴다", () => {
+    // 입력에 초점이 있는 채로 문서를 바꾸고 옮기면 Chromium이 DOM selection을 다음
+    // 문단으로 옮겨 toolbar가 닫힌다(Issue #408, e2e가 소유). jsdom은 호출 순서만 고정한다.
+    const controller = fakeController(() => new Promise<never>(() => {}));
+    let activeAtApply: Element | null = null;
+    controller.commands.setMediaBlockUrl.mockImplementation(() => {
+      activeAtApply = document.activeElement;
+      return { ok: true };
+    });
+    const { editable } = enterReplacing(controller);
+    const input = typeEmbedUrl("https://example.com/new.png");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(controller.commands.setMediaBlockUrl).toHaveBeenCalled();
+    expect(activeAtApply).toBe(editable);
+  });
+
   it("Embed 탭 저장 버튼을 누르면 초점이 편집기로 돌아온다", () => {
     const { editable } = enterReplacing();
     typeEmbedUrl("https://example.com/new.png");

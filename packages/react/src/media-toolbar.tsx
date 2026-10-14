@@ -544,8 +544,8 @@ export const MediaToolbar = ({
     clipExempt: moreMenuOpen,
   });
   const focusEditor = useFocusEditor(element);
-  // finishReplacing·startReplaceUpload가 menuRef·focusEditor를 deps로 읽는다.
-  // 그 두 콜백보다 앞에서 선언해야 deps 배열이 TDZ 오류를 내지 않는다(Issue #408).
+  // startReplaceUpload가 menuRef·focusEditor를 deps로 읽는다. 그 콜백보다 앞에서
+  // 선언해야 deps 배열이 TDZ 오류를 내지 않는다(Issue #408).
 
   // Upload 성공(pending null)·Embed URL 적용 성공 공용 — url/name이 실제로
   // 바뀌었으므로 finishEditing처럼 로컬 캐시 값을 재사용하지 않고 core를
@@ -553,10 +553,11 @@ export const MediaToolbar = ({
   // 다른 상태로 나갔으면(Cancel 등) 손대지 않는다 — updateFromSelection과
   // 같은 판정을 여기 인라인한다(updateFromSelection을 setState 콜백 안에서
   // 부르면 안 돼 직접 푼다).
-  // 다음 상태는 업데이터 밖에서 계산한다(Issue #408). 호출부가 반환값(view로
-  // 돌아갔는가)으로 초점 이동을 정한다. 업데이터는 core를 읽지 않고 미리 계산한
-  // 값을 고를 뿐이다(editingRef 해제만 예외다). 미디어 블록이 사라져 closed가
-  // 되면 false다. 돌아갈 편집 위치가 없어 초점을 옮기지 않는다.
+  // 다음 상태는 업데이터 밖에서 계산한다(Issue #408). 업로드 성공 분기가 반환값
+  // (view로 돌아갔는가)으로 초점 이동을 정한다. Embed 저장은 적용 전에 옮기므로
+  // 반환값을 쓰지 않는다. 업데이터는 core를 읽지 않고 미리 계산한 값을 고를 뿐이다
+  // (editingRef 해제만 예외다). 미디어 블록이 사라져 closed가 되면 false다.
+  // 돌아갈 편집 위치가 없어 초점을 옮기지 않는다.
   // 호출부는 mode가 replacing이고 blockId가 같을 때만 부른다. 업데이터의 같은
   // 판정은 렌더 사이 경합을 막는 이중 안전장치다.
   const finishReplacing = useCallback(
@@ -709,17 +710,24 @@ export const MediaToolbar = ({
   const applyReplaceUrl = () => {
     if (toolbarState.mode !== "replacing") return;
     const { blockId, draft, kind } = toolbarState;
+    // 저장은 사용자가 툴바에서 직접 낸 결정이라 초점 가드 없이 편집기로 돌려보낸다
+    // (Issue #408). 적용 전에 옮긴다. 입력에 초점이 있는 채로 문서를 바꾸고 옮기면
+    // Chromium이 DOM selection을 미디어 블록 다음 문단으로 옮겨 PM selection이 따라가고
+    // 툴바가 닫힌다(실측). 적용 전에는 PM이 포커스된 채 selection을 DOM에 쓴다.
+    // replacing 중 editingRef는 이미 true라 이 이동의 selectionchange가 재조회하지 않는다.
+    // 미디어 블록이 이미 사라졌으면(selection 이탈) 돌아갈 편집 위치가 없어 옮기지 않는다.
+    if (editor.getSelectionMediaBlock()?.blockId === blockId) focusEditor();
     const result = applyMediaUrl(editor, { blockId, kind, draft }, dictionary);
     if (!result.ok) {
       const { rejectedMessage } = result;
       setToolbarState((prev) =>
         prev.mode === "replacing" ? { ...prev, rejectedMessage } : prev,
       );
+      // 거절 문구를 읽고 URL을 고치도록 초점을 입력으로 되돌린다.
+      replaceUrlInputRef.current?.focus();
       return;
     }
-    // 저장 성공은 사용자가 툴바에서 직접 낸 결정이라 초점 가드 없이 편집기로
-    // 돌려보낸다(Issue #408). 미디어가 사라져 closed가 되면 옮기지 않는다.
-    if (finishReplacing(blockId)) focusEditor();
+    finishReplacing(blockId);
   };
 
   // uploading 중이면 먼저 abort하고, 상태와 무관하게 교체 전 값(로컬에

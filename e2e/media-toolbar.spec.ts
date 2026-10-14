@@ -1155,3 +1155,72 @@ test("교체 모드에서 toolbar 안의 탭을 클릭해도 모드가 닫히지
     "true",
   );
 });
+
+// Issue #408 — 교체 모드의 Embed 저장 뒤 초점이 편집기로 돌아오고 툴바와 선택이 남는다.
+// 입력에 초점이 있는 채로 문서를 바꾼 뒤 초점을 옮기면 Chromium이 DOM selection을
+// 미디어 블록 다음 문단으로 옮겨 툴바가 닫혔다. 사람 속도 keyup이 닫힘을 드러낸다.
+test("교체 모드에서 Embed URL을 Enter로 저장하면 초점이 편집기로 돌아오고 toolbar가 남는다 (#408)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
+  const input = page.getByRole("textbox", { name: /URL/ });
+  await input.fill("https://example.com/new.png");
+
+  await input.press("Enter", { delay: 120 });
+
+  const toolbar = page.getByRole("toolbar", { name: "Media toolbar" });
+  await expect(page.getByRole("tablist")).not.toBeVisible();
+  await expect(editable).toBeFocused();
+  await page.waitForTimeout(400);
+  await expect(toolbar).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeVisible();
+  await expect(editable).toBeFocused();
+});
+
+test("교체 모드에서 Embed 저장 버튼을 누르면 초점이 편집기로 돌아오고 다음 키 입력 뒤에도 toolbar가 남는다 (#408)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
+  await page
+    .getByRole("textbox", { name: /URL/ })
+    .fill("https://example.com/new.png");
+
+  await page.getByRole("button", { name: "Save URL" }).click();
+  await expect(editable).toBeFocused();
+  await page.waitForTimeout(600);
+  await page.keyboard.press("Shift");
+  await page.waitForTimeout(300);
+
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+  await expect(editable).toBeFocused();
+});
+
+test("교체 모드에서 거절된 Embed URL은 교체 모드를 유지하고 초점이 URL 입력에 남는다 (#408)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
+  const input = page.getByRole("textbox", { name: /URL/ });
+  await input.fill("not a url");
+
+  await input.press("Enter", { delay: 120 });
+  await page.waitForTimeout(400);
+
+  await expect(page.getByRole("tablist")).toBeVisible();
+  await expect(input).toBeFocused();
+});
