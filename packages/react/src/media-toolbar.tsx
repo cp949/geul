@@ -580,6 +580,34 @@ export const MediaToolbar = ({
     [editor, element],
   );
 
+  // 초점을 편집기로 옮기기 전에 DOM selection을 미디어 블록 범위로 돌려 둔다
+  // (Issue #417). DOM selection이 편집기 밖(툴바 입력)에 있으면 focus()가 캐럿을
+  // 첫 위치로 옮겨, 미디어 다음 문단의 TextSelection으로 바뀌고 툴바가 닫힌다.
+  // 조건은 activeElement가 아니라 selection 위치라 검사하지 않고 항상 쓴다.
+  const selectMediaBlockInDom = useCallback(
+    (blockId: string) => {
+      const blockElement =
+        element === null
+          ? null
+          : findElementByAttribute(
+              element,
+              null,
+              "data-geul-block-id",
+              blockId,
+            );
+      const parent = blockElement?.parentNode ?? null;
+      if (blockElement === null || parent === null) return;
+      const index = Array.prototype.indexOf.call(
+        parent.childNodes,
+        blockElement,
+      );
+      blockElement.ownerDocument
+        .getSelection()
+        ?.setBaseAndExtent(parent, index, parent, index + 1);
+    },
+    [element],
+  );
+
   // Upload/Replace 공용 — 파일 선택 직후와 retry 둘 다 이 함수로 들어온다
   // (RD-003.md "결정" 그대로 — Promise를 직접 await해 loading→성공/실패/
   // 취소를 로컬 state로 반영, file-panel.tsx startUpload와 같은 패턴).
@@ -641,29 +669,7 @@ export const MediaToolbar = ({
         active === ownerDocument?.body ||
         (menuRef.current?.contains(active) ?? false);
       if (finishReplacing(blockId) && focusIdle) {
-        // DOM selection이 편집기 밖(툴바 입력)에 있으면 focus()가 캐럿을 첫 위치로
-        // 옮겨, 미디어 다음 문단의 TextSelection으로 바뀌고 툴바가 닫힌다(Issue #417).
-        // 초점 이동 전에 selection을 미디어 블록 범위로 돌려 둔다. activeElement가
-        // 아니라 selection 위치가 조건이라 검사하지 않고 항상 쓴다.
-        const blockElement =
-          element === null
-            ? null
-            : findElementByAttribute(
-                element,
-                null,
-                "data-geul-block-id",
-                blockId,
-              );
-        const parent = blockElement?.parentNode ?? null;
-        if (blockElement !== null && parent !== null) {
-          const index = Array.prototype.indexOf.call(
-            parent.childNodes,
-            blockElement,
-          );
-          ownerDocument
-            ?.getSelection()
-            ?.setBaseAndExtent(parent, index, parent, index + 1);
-        }
+        selectMediaBlockInDom(blockId);
         focusEditor();
       }
     },
@@ -673,6 +679,7 @@ export const MediaToolbar = ({
       dictionary.status.uploadCouldNotStart,
       finishReplacing,
       menuRef,
+      selectMediaBlockInDom,
       focusEditor,
     ],
   );
@@ -767,6 +774,7 @@ export const MediaToolbar = ({
     editingRef.current = true;
     // finishEditing과 같은 순서다. 초점 이동이 만드는 selectionchange가 재조회와
     // 경합하지 않게 editingRef를 세운 뒤 옮긴다(Issue #408).
+    selectMediaBlockInDom(toolbarState.blockId);
     focusEditor();
     // moreMenu는 "replacing" 진입 시점에 이미 위 감시 useEffect로 닫혀
     // 있었고(더보기 트리거가 view 모드에서만 렌더돼 그 사이 다시 열릴 수

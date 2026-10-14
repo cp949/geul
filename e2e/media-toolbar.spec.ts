@@ -1262,6 +1262,33 @@ const expectSelectionStaysOnMedia = async (page: Page, editable: Locator) => {
   expect(anchorInEditor).toBe(true);
 };
 
+/**
+ * 교체 취소 뒤 초점·선택·toolbar를 확인한다(Issue #417). 사람 속도 keyup이
+ * 닫힘을 드러내므로 대기 뒤 Shift를 누른다. 교체 모드가 끝나 `More media options`가
+ * 다시 보이면 view로 돌아온 것이다.
+ */
+const expectSelectionStaysOnMediaAfterCancel = async (
+  page: Page,
+  editable: Locator,
+) => {
+  await expect(editable).toBeFocused();
+  await page.waitForTimeout(400);
+  await page.keyboard.press("Shift");
+  await page.waitForTimeout(300);
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "More media options" }),
+  ).toBeVisible();
+  await expect(editable).toBeFocused();
+  const anchorInEditor = await editable.evaluate((node) => {
+    const anchor = node.ownerDocument.getSelection()?.anchorNode ?? null;
+    return anchor !== null && node.contains(anchor);
+  });
+  expect(anchorInEditor).toBe(true);
+};
+
 // Issue #417 — 업로드 대기 중 Embed 탭 URL 입력을 클릭하면 DOM selection이 입력에
 // 남는다. 성공 뒤 focus()가 캐럿을 미디어 다음 문단 첫 위치로 옮겨 NodeSelection이
 // TextSelection으로 바뀌고 툴바가 닫혔다. 사람 속도 keyup이 닫힘을 드러낸다.
@@ -1300,4 +1327,37 @@ test("교체 업로드 대기 중 초점이 body에 있어도 성공 뒤 toolbar
   await startReplaceUpload(page);
 
   await expectSelectionStaysOnMedia(page, editable);
+});
+
+// Issue #417 — Embed 입력을 클릭하면 DOM selection이 입력에 남는다. 이 상태로 Cancel
+// 버튼이나 Escape가 초점을 편집기로 옮기면 캐럿이 미디어 다음 문단 첫 위치로 가서
+// NodeSelection이 TextSelection으로 바뀌고 toolbar가 닫혔다.
+test("Embed 입력을 클릭한 뒤 Cancel 버튼으로 취소해도 초점이 편집기에 있고 toolbar가 남는다 (#417)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
+  await page.getByRole("textbox", { name: /URL/ }).click();
+
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await expectSelectionStaysOnMediaAfterCancel(page, editable);
+});
+
+test("Embed 입력을 클릭한 뒤 Escape로 취소해도 초점이 편집기에 있고 toolbar가 남는다 (#417)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  await page.getByRole("tab", { name: "Embed" }).click();
+  await page.getByRole("textbox", { name: /URL/ }).click();
+
+  await page.keyboard.press("Escape", { delay: 120 });
+
+  await expectSelectionStaysOnMediaAfterCancel(page, editable);
 });
