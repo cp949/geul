@@ -61,6 +61,12 @@ export const importMarkdown = (
   options?: { createId?: IdFactory },
 ): Result<ImportSuccess, ImportError> => {
   try {
+    // 선두 BOM(U+FEFF)을 입력 단계에서 전부 한 번에 뗀다(Issue #421).
+    // - remark는 입력의 선두 BOM을 하나 떼고 파싱해 position.offset이 그 기준이다.
+    // - 원본을 받은 가드와 offset 기반 후처리는 BOM 개수만큼 어긋난다.
+    // - 하나만 떼면 남은 BOM을 remark가 또 떼서 다시 어긋난다.
+    const markdownSource = source.replace(/^\uFEFF+/, "");
+
     // remark-gfm의 list 파싱이 중첩 단수에 초선형(대략 3차)으로 느려져
     // depth 500부터 수 초, depth 1000은 30초 내 미종료로 CPU를 소진한다
     // (Issue #206). capMarkdownTreeDepth(아래)와 달리 손상이
@@ -68,7 +74,7 @@ export const importMarkdown = (
     // 뒤에야 실행되는 post-parse 방어로는 막을 수 없다 — 파서를 호출하기
     // 전에 원본 텍스트만 사전 스캔해 구조적으로 거절한다
     // (import-markdown-list-nesting-guard.ts).
-    if (markdownListNestingTooDeep(source)) {
+    if (markdownListNestingTooDeep(markdownSource)) {
       return {
         ok: false,
         error: {
@@ -84,7 +90,7 @@ export const importMarkdown = (
     // - CommonMark는 CR·CRLF·LF를 모두 줄 끝으로 정의한다.
     // - model은 LF 외 줄바꿈을 거절한다. 노드별 후처리는 빠뜨리기 쉽다.
     // - 길이가 바뀐다. offset을 읽는 후처리는 이 문자열을 받아야 한다.
-    const parsedSource = source
+    const parsedSource = markdownSource
       .replace(/\0/g, "\u0001")
       .replace(/\r\n?/g, "\n");
     const root = asMarkdownRoot(parseProcessor.parse(parsedSource));
