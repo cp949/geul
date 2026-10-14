@@ -1224,3 +1224,80 @@ test("교체 모드에서 거절된 Embed URL은 교체 모드를 유지하고 �
   await expect(page.getByRole("tablist")).toBeVisible();
   await expect(input).toBeFocused();
 });
+
+/**
+ * 교체 모드에서 파일을 골라 업로드를 시작한다(Issue #417). 데모 mock
+ * uploadFile이 300ms 뒤 성공하므로 `status`가 보인 직후 Embed 탭 조작을 끼워 넣을
+ * 수 있다. 성공은 호출부가 `img` src로 기다린다.
+ */
+const startReplaceUpload = async (page: Page) => {
+  await openMoreMenu(page);
+  await page.getByRole("menuitem", { name: "Replace file" }).click();
+  await page.getByLabel("Image file").setInputFiles("e2e/fixtures/new.png");
+  await expect(page.getByRole("status")).toBeVisible();
+};
+
+/**
+ * 업로드 성공 뒤 초점·선택·toolbar를 확인한다(Issue #417). 사람 속도 keyup이
+ * 닫힘을 드러내므로 대기 뒤 Shift를 누른다. DOM selection이 편집기 안에 있는지도
+ * 본다 — 툴바 입력에 남아 있던 selection이 결함의 원인이다.
+ */
+const expectSelectionStaysOnMedia = async (page: Page, editable: Locator) => {
+  await expect(editable.locator("img")).toHaveAttribute(
+    "src",
+    "https://example.com/uploads/new.png",
+  );
+  await expect(editable).toBeFocused();
+  await page.waitForTimeout(400);
+  await page.keyboard.press("Shift");
+  await page.waitForTimeout(300);
+  await expect(
+    page.getByRole("toolbar", { name: "Media toolbar" }),
+  ).toBeVisible();
+  await expect(editable).toBeFocused();
+  const anchorInEditor = await editable.evaluate((node) => {
+    const anchor = node.ownerDocument.getSelection()?.anchorNode ?? null;
+    return anchor !== null && node.contains(anchor);
+  });
+  expect(anchorInEditor).toBe(true);
+};
+
+// Issue #417 — 업로드 대기 중 Embed 탭 URL 입력을 클릭하면 DOM selection이 입력에
+// 남는다. 성공 뒤 focus()가 캐럿을 미디어 다음 문단 첫 위치로 옮겨 NodeSelection이
+// TextSelection으로 바뀌고 툴바가 닫혔다. 사람 속도 keyup이 닫힘을 드러낸다.
+test("교체 업로드 대기 중 Embed URL 입력을 클릭해도 성공 뒤 toolbar가 남는다 (#417)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await startReplaceUpload(page);
+
+  await page.getByRole("tab", { name: "Embed" }).click();
+  await page.getByRole("textbox", { name: /URL/ }).click();
+
+  await expectSelectionStaysOnMedia(page, editable);
+});
+
+test("Embed 입력을 클릭한 뒤 Upload 탭으로 돌아와도 업로드 성공 뒤 toolbar가 남는다 (#417)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await startReplaceUpload(page);
+
+  await page.getByRole("tab", { name: "Embed" }).click();
+  await page.getByRole("textbox", { name: /URL/ }).click();
+  await page.getByRole("tab", { name: "Upload" }).click();
+
+  await expectSelectionStaysOnMedia(page, editable);
+});
+
+test("교체 업로드 대기 중 초점이 body에 있어도 성공 뒤 toolbar가 남는다 (#417)", async ({
+  page,
+}) => {
+  const { editable } = await openDemo(page);
+  await insertFilledImage(page, editable);
+  await startReplaceUpload(page);
+
+  await expectSelectionStaysOnMedia(page, editable);
+});

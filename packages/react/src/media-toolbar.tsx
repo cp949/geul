@@ -21,6 +21,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { findElementByAttribute } from "./find-by-attribute.js";
 import { useFixedPlacement } from "./fixed-placement.js";
 import { IconButton } from "./icon-button.js";
 import { iconProps } from "./icon-props.js";
@@ -639,7 +640,32 @@ export const MediaToolbar = ({
         active === null ||
         active === ownerDocument?.body ||
         (menuRef.current?.contains(active) ?? false);
-      if (finishReplacing(blockId) && focusIdle) focusEditor();
+      if (finishReplacing(blockId) && focusIdle) {
+        // DOM selection이 편집기 밖(툴바 입력)에 있으면 focus()가 캐럿을 첫 위치로
+        // 옮겨, 미디어 다음 문단의 TextSelection으로 바뀌고 툴바가 닫힌다(Issue #417).
+        // 초점 이동 전에 selection을 미디어 블록 범위로 돌려 둔다. activeElement가
+        // 아니라 selection 위치가 조건이라 검사하지 않고 항상 쓴다.
+        const blockElement =
+          element === null
+            ? null
+            : findElementByAttribute(
+                element,
+                null,
+                "data-geul-block-id",
+                blockId,
+              );
+        const parent = blockElement?.parentNode ?? null;
+        if (blockElement !== null && parent !== null) {
+          const index = Array.prototype.indexOf.call(
+            parent.childNodes,
+            blockElement,
+          );
+          ownerDocument
+            ?.getSelection()
+            ?.setBaseAndExtent(parent, index, parent, index + 1);
+        }
+        focusEditor();
+      }
     },
     [
       editor,
