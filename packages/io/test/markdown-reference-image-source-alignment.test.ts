@@ -7,7 +7,7 @@
  *   - 불일치하면 노드 전체가 경고 없이 물러나 `![a][x]`가 원문으로 남았다.
  * - 지금은 `import-markdown-source-alignment.ts`가 값과 소스를 글자 단위로 맞춘다.
  *   - 소스에 글자 그대로 있는 글자만 남긴 마스크 위에서 `!`, `[`, `]`를 구조로 읽는다.
- * 단언은 열 가지다.
+ * 단언은 열세 가지다.
  * - 이슈 재현 세 입력이 `a [x]`와 `IMAGE_DOWNGRADED` 경고 1건을 낸다.
  * - 오라클: 컨테이너 안 결과가 컨테이너 없는 같은 내용의 결과와 텍스트·경고 종류가 같다.
  * - 구조 문자는 소스에 글자 그대로일 때만 구조다. alt·식별자 안의 이스케이프·문자 참조는 허용한다.
@@ -20,6 +20,9 @@
  * - 정렬 성공: 행렬의 모든 text 노드에서 정렬기가 `undefined`를 내지 않는다.
  *   극단 입력(걸음 수 예산을 넘는 이름형 참조 연쇄, 위치 없는 text)은 `undefined`일 수 있다.
  * - 유계성: `&amp;` 2만 개와 1만 줄 인용을 `RangeError` 없이 처리한다.
+ * - 글자 그대로인 `>`: 들여쓰기 4칸 이상의 이어짐 줄은 값에 `>`가 남는다. 접두사 `>`와 구별해 맞춘다.
+ * - 체크박스만 있는 작업 목록 첫 줄: 다음 줄 text의 시작 위치가 밀려도 맞춘다.
+ * - 마지막 매치 뒤 text와 숫자 참조 경계: 풀린 글자를 쓰고, 파서와 같은 규칙으로 푼다.
  */
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
@@ -435,6 +438,95 @@ describe("끊어진 참조 이미지 소스 정렬: 줄바꿈 문자 참조", ()
 
     expect(result.texts).toEqual([text]);
     expect(result.kinds).toEqual(Array(warnings).fill("IMAGE_DOWNGRADED"));
+  });
+});
+
+describe("끊어진 참조 이미지 소스 정렬: 글자 그대로인 `>`로 시작하는 이어짐 줄", () => {
+  // 들여쓰기 4칸 이상의 `>` 줄은 인용이 아니라 문단 이어짐이다. 값에 `>`가 글자 그대로 남는다.
+  it.each([
+    ["4칸 들여쓴 이어짐 줄", "a ![x][y]\n    > b\n", "a x [y]\n> b"],
+    [
+      "인용 안 4칸 들여쓴 이어짐 줄",
+      "> a ![x][y]\n>     > b\n",
+      "a x [y]\n> b",
+    ],
+    ["목록 안 이어짐 줄", "- a ![x][y]\n  b\n      > c\n", "a x [y]\nb\n> c"],
+    ["이스케이프된 `>`는 이전처럼", "a ![x][y]\n  \\> b\n", "a x [y]\n> b"],
+    ["문자 참조 `&gt;`는 이전처럼", "a ![x][y]\n  &gt; b\n", "a x [y]\n> b"],
+  ])("%s", (_name, source, text) => {
+    const result = summarize(source);
+
+    expect(result.texts).toEqual([text]);
+    expect(result.kinds).toEqual(["IMAGE_DOWNGRADED"]);
+  });
+
+  it.each([
+    ["4칸 들여쓴 이어짐 줄", "a\n> b", "a\n    > b", "a\n> b"],
+    ["인용 접두사 뒤 글자 그대로인 `>`", "a\n> b", "a\n>     > b", "a\n> b"],
+    ["접두사 `>`와 이스케이프된 `>`", "a\n> b", "a\n> \\> b", `a\n${M} b`],
+  ])("정렬기: %s", (_name, value, raw, mask) => {
+    expect(alignTextToSource(value, raw)).toBe(mask);
+  });
+});
+
+describe("끊어진 참조 이미지 소스 정렬: 체크박스만 있는 작업 목록 첫 줄", () => {
+  // remark-gfm이 체크박스를 떼면 다음 줄 text의 시작 위치가 들여쓰기 안쪽으로 밀린다.
+  it.each([
+    ["체크박스 뒤 공백", "- [ ] \n  ![a][x]\n"],
+    ["체크박스 바로 뒤 줄바꿈", "- [ ]\n  ![a][x]\n"],
+    ["체크박스 뒤 공백과 탭", "- [ ] \t\n  ![a][x]\n"],
+    ["체크한 항목", "- [x] \n  ![a][x]\n"],
+  ])("%s", (_name, source) => {
+    const result = summarize(source);
+
+    expect(result.texts).toEqual(["a [x]"]);
+    expect(result.kinds).toEqual(["IMAGE_DOWNGRADED"]);
+  });
+
+  it("체크박스 뒤 줄에 글자가 앞서도 맞춘다", () => {
+    const result = summarize("- [ ] \n  b ![a][x]\n");
+
+    expect(result.texts).toEqual(["b a [x]"]);
+    expect(result.kinds).toEqual(["IMAGE_DOWNGRADED"]);
+  });
+
+  it("시작이 값의 공백이면 소스의 공백을 건너뛰지 않는다", () => {
+    expect(alignTextToSource(" b", " b")).toBe(" b");
+    expect(alignTextToSource("b", "   b")).toBe("b");
+  });
+});
+
+describe("끊어진 참조 이미지 소스 정렬: 마지막 매치 뒤 text와 숫자 참조 경계", () => {
+  it("마지막 참조 뒤 text의 이스케이프·문자 참조는 풀린 글자다", () => {
+    const result = summarize("![a][x] a\\*b &amp; c\n");
+
+    expect(result.texts).toEqual(["a [x] a*b & c"]);
+    expect(result.texts.join("")).not.toContain(M);
+  });
+
+  it.each([
+    ["대문자 X 16진", "A", "&#X41;", M],
+    ["16진 6자리 비문자 `&#x10FFFE;`는 U+FFFD", "\uFFFD", "&#x10FFFE;", M],
+    ["16진 7자리는 참조가 아니다", "&#x1234567;", "&#x1234567;", "&#x1234567;"],
+    ["10진 8자리는 참조가 아니다", "&#12345678;", "&#12345678;", "&#12345678;"],
+    ["10진 7자리", "\uFFFD", "&#1114112;", M],
+    ["탭 `&#9;`", "\t", "&#9;", M],
+    ["수직 탭 `&#11;`은 U+FFFD", "\uFFFD", "&#11;", M],
+    ["제어 `&#14;`는 U+FFFD", "\uFFFD", "&#14;", M],
+    ["제어 `&#31;`은 U+FFFD", "\uFFFD", "&#31;", M],
+    ["공백 `&#32;`", " ", "&#32;", M],
+    ["DEL `&#127;`은 U+FFFD", "\uFFFD", "&#127;", M],
+    ["C1 끝 `&#159;`는 U+FFFD", "\uFFFD", "&#159;", M],
+    ["`&#160;`는 NBSP", "\u00A0", "&#160;", M],
+    ["비문자 `&#xFDD0;`은 U+FFFD", "\uFFFD", "&#xFDD0;", M],
+    ["비문자 `&#xFDEF;`는 U+FFFD", "\uFFFD", "&#xFDEF;", M],
+    ["비문자 `&#xFDF0;`는 문자", "\uFDF0", "&#xFDF0;", M],
+    ["비문자 `&#xFFFE;`는 U+FFFD", "\uFFFD", "&#xFFFE;", M],
+    ["비문자 `&#x1FFFF;`는 U+FFFD", "\uFFFD", "&#x1FFFF;", M],
+    ["서로게이트 경계 `&#xDFFF;`", "\uFFFD", "&#xDFFF;", M],
+    ["서로게이트 앞 `&#xD7FF;`", "\uD7FF", "&#xD7FF;", M],
+  ])("숫자 참조 경계: %s", (_name, value, raw, mask) => {
+    expect(alignTextToSource(value, raw)).toBe(mask);
   });
 });
 

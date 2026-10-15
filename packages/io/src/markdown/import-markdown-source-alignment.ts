@@ -22,13 +22,19 @@
 // - 값의 `\n`은 소스 줄바꿈이거나 문자 참조(`&#10;`, `&NewLine;`)다. 참조면 표식 자리다.
 // - 값의 `\n` 직전: 소스의 공백·탭을 건너뛴다(줄끝 공백).
 // - 값의 `\n` 직후: 소스의 공백·탭·`>`를 건너뛴다(컨테이너 접두사, 줄머리 공백).
-//   값의 글자 `>`는 `\>`나 `&gt;`로만 소스에 온다. 둘 다 `>`로 시작하지 않는다.
+//   - 다음 값 글자가 `>`가 아니면 접두사를 끝까지 건너뛴다.
+//   - 다음 값 글자가 `>`면 갈래다. `>`는 `\>`·`&gt;`에서 올 수 있고,
+//     들여쓰기 4칸 이상의 이어짐 줄에서는 글자 그대로일 수도 있다(`    > b`).
+//     접두사 끝에서 먼저 시도하고, 안 맞으면 접두사 속 `>`를 뒤에서부터 글자 그대로로 본다.
+// - 값의 시작: 값이 공백·탭으로 시작하지 않으면 소스 시작의 공백·탭을 건너뛴다.
+//   remark-gfm이 체크박스만 있는 작업 목록 첫 줄을 떼면 다음 줄 text의 시작 위치가 들여쓰기 쪽으로 밀린다.
 // - 그 밖은 정렬 불능이다. 소스나 값이 남아도 정렬 불능이다. `undefined`를 낸다.
 // 구현 메모:
-// - 갈래는 `&` 한 곳뿐이다. 되돌림은 명시적 스택이다. 재귀를 쓰지 않는다.
+// - 갈래는 `&`와, 값 `\n` 뒤 `>`의 두 곳이다. 되돌림은 명시적 스택이다. 재귀를 쓰지 않는다.
 // - 갈래 상태 (소스 위치, 값 위치)는 한 번만 탐색한다. 실패한 상태를 다시 보지 않는다.
 // - 그래도 어긋난 갈래가 끝까지 이어지면 탐색이 입력 길이의 제곱에 가까워진다.
-//   (예: 두 코드포인트 참조 `&NotEqualTilde;`만 수만 번 이은 입력)
+//   (실측: `&NotEqualTilde;`만 이은 입력은 91번, 알 수 없는 이름 `&foo;`만 이은 입력은 12번에서 예산을 넘는다.
+//   사이에 공백이 끼면 10만 번도 넘지 않는다.)
 //   그래서 걸음 수 예산을 둔다. 넘으면 정렬 불능으로 본다.
 // - 마스크는 걸어온 길의 모든 자리를 다시 쓴다. 되돌린 갈래의 표식이 남지 않는다.
 
@@ -117,6 +123,21 @@ const skipWhile = (raw: string, from: number, chars: string): number => {
   return index;
 };
 
+/**
+ * 값의 `\n` 뒤에서 소스가 접두사를 건너뛴 뒤 설 수 있는 자리들. 먼저 시도할 순서다.
+ * 첫 자리는 접두사 끝이다. `greater`면 접두사 속 `>`의 바로 앞이 뒤에서부터 이어진다.
+ */
+const prefixStops = (raw: string, from: number, greater: boolean): number[] => {
+  const end = skipWhile(raw, from, " \t>");
+  const stops = [end];
+  if (greater) {
+    for (let index = end - 1; index >= from; index -= 1) {
+      if (raw.charAt(index) === ">") stops.push(index);
+    }
+  }
+  return stops;
+};
+
 export const alignTextToSource = (
   value: string,
   raw: string,
@@ -128,6 +149,9 @@ export const alignTextToSource = (
   let rawIndex = 0;
   let valueIndex = 0;
   let option = 0;
+  if (value !== "" && !" \t".includes(value.charAt(0))) {
+    rawIndex = skipWhile(raw, 0, " \t");
+  }
   let budget = STEP_BUDGET_PER_UNIT * (raw.length + value.length) + 64;
 
   for (;;) {
@@ -148,10 +172,26 @@ export const alignTextToSource = (
       const lineEnd =
         valueChar === "\n" ? skipWhile(raw, rawIndex, " \t") : rawIndex;
       if (valueChar === "\n" && raw.charAt(lineEnd) === "\n") {
-        rawIndex = skipWhile(raw, lineEnd + 1, " \t>");
-        mask[valueIndex] = valueChar;
-        valueIndex += 1;
-        option = 0;
+        const stops = prefixStops(
+          raw,
+          lineEnd + 1,
+          value.charAt(valueIndex + 1) === ">",
+        );
+        const stateKey = rawIndex * stride + valueIndex;
+        if (stops.length > 1 && option === 0 && explored.has(stateKey)) {
+          failed = true;
+        } else if (option >= stops.length) {
+          failed = true;
+        } else {
+          if (stops.length > 1) explored.add(stateKey);
+          if (option + 1 < stops.length) {
+            branches.push({ rawIndex, valueIndex, option: option + 1 });
+          }
+          rawIndex = stops[option] ?? rawIndex;
+          mask[valueIndex] = valueChar;
+          valueIndex += 1;
+          option = 0;
+        }
       } else if (
         rawChar === "\\" &&
         isAsciiPunctuation(raw.charAt(rawIndex + 1)) &&
