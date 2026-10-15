@@ -9,7 +9,9 @@
 // - 식별자(collapsed·shortcut은 alt)에 이스케이프·문자 참조가 있으면 정의로 해석하지 않는다.
 //   CommonMark는 라벨을 디코딩 전 원문으로 대조한다. 풀어 쓴 글자로 대조하면 안 된다.
 // - 맞출 수 없으면 노드를 그대로 둔다. 일반 입력에서는 닿지 않고,
-//   걸음 수 예산을 넘는 이름형 참조 연쇄나 위치 없는 text 같은 극단 입력에서만 닿는다.
+//   걸음 수 예산을 넘는 이름형 참조 연쇄 같은 극단 입력에서만 닿는다.
+// - 파서가 만든 text는 모두 `position`이 있다. gfm-parse-processor.ts가 위치를 잃게 하던
+//   autolink literal 변환을 끈다(Issue #423). 위치 없는 text는 안전망으로만 다룬다.
 import {
   type MarkdownNode,
   type MarkdownRoot,

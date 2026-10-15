@@ -6,12 +6,10 @@
 // 참조 해석, table/paragraph 판정, 상호재귀 블록 변환)은 같은 디렉터리의
 // import-markdown-*.ts로 분리했다.
 import { type IdFactory, parseDocument } from "@cp949/geul-model";
-import remarkGfm from "remark-gfm";
-import remarkParse from "remark-parse";
-import { unified } from "unified";
 
 import type { ImportError } from "../errors.js";
 import type { Result } from "../result.js";
+import { parseProcessor } from "./gfm-parse-processor.js";
 import { documentFromRoot } from "./import-markdown-blocks.js";
 import {
   createDefaultIdFactory,
@@ -39,8 +37,6 @@ export type {
   ImportSuccess,
   ImportWarning,
 } from "./import-markdown-warnings.js";
-
-const parseProcessor = unified().use(remarkParse).use(remarkGfm);
 
 const asMarkdownRoot = (node: unknown): MarkdownRoot | undefined => {
   if (

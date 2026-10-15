@@ -116,7 +116,7 @@ describe("맨몸 literal 가져오기", () => {
     ]);
   });
 
-  it("이스케이프가 낀 literal은 position 없는 link 경로여도 평문이다", () => {
+  it("이스케이프가 낀 literal도 평문이다", () => {
     expect(importedRuns("see https\\://a.com now")).toEqual([
       { text: "see https://a.com now" },
     ]);

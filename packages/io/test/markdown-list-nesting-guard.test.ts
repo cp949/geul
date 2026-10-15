@@ -21,7 +21,7 @@
  *    도달하지 않고 조기 반환됨을 spy로 결정적으로 확인한다.
  *
  * unified()를 모듈째 감싸 프로세서의 parse 메서드 호출 횟수를 센다.
- * import-markdown.ts의 parseProcessor는 모듈 최초 로드 시 `unified()`를
+ * gfm-parse-processor.ts의 parseProcessor는 모듈 최초 로드 시 `unified()`를
  * 한 번 호출해 만든 싱글턴이라, 이 mock이 그 생성 호출을 가로채 반환하는
  * 프로세서 인스턴스에 parse를 감싸 두면 이후 모든 importMarkdown() 호출이
  * 같은 인스턴스의 parse를 거친다 — remark-parse 내부 구현(plugin이

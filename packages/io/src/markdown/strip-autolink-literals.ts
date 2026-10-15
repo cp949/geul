@@ -4,10 +4,10 @@
 // - remark-gfm 4.0.1에 literal만 끄는 옵션이 없다. parse 뒤 트리를 후처리한다.
 // - 판별은 소스 첫 글자다. 명시 링크는 `[`, `<url>`은 `<`로 시작한다.
 //   literal은 그 외 글자로 시작한다.
-// - 함정: literal이 `position` 없이 만들어지는 경로가 있다. 이스케이프(`https\://`)나
-//   NBSP가 끼면 micromark 토큰이 아니라 mdast-util-gfm-autolink-literal의
-//   변환이 text를 쪼개 link를 만든다. 그 link는 `position`이 없다.
-//   parser가 만든 명시 링크는 항상 `position`이 있다. 없으면 literal로 본다.
+// - 이스케이프(`https\://`)나 NBSP가 낀 literal은 파서 변환이 아니라 평문 text로 남는다.
+//   gfm-parse-processor.ts가 mdast-util-gfm-autolink-literal의 `transforms`를 끈다(Issue #423).
+//   그 변환이 만든 link와 쪼개진 text는 `position`이 없었다.
+// - 파서가 만든 link는 항상 `position`이 있다. 없으면 literal로 보는 분기는 안전망으로 둔다.
 // - literal link의 자식은 text 하나다. link를 자식으로 치환하면 글자는 그대로다.
 //   인접 text 병합은 이후 인라인 변환이 맡는다.
 // - `source`는 parse에 넣은 문자열과 같아야 한다. offset이 그 문자열 기준이다.
