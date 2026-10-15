@@ -14,6 +14,8 @@ export type MarkdownNode = {
   url?: string;
   alt?: string;
   identifier?: string;
+  /** 정의로 해석하지 않는다. 라벨에 이스케이프·문자 참조가 있어 원문이 어떤 정의와도 맞지 않는 참조다(Issue #422). */
+  skipDefinition?: boolean;
   align?: Array<"left" | "right" | "center" | null>;
   ordered?: boolean;
   start?: number | null;
