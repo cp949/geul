@@ -1,11 +1,13 @@
 /**
  * Markdown 가져오기 파서가 위치 없는 text·link를 만들지 않는지 검증한다(Issue #423).
  * - remark-gfm의 autolink literal 변환(`transforms`)은 이스케이프 URL·NBSP·`\@`가 낀 text를 쪼갠다.
+ *   정의 없는 참조 대괄호 안의 맨몸 literal(`[www.x.com][d]`)도 같은 변환이 쪼갠다.
  * - 쪼개진 text와 link는 `position`을 잃는다. 소스와 글자 단위로 맞출 수 없다.
  * - 그래서 같은 text에 있는 끊어진 참조 이미지 `![a][x]`가 평문으로 내려가지 않았다.
  * - `gfm-parse-processor.ts`가 그 변환만 끈다. literal은 어차피 평문으로 되돌린다.
- * 단언은 네 가지다.
+ * 단언은 다섯 가지다.
  * - 이슈 재현 두 입력이 `a [x]`와 `IMAGE_DOWNGRADED` 경고를 낸다.
+ * - 끊어진 참조 대괄호 안 맨몸 literal 뒤 참조 이미지도 평문 `a [a]`와 경고 1건을 낸다.
  * - 행렬: literal 3종 × 컨테이너 6종에서 `<literal> ![a][x]`가 `<literal> a [x]`와 경고 1건을 낸다.
  *   컨테이너 안 결과는 컨테이너 없는 문단 결과와 텍스트가 같다.
  * - 불변식: 파서 출력 트리에 `position`이 없는 text·link 노드가 0개다. remark-gfm 구조가 바뀌어
@@ -138,6 +140,18 @@ describe("literal 변환 위치: 이슈 재현", () => {
   });
 });
 
+describe("literal 변환 위치: 끊어진 참조 대괄호 안 맨몸 literal", () => {
+  it.each([
+    ["[www.x.com][d] ![a][]\n", "[www.x.com][d] a [a]"],
+    ["[x www.x.com] ![a][]\n", "[x www.x.com] a [a]"],
+  ])("%j의 참조 이미지가 평문이고 경고 1건이다", (source, expected) => {
+    const { texts, kinds } = summarize(source);
+
+    expect(texts).toEqual([expected]);
+    expect(kinds).toEqual(["IMAGE_DOWNGRADED"]);
+  });
+});
+
 describe("literal 변환 위치: 컨테이너 × literal 행렬", () => {
   it.each(MATRIX)(
     "%s 안 %s 뒤 끊어진 참조 이미지가 `a [x]`와 경고 1건이다",
@@ -173,6 +187,8 @@ describe("literal 변환 위치: 위치 없는 노드 불변식", () => {
   const sources = [
     "https\\://a.com ![a][x]",
     "> https\\://a.com ![a][x]\n> ![b][y]",
+    "[www.x.com][d] ![a][]\n",
+    "[x www.x.com] ![a][]\n",
     ...MATRIX.map(([, , container, literal]) =>
       container.wrap(`${literal.source} ![a][x]`),
     ),

@@ -142,11 +142,13 @@ export const documentVisibleText = (document: Document): string => {
 };
 
 /**
- * remark-parse + remark-gfm 기본 구성의 독립 파서다. import-markdown.ts가 쓰는
- * gfm-parse-processor.ts와 달리 autolink literal 변환(Issue #423)을 끄지 않는다. capMarkdownTreeDepth(import-markdown-tree-depth.ts) 단위 테스트가
- * own-traversal·own-cap을 거치지 않은 raw mdast 트리를 직접 얻는 데 쓴다 —
- * import-markdown.ts는 이 파서를 export하지 않는다(공개 진입점은
- * importMarkdown 하나뿐이라는 설계, G-CNV-001).
+ * remark-parse + remark-gfm 기본 구성의 독립 파서다.
+ * - import-markdown.ts가 쓰는 gfm-parse-processor.ts와 달리
+ *   autolink literal 변환(Issue #423)을 끄지 않는다.
+ * - capMarkdownTreeDepth(import-markdown-tree-depth.ts) 단위 테스트가
+ *   own-traversal·own-cap을 거치지 않은 raw mdast 트리를 직접 얻는 데 쓴다.
+ * - import-markdown.ts는 이 파서를 export하지 않는다.
+ *   공개 진입점은 importMarkdown 하나뿐이라는 설계다(G-CNV-001).
  */
 const rawParseProcessor = unified().use(remarkParse).use(remarkGfm);
 

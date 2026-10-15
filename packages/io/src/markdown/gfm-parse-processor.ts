@@ -1,6 +1,7 @@
 // importMarkdown이 쓰는 remark 파서. remark-gfm의 autolink literal mdast 변환만 끈다(Issue #423).
 // - remark-gfm은 text를 쪼개 link를 만드는 `transforms`를 가진다.
 //   - 대상은 이스케이프(`https\://a.com`)·NBSP·`\@`가 낀 text다.
+//   - 정의 없는 참조 대괄호 안의 맨몸 literal(`[www.x.com][d]`)도 쪼갠다.
 //   - 쪼개진 text와 link는 `position`을 잃는다.
 // - 위치 없는 text는 소스와 글자 단위로 맞출 수 없다.
 //   - 끊어진 참조 이미지(`![a][x]`)가 같은 text에 있으면 평문으로 내려가지 않는다.
@@ -11,6 +12,8 @@
 // - 함정: 확장 목록은 `freeze()` 뒤에만 data에 있다.
 //   - remark-gfm 업그레이드로 구조가 바뀌면 비우기가 조용히 무효가 된다.
 //   - 던지지 않는다. markdown-literal-transform-positions.test.ts가 위치 없는 노드 0건으로 지킨다.
+// - 모든 확장의 `transforms`를 비운다. 지금은 autolink literal만 `transforms`를 가진다.
+//   - remark-gfm 업그레이드로 다른 확장이 `transforms`를 추가하면 그것도 꺼진다. 그때 대상을 좁힌다.
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
