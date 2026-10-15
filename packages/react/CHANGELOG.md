@@ -1,5 +1,41 @@
 # @cp949/geul-react
 
+## 0.2.3
+
+### Patch Changes
+
+- 49036cf: `EmojiPicker`가 강조한 이모지를 보조 기술에 알린다.
+
+  - 방향키로 강조한 옵션의 `id`를 편집기 contenteditable의 `aria-activedescendant`로 설정한다.
+  - 옵션 `id`는 `useId()` 기반 접두사와 이모지 `id`를 이은 값이다. 옵션마다 다르다.
+  - 팝업이 닫히면(Escape, 선택) 속성을 제거한다.
+  - 후보가 0건이면 속성을 달지 않는다.
+  - `CalloutIconPicker`의 이모지 선택기는 바뀌지 않는다. 옵션에 `id`가 없고 편집기에 속성도 없다.
+
+- 1ad72c1: `MediaToolbar`의 이름·캡션 편집을 끝내도 미디어 선택과 툴바가 남는다.
+
+  - Rename·Edit caption 입력을 클릭한 뒤 Enter, Escape, Cancel 버튼, Save 버튼으로 끝내면 초점이 편집기 contenteditable로 돌아온다.
+  - 입력을 클릭해 DOM selection이 툴바 입력에 있어도 미디어 선택과 툴바가 남는다. 이전에는 캐럿이 다음 문단으로 옮겨 툴바가 닫혔다.
+
+- dd45fb0: `MediaToolbar`의 Replace 모드를 빠져나오면 초점이 편집기로 돌아온다.
+
+  - Embed 탭에서 URL을 저장하면(Enter, 저장 버튼) 초점이 편집기 contenteditable로 돌아온다. 현재 URL과 같은 URL을 다시 저장해도 같고, 미디어 선택과 툴바가 남는다.
+  - Cancel 버튼으로 취소해도 초점이 편집기로 돌아온다. Embed 입력을 클릭한 뒤 취소해도 미디어 선택과 툴바가 남는다.
+  - 업로드가 성공하면 초점이 툴바 안이거나 `body`일 때만 편집기로 돌아온다. 툴바·편집기 밖 입력에 있으면 그대로 둔다. 툴바 입력을 거쳐 DOM selection이 편집기 밖에 있어도 미디어 선택과 툴바가 남는다.
+  - 바깥 클릭으로 닫힌 뒤 끝난 업로드와, 미디어 블록이 사라져 툴바가 닫히는 경우는 초점을 옮기지 않는다.
+  - Escape로 교체를 취소하는 동작은 같다. Embed 입력을 클릭한 뒤 눌러도 초점이 편집기로 돌아오고 미디어 선택과 툴바가 남는다.
+
+- Updated dependencies [fe6397f]
+- Updated dependencies [f178f2d]
+- Updated dependencies [4a7ffee]
+- Updated dependencies [b4a17b2]
+- Updated dependencies [3aace49]
+- Updated dependencies [8b3d803]
+- Updated dependencies [6a873e6]
+- Updated dependencies [76a1532]
+- Updated dependencies [95c6c80]
+  - @cp949/geul-core@0.2.3
+
 ## 0.2.2
 
 ### Patch Changes

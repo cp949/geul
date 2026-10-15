@@ -1,5 +1,99 @@
 # @cp949/geul-core
 
+## 0.2.3
+
+### Patch Changes
+
+- fe6397f: Backspace가 문서를 바꾸지 않는데 undo 단위를 남기던 경우를 고친다. 이제 문서와 undo 이력은 그대로고 캐럿만 앞 블록 끝으로 옮겨 간다.
+
+  - 마지막 블록이 heading, 목록 항목, divider, 표, 자식 딸린 문단일 때 자동 trailing 문단 선두의 Backspace가 그 문단을 지웠다가 새 blockId로 되붙이던 것이 사라진다.
+  - 캐럿은 병합 접점으로 이동한다. 접힌 toggle 뒤에서는 숨은 자손이 아니라 toggle 라벨 끝으로 간다.
+  - Mod-Backspace와 Shift-Backspace도 같다.
+  - 앞 블록이 자식 없는 문단이면 빈 마지막 문단은 이전처럼 Backspace로 지워진다.
+  - 마지막 빈 문단에 색이나 정렬이 있으면 Backspace가 이전처럼 병합해 그 속성을 지운다. 속성이 사라지므로 실제 변화다.
+  - 마지막 코드 블록 뒤 trailing 문단의 Backspace는 이전처럼 코드 블록을 문단으로 흡수한다.
+
+- f178f2d: 접힌 toggle 라벨 끝의 Delete가 숨은 자손과 병합하던 것을 고친다. 이제 보이는 다음 블록과 병합한다.
+
+  - 숨은 첫 자식이 문단이면 그 글자가 라벨로 빨려 들고 숨은 그룹에서 사라지던 것이 사라진다.
+  - 숨은 첫 자식이 divider이면 divider를 건너뛰고 더 안쪽 숨은 글자를 가져가던 것이 사라진다.
+  - 숨은 첫 자식이 `codeBlock`이면 그 내용을 라벨에 흡수하던 것이 사라진다.
+  - 숨은 자손은 id, 타입, 글자, 접힘 상태가 그대로 남는다.
+  - 보이는 다음 블록이 `codeBlock`이면 이전처럼 내용을 라벨 뒤에 붙인다.
+  - 보이는 다음 블록이 없으면(`paragraph`를 막은 설정의 문서 끝) 키만 소비하고 문서와 undo 이력을 바꾸지 않는다.
+  - 자식 없는 접힌 toggle과 펼친 toggle의 Delete는 이전과 같다.
+
+- 4a7ffee: Delete가 문서를 바꾸지 않는데 undo 단위를 남기던 경우를 고친다. 이제 키만 소비하고 문서와 undo 이력은 그대로다.
+
+  - 빈 마지막 문단에서 Delete를 누르면 같은 문단이 되채워지며 undo 단위가 남던 것이 사라진다. 문단이 하나뿐인 문서도 같다.
+  - 마지막 블록이 heading, 목록 항목, divider, 자식 딸린 문단일 때 끝의 Delete가 자동 trailing 문단을 지웠다가 새 blockId로 되붙이던 것이 사라진다.
+  - 마지막 코드 블록 끝의 Delete도 같은 증상이 사라진다.
+  - 앞 블록이 자식 없는 문단이면 빈 마지막 문단은 이전처럼 Delete로 지워진다. 비어 있지 않은 trailing 문단은 이전처럼 병합된다.
+  - 마지막 빈 문단에 색이나 정렬이 있으면 Delete가 이전처럼 병합해 그 속성을 지운다. 속성이 사라지므로 실제 변화다.
+
+- b4a17b2: heading 안 `#` 재발동 입력 규칙이 블록 경계를 걸친 범위 선택 위에서 `TypeError`를 던지던 문제를 고친다.
+
+  - 범위 선택 위 입력은 규칙을 건너뛰고 브라우저 기본 입력(선택 대체 평문)에 맡긴다.
+  - 이전에는 heading의 `##` 뒤에서 다음 블록 중간까지 선택하고 공백을 입력하거나, heading 시작부터 선택하고 `# `를 한 번에 입력하면 `Cannot read properties of undefined (reading 'nodeSize')`가 났다.
+  - 캐럿(빈 선택) 입력의 재발동 동작은 같다. heading 안에 머무는 범위 선택도 이전처럼 규칙을 건너뛴다.
+
+- 3aace49: `enabledBlockTypes`가 `paragraph`를 막은 설정에서 문서 끝 블록의 Delete가 Tiptap 기본 체인으로 새던 것을 고친다. 문서 끝에는 병합 대상이 없어 키만 소비한다.
+
+  - 문서 끝 빈 목록 항목·heading·quote·callout의 Delete는 키만 소비한다. 문서와 undo 단위는 바뀌지 않는다. 이전에는 빈 블록이 level 1 heading으로 바뀌었다. 빈 level 1 heading은 겉모양 변화 없이 undo 단위만 남았다.
+  - toggle·quote 아래 중첩 마지막 자식과 캐럿이 끝인 글자 있는 끝 블록도 같다.
+  - 빈 코드 블록이 최상위 유일한 블록이면 지우지 않고 키만 소비한다. 앞 블록이 있으면 이전처럼 코드 블록을 지운다.
+  - `paragraph`를 막지 않은 설정은 바뀌지 않는다.
+
+- 8b3d803: `enabledBlockTypes`가 `paragraph`를 막은 설정에서 빈 목록 항목의 Backspace·Enter가 Tiptap 기본 체인으로 새던 것을 고친다. 종료 규칙(항목을 `paragraph`로 바꾼다)은 대상이 없으면 건너뛰고 일반 규칙을 따른다.
+
+  - 빈 항목의 Enter는 키를 소비하고 같은 타입의 새 빈 항목을 연다. 대상은 bullet·numbered·check·toggle 항목이다.
+  - 앞 블록이 있는 빈 항목의 Backspace는 항목을 지우고 캐럿을 앞 블록 끝에 둔다. 항목을 앞 블록의 자식으로 들여쓰지 않는다.
+  - 문서 최선두 항목과 자식 있는 toggle 헤더의 Backspace는 키만 소비한다. 문서와 undo 단위는 바뀌지 않는다. 이전에는 항목이 heading으로 바뀌거나 들여쓰기됐고 결과가 엔진마다 달랐다.
+  - 코드 블록 바로 뒤 목록 항목의 Backspace는 코드 블록을 한 번에 흡수한다. 항목 타입은 유지된다.
+  - `paragraph`를 막지 않은 설정은 이전처럼 항목을 `paragraph`로 바꿔 목록을 종료한다.
+
+- 6a873e6: `enabledBlockTypes`가 `paragraph`를 막은 설정에서 heading·quote·callout 끝 Enter가 `TypeError`를 던지던 것을 고친다. 이제 예외 없이 같은 타입의 새 블록을 연다.
+
+  - 새 블록은 원본의 타입과 attrs(heading `level`, callout `icon`)를 복사하고 내용은 비어 있다.
+  - 키는 소비하고 undo 단위는 1회다.
+  - heading 끝에 여러 줄 평문을 붙여넣을 때 같은 `TypeError`가 나던 것도 사라진다. 줄 사이가 같은 타입으로 분할된다.
+  - `paragraph`를 막지 않은 설정의 끝 Enter는 이전처럼 빈 `paragraph`를 연다.
+
+- 76a1532: `enabledBlockTypes`가 `paragraph`를 막은 설정에서 문서 첫 위치 빈 블록의 Backspace가 Tiptap 기본 체인으로 새던 것을 고친다. 바꿀 대상이 없어 키만 소비한다.
+
+  - 문서 첫 텍스트 위치의 빈 heading·quote·callout의 Backspace는 키만 소비한다. 문서와 undo 단위는 바뀌지 않는다. 이전에는 빈 블록이 level 1 heading으로 바뀌었다. 빈 level 1 heading은 겉모양 변화 없이 undo 단위만 남았다.
+  - 뒤에 다른 블록이 있거나 자식이 딸린 경우, 인라인 원소만 든 블록도 같다.
+  - 앞이 divider·표뿐인 빈 블록과 앞 블록이 있는 빈 블록은 이전처럼 지워지거나 병합된다.
+  - `paragraph`를 막지 않은 설정은 바뀌지 않는다.
+
+- 95c6c80: `removeBlocks`가 조상과 자손을 함께 받으면 인자 순서와 무관하게 거절한다.
+
+  - 조상과 자손(자식·손자 포함)을 함께 주면 `COMMAND_NOT_APPLICABLE`로 거절한다. 문서·selection·undo 단위는 바뀌지 않는다.
+  - 이전에는 자손을 먼저 적으면 성공했다. 이 조합은 이제 거절로 바뀐다. 호출 쪽에서 조상만 넘기거나 겹치지 않는 대상만 넘긴다.
+  - 같은 id를 두 번 주는 경우도 명시적으로 `COMMAND_NOT_APPLICABLE`로 거절한다.
+  - 존재하지 않는 id가 섞이면 이전처럼 `BLOCK_NOT_FOUND`가 먼저다.
+  - `replaceBlocks`의 동작은 같다. 같은 판정을 공유한다.
+
+- Updated dependencies [fc82881]
+- Updated dependencies [4a20c43]
+- Updated dependencies [1b9d938]
+- Updated dependencies [53bf9ed]
+- Updated dependencies [18a0663]
+- Updated dependencies [0f6d789]
+- Updated dependencies [980fe8c]
+- Updated dependencies [d92e81a]
+- Updated dependencies [ebedf14]
+- Updated dependencies [90dfa38]
+- Updated dependencies [f117644]
+- Updated dependencies [59c55bc]
+- Updated dependencies [eb3ff20]
+- Updated dependencies [72c121b]
+- Updated dependencies [178f8cc]
+- Updated dependencies [5be0434]
+- Updated dependencies [59e4e60]
+  - @cp949/geul-io@0.2.3
+  - @cp949/geul-model@0.2.3
+
 ## 0.2.2
 
 ### Patch Changes

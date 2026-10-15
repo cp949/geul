@@ -1,6 +1,6 @@
 {
   "name": "@cp949/geul-io",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "geul 문서와 HTML/Markdown(GFM) 간 변환 — exportHtml/importHtml/exportMarkdown/importMarkdown",
   "license": "MIT",
   "repository": {
