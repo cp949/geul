@@ -17,6 +17,7 @@ import {
   sanitizeInlineText,
 } from "@cp949/geul-model";
 
+import { readStylePxWidth } from "../css/width-declaration.js";
 import { MEDIA_VISUAL_TAG_NAMES } from "./block-tag-names.js";
 import { propertyDecimal, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
@@ -138,6 +139,23 @@ const resolvedIframeUrl = (
   resolveIframeEmbedDecision(rawSrc, iframeEmbedConfig).allowed
     ? rawSrc
     : undefined;
+
+// geul data 속성이 없는 legacy image의 폭이다. 안쪽 img의 인라인 `width: <n>px`만 읽는다
+// (RD-004.md 결정: video·audio·img[width] 속성·figure의 style 폭은 읽지 않는다). 출처가
+// 속성이 아니라 style이므로 무효 값은 경고 없이 값 없음이다 — style 제거 경고는 수집기가
+// 이미 낸다.
+const legacyImagePreviewWidth = (
+  mediaType: MediaBlock["type"],
+  visualNode: HtmlElementNode | undefined,
+): number | undefined => {
+  if (mediaType !== "image" || visualNode?.tagName !== "img") return undefined;
+  const style = visualNode.properties.style;
+  if (typeof style !== "string") return undefined;
+  const width = readStylePxWidth(style);
+  return width !== undefined && isValidMediaPreviewWidth(width)
+    ? width
+    : undefined;
+};
 
 // segmentBlocks가 낸 kind:"media" 세그먼트 하나를 5종 Block으로 디코드한다.
 // data-geul-*는 항상 node(세그먼트 자신) 속성이고, src/href는 visualNode(시각
@@ -271,17 +289,21 @@ export const mediaBlockFromNode = (
     "dataGeulPreviewWidth",
     Number.NaN,
   );
-  const previewWidth =
-    !mediaBlockTypeHasField(mediaType, "previewWidth") ||
-    Number.isNaN(previewWidthRaw)
-      ? undefined
-      : validOptionalValue(
-          context,
-          node,
-          "dataGeulPreviewWidth",
-          previewWidthRaw,
-          isValidMediaPreviewWidth,
-        );
+  // data 속성이 없을 때만 legacy 폭(구 에디터의 img 인라인 px 폭)을 읽는다. 속성이 있으면
+  // 무효·빈 값이어도 style로 복구하지 않는다.
+  const previewWidth = !mediaBlockTypeHasField(mediaType, "previewWidth")
+    ? undefined
+    : node.properties.dataGeulPreviewWidth === undefined
+      ? legacyImagePreviewWidth(mediaType, visualNode)
+      : Number.isNaN(previewWidthRaw)
+        ? undefined
+        : validOptionalValue(
+            context,
+            node,
+            "dataGeulPreviewWidth",
+            previewWidthRaw,
+            isValidMediaPreviewWidth,
+          );
   const textAlignment = mediaBlockTypeHasField(mediaType, "textAlignment")
     ? (validOptionalValue(
         context,

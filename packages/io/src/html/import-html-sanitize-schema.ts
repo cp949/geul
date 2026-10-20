@@ -93,7 +93,10 @@ export const htmlImportSanitizeSchema = {
     // href는 공유 목록(htmlAllowedAttributes.a)에 이미 있어 스프레드로
     // 유지된다.
     a: [...(sanitizeAllowedAttributes.a ?? []), ...mediaDataAttributeNames],
-    img: ["src", "alt", ...mediaDataAttributeNames],
+    // img의 style은 구 에디터가 저장한 인라인 px 폭을 previewWidth로 읽으려고 남긴다
+    // (Issue #424). 읽기 전용이라 경고 기준(htmlAllowedAttributes)에는 없다 — 다른 선언은
+    // 버려지므로 raw 경고는 이전처럼 style 제거를 보고한다.
+    img: ["src", "alt", "style", ...mediaDataAttributeNames],
     video: ["src", "controls", ...mediaDataAttributeNames],
     audio: ["src", "controls", ...mediaDataAttributeNames],
     figure: [...mediaDataAttributeNames],

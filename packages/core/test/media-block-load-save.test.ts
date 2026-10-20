@@ -4,7 +4,7 @@
  * codec 자체(encode/decode 무손실)는 media-block-codec.test.ts가 소유한다
  * — 여기는 production 경계(createTiptapEditor·readEditorDocument)만 본다.
  */
-import { exportHtml } from "@cp949/geul-io";
+import { exportHtml, importHtml } from "@cp949/geul-io";
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
@@ -189,5 +189,43 @@ describe("production load/save — 소수 previewWidth", () => {
     expect(html.value).toContain('data-geul-preview-width="320.5"');
     expect(html.value).toContain('data-geul-preview-width="480.25"');
     expect(html.value).toContain('data-geul-preview-width="640.75"');
+  });
+});
+
+// Issue #424 RD-004 — 구 에디터가 저장한 HTML의 img 인라인 px 폭이 importHtml → 편집기 →
+// 저장·발행을 거쳐도 유지된다.
+describe("production load/save — legacy HTML img 인라인 폭", () => {
+  it("importHtml → replaceDocument → getDocument → exportHtml에서 style 폭이 previewWidth로 유지된다", () => {
+    const imported = importHtml(
+      '<img src="https://example.com/pic.png" style="width: 320.5px"><p></p>',
+    );
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+
+    const editor = createEditor({
+      initialDocument: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [{ id: "p-1", type: "paragraph", content: [] }],
+      },
+      createId: sequentialIds("id"),
+    });
+    mountTiptapEditor(editor);
+    expect(editor.replaceDocument(imported.value.document)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    const saved = editor.getDocument();
+    expect(saved.blocks[0]).toMatchObject({
+      type: "image",
+      previewWidth: 320.5,
+    });
+
+    const html = exportHtml(saved);
+    expect(html.ok).toBe(true);
+    if (!html.ok) return;
+    expect(html.value).toContain('data-geul-preview-width="320.5"');
+    expect(html.value).toContain("width: 320.5px");
   });
 });
