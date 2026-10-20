@@ -358,11 +358,19 @@ describe("미디어 블록 선택 표시 필드 무효 값", () => {
     },
   );
 
-  it.each(MEDIA_SHAPES)(
-    "$name, 무효 textAlignment: 그 필드만 버리고 경고 1건을 낸다",
+  // 미디어 textAlignment는 left/center/right만 받는다. justify는 텍스트 블록에서만
+  // 유효해졌으므로(Issue #424) 미디어에서는 계속 무효 값이다.
+  it.each(
+    MEDIA_SHAPES.flatMap((shape) =>
+      ["justify", "start"].map((value) => ({ ...shape, value })),
+    ),
+  )(
+    "$name, 무효 textAlignment($value): 그 필드만 버리고 경고 1건을 낸다",
     (shape) => {
       const { document, warnings } = imported(
-        shape.html(' data-geul-text-alignment="start" data-geul-name="n"'),
+        shape.html(
+          ` data-geul-text-alignment="${shape.value}" data-geul-name="n"`,
+        ),
         PERMISSIVE,
       );
       const [block] = document.blocks;
