@@ -682,6 +682,19 @@ export const collectDispatched = (
 };
 
 /**
+ * `collectDispatched`로 모은 transaction 중 문서를 바꾼 것이 정확히 하나인지
+ * 단언하고 그 transaction을 돌려준다. selection만 옮기는 transaction은 빼고
+ * 편집 transaction 하나의 플래그를 단언할 때 쓴다.
+ */
+export const onlyDocChangedTransaction = (
+  dispatched: readonly Transaction[],
+): Transaction | undefined => {
+  const changed = dispatched.filter((tr) => tr.docChanged);
+  expect(changed).toHaveLength(1);
+  return changed[0];
+};
+
+/**
  * 기본 `history` depth(100) + 비공개 DEPTH_OVERFLOW(20) 이후에도 여유를 둔
  * 값 — 실제 eviction이 반드시 일어났음을 보장한다.
  */

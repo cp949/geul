@@ -18,6 +18,7 @@ import {
   documentOf,
   mounted,
   okResult,
+  onlyDocChangedTransaction,
   paragraphBlock,
 } from "./editor-controller-support.js";
 
@@ -32,13 +33,6 @@ const placeCaret = (tiptap: Tiptap, blockId: string, offset = 0): number => {
     ),
   );
   return position;
-};
-
-/** 문서를 바꾼 transaction이 정확히 하나인지 확인하고 돌려준다. */
-const onlyConversion = (dispatched: ReturnType<typeof collectDispatched>) => {
-  const conversions = dispatched.filter((tr) => tr.docChanged);
-  expect(conversions).toHaveLength(1);
-  return conversions[0];
 };
 
 describe("setBlockType 일반 경로의 selection 스크롤 표시", () => {
@@ -57,7 +51,7 @@ describe("setBlockType 일반 경로의 selection 스크롤 표시", () => {
       ),
     ).toEqual(okResult);
 
-    expect(onlyConversion(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
     expect(tiptap.state.selection.head).toBe(
       contentTextStart(tiptap, "source"),
     );
@@ -74,7 +68,7 @@ describe("setBlockType 일반 경로의 selection 스크롤 표시", () => {
       editor.commands.setBlockType("source", { type: "heading", level: 2 }),
     ).toEqual(okResult);
 
-    expect(onlyConversion(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
   });
 
   it.each([
@@ -96,7 +90,9 @@ describe("setBlockType 일반 경로의 selection 스크롤 표시", () => {
         okResult,
       );
 
-      expect(onlyConversion(dispatched)?.scrolledIntoView).toBe(true);
+      expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(
+        true,
+      );
     },
   );
 
@@ -111,7 +107,7 @@ describe("setBlockType 일반 경로의 selection 스크롤 표시", () => {
       editor.commands.setBlockType("source", { type: "heading", level: 1 }),
     ).toEqual(okResult);
 
-    expect(onlyConversion(dispatched)?.scrolledIntoView).toBe(false);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(false);
     expect(tiptap.state.selection.toJSON()).toEqual({
       type: "text",
       anchor: tailStart,
@@ -144,7 +140,7 @@ describe("setBlockTypes의 selection 스크롤 표시", () => {
       editor.commands.setBlockTypes(["a", "b"], { type: "heading", level: 3 }),
     ).toEqual(okResult);
 
-    expect(onlyConversion(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
   });
 
   it("selection head가 이미 같은 타입이라 건너뛴 대상 블록 안이어도 스크롤을 표시한다", () => {
@@ -171,7 +167,7 @@ describe("setBlockTypes의 selection 스크롤 표시", () => {
       editor.commands.setBlockTypes(["a", "b"], { type: "heading", level: 3 }),
     ).toEqual(okResult);
 
-    expect(onlyConversion(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
   });
 
   it("selection head가 변환한 모든 블록 밖이면 스크롤을 표시하지 않는다", () => {
@@ -189,7 +185,7 @@ describe("setBlockTypes의 selection 스크롤 표시", () => {
       editor.commands.setBlockTypes(["a", "b"], { type: "quote" }),
     ).toEqual(okResult);
 
-    expect(onlyConversion(dispatched)?.scrolledIntoView).toBe(false);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(false);
     expect(tiptap.state.selection.head).toBe(tailStart);
   });
 });
@@ -206,7 +202,7 @@ describe("단축키 경로의 selection 스크롤 표시", () => {
       true,
     );
 
-    expect(onlyConversion(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
   });
 
   it("setBlockTypeCommand도 캐럿이 대상 밖이면 스크롤을 표시하지 않는다", () => {
@@ -220,7 +216,7 @@ describe("단축키 경로의 selection 스크롤 표시", () => {
       setBlockTypeCommand(tiptap, "source", { type: "heading", level: 1 }),
     ).toEqual(okResult);
 
-    expect(onlyConversion(dispatched)?.scrolledIntoView).toBe(false);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(false);
     expect(tiptap.state.selection.head).toBe(tailStart);
   });
 });

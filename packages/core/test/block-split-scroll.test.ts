@@ -20,6 +20,7 @@ import {
   documentOf,
   listItemBlock,
   mounted,
+  onlyDocChangedTransaction,
   paragraphBlock,
 } from "./editor-controller-support.js";
 import {
@@ -27,18 +28,10 @@ import {
   inBlock,
   inCell,
   run,
+  setLiveSelection,
   singleCellTable,
   TAIL,
 } from "./table-boundary-test-support.js";
-
-type Dispatched = ReturnType<typeof collectDispatched>;
-
-/** 문서를 바꾼 transaction이 정확히 하나인지 확인하고 돌려준다. */
-const onlySplit = (dispatched: Dispatched) => {
-  const splits = dispatched.filter((tr) => tr.docChanged);
-  expect(splits).toHaveLength(1);
-  return splits[0];
-};
 
 /** blocks를 마운트하고 anchor→head 범위(같으면 캐럿)를 둔다. */
 const mountWithSelection = (
@@ -48,11 +41,7 @@ const mountWithSelection = (
 ) => {
   const harness = mounted(documentOf(...blocks));
   const { tiptap } = harness;
-  tiptap.view.dispatch(
-    tiptap.state.tr.setSelection(
-      TextSelection.create(tiptap.state.doc, anchor(tiptap), head(tiptap)),
-    ),
-  );
+  setLiveSelection(tiptap, anchor(tiptap), head(tiptap));
   return harness;
 };
 
@@ -80,7 +69,7 @@ describe("일반 블록 Enter 분할의 스크롤 표시", () => {
 
     expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
 
-    expect(onlySplit(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
   });
 
   it("문단 안 범위 선택 Enter는 삭제·분할 transaction에 스크롤을 표시한다", () => {
@@ -93,7 +82,7 @@ describe("일반 블록 Enter 분할의 스크롤 표시", () => {
 
     expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
 
-    expect(onlySplit(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
   });
 
   it("빈 목록 항목 Enter는 paragraph 전환 transaction에 스크롤을 표시한다", () => {
@@ -108,7 +97,7 @@ describe("일반 블록 Enter 분할의 스크롤 표시", () => {
 
     expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
 
-    expect(onlySplit(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
     // 분할이 아닌 paragraph 탈출 분기를 탔는지 확인한다.
     expect(editor.getDocument().blocks[0]).toEqual(paragraphBlock("item", ""));
   });
@@ -130,7 +119,7 @@ describe("codeBlock 시작 범위 Enter의 스크롤 표시", () => {
 
     expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
 
-    expect(onlySplit(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
   });
 
   it("범위를 지운 뒤 캐럿이 일반 블록에 닿아 분할하는 분기는 스크롤을 표시한다", () => {
@@ -148,7 +137,7 @@ describe("codeBlock 시작 범위 Enter의 스크롤 표시", () => {
 
     expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
 
-    expect(onlySplit(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
   });
 });
 
@@ -162,7 +151,7 @@ describe("codeBlock 전용 Enter·Shift-Enter의 스크롤 표시", () => {
 
     expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
 
-    expect(onlySplit(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
     // 일반 개행 삽입이 아닌 탈출 분기를 탔는지 확인한다.
     expect(editor.getDocument().blocks[0]).toEqual(
       codeBlockBlock("code", "code"),
@@ -171,7 +160,7 @@ describe("codeBlock 전용 Enter·Shift-Enter의 스크롤 표시", () => {
   });
 
   it("codeBlock 끝 Shift-Enter 분할은 스크롤을 표시한다", () => {
-    const { tiptap } = mountWithSelection(
+    const { editor, tiptap } = mountWithSelection(
       [codeBlockBlock("code", "code"), paragraphBlock("tail", "꼬리")],
       inBlock("code", "code".length),
     );
@@ -179,7 +168,14 @@ describe("codeBlock 전용 Enter·Shift-Enter의 스크롤 표시", () => {
 
     expect(dispatchKeydown(tiptap, "Enter", true)).toBe(true);
 
-    expect(onlySplit(dispatched)?.scrolledIntoView).toBe(true);
+    expect(onlyDocChangedTransaction(dispatched)?.scrolledIntoView).toBe(true);
+    // codeBlock 안 개행 삽입이 아닌 새 paragraph 형제 분할 분기를 탔는지 확인한다.
+    expect(editor.getDocument().blocks).toEqual([
+      codeBlockBlock("code", "code"),
+      paragraphBlock("id-1", ""),
+      paragraphBlock("tail", "꼬리"),
+    ]);
+    expect(tiptap.state.selection.head).toBe(contentTextStart(tiptap, "id-1"));
   });
 });
 
