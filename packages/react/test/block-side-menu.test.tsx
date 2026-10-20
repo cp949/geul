@@ -891,6 +891,30 @@ describe("블록 메뉴 색상·정렬 섹션(RD-003 DELTA-02)", () => {
     expect(cleared.textAlignment).toBeUndefined();
   });
 
+  it("justify 블록은 메뉴를 열거나 색을 바꿔도 정렬이 유지되고, Align left로 바꿀 수 있다", () => {
+    const rendered = openBlockMenu();
+    const applied = rendered.editor.commands.setBlockTextAlignment(
+      "block-1",
+      "justify",
+    );
+    if (!applied.ok) throw new Error("justify fixture 준비 실패");
+
+    const alignmentOf = () => {
+      const raw = rendered.editor.getDocument().blocks[0];
+      if (raw?.type !== "paragraph") throw new Error("본문 문단이 아니다");
+      return (raw as ParagraphBlock).textAlignment;
+    };
+    expect(alignmentOf()).toBe("justify");
+
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Background color Blue" }),
+    );
+    expect(alignmentOf()).toBe("justify");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Align left" }));
+    expect(alignmentOf()).toBe("left");
+  });
+
   it("codeBlock 소스에서는 색상·정렬 섹션이 비노출된다", () => {
     const rendered = openBlockMenu();
     const converted = rendered.editor.commands.setBlockType("block-1", {

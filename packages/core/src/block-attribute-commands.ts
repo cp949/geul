@@ -1,12 +1,14 @@
 import {
   isCanonicalCellAlign,
   isCanonicalCellColor,
+  isCanonicalTextBlockAlign,
   isNestableBlockType,
   isSupportedMediaUrl,
   isValidMediaPreviewWidth,
   mediaBlockTypeHasField,
   resolveIframeEmbedDecision,
   type Result,
+  type TextBlockAlignment,
 } from "@cp949/geul-model";
 
 import { runBlockAttrCommand } from "./block-attr-command.js";
@@ -264,14 +266,14 @@ export const createBlockAttributeCommands = (
     );
   const setBlockTextAlignment = (
     blockId: string,
-    align: "left" | "center" | "right" | null,
+    align: TextBlockAlignment | null,
   ): Result<void, EditorError> =>
     runSetBlockTextPropCommand(
       "setBlockTextAlignment",
       blockId,
       align,
       (value) =>
-        isCanonicalCellAlign(value)
+        isCanonicalTextBlockAlign(value)
           ? null
           : { code: "INVALID_ALIGN", align: value },
       (attrs, value) => ({ ...attrs, textAlignment: value }),

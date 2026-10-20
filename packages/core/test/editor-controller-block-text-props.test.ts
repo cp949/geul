@@ -8,7 +8,7 @@
  * 다르다. 같은 값 재적용이 빈 undo 단위를 남기지 않는 계약(Issue #375)도
  * 이 파일 끝의 표가 고정한다.
  */
-import type { Block } from "@cp949/geul-model";
+import type { Block, TextBlockAlignment } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 import type { EditorController } from "../src/index.js";
 import {
@@ -17,6 +17,7 @@ import {
   editorState,
   expectSameValueReapplyIsNoop,
   listItemBlock,
+  mediaBlock,
   mounted,
   notApplicable,
   okResult,
@@ -24,12 +25,13 @@ import {
   paragraphBlock,
   quoteBlock,
   restored,
+  tailParagraphBlock,
 } from "./editor-controller-support.js";
 
 type ParagraphTextBlockProps = {
   textColor?: string;
   backgroundColor?: string;
-  textAlignment?: "left" | "center" | "right";
+  textAlignment?: TextBlockAlignment;
 };
 
 /**
@@ -196,6 +198,66 @@ describe("setBlockTextAlignment", () => {
     expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
   });
 
+  it("justify를 설정하고 undo 1회로 복원한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(paragraphBlock("p-1", "본문"), paragraphBlock("tail", "꼬리")),
+    );
+    const before = editorState(editor, tiptap);
+
+    expect(editor.commands.setBlockTextAlignment("p-1", "justify")).toEqual(
+      okResult,
+    );
+
+    expect(editor.getDocument()).toEqual({
+      ...documentOf(
+        paragraphWithProps("p-1", "본문", { textAlignment: "justify" }),
+        paragraphBlock("tail", "꼬리"),
+      ),
+      revision: 1,
+    });
+
+    expect(editor.commands.undo()).toEqual(okResult);
+    expect(editorState(editor, tiptap)).toEqual(restored(before, 2));
+  });
+
+  it("justify로 저장된 블록을 열면 그대로 읽히고 null로 해제된다", () => {
+    const source = paragraphWithProps("p-1", "본문", {
+      textAlignment: "justify",
+    });
+    const { editor } = mounted(
+      documentOf(source, paragraphBlock("tail", "꼬리")),
+    );
+    expect(editor.getDocument().blocks[0]).toEqual(source);
+
+    expect(editor.commands.setBlockTextAlignment("p-1", null)).toEqual(
+      okResult,
+    );
+    expect(editor.getDocument().blocks[0]).toEqual(
+      paragraphBlock("p-1", "본문"),
+    );
+  });
+
+  it("justify에서 left로 바꿀 수 있고 같은 justify 재적용은 무변경이다", () => {
+    const source = paragraphWithProps("p-1", "본문", {
+      textAlignment: "justify",
+    });
+    const { editor, tiptap } = mounted(
+      documentOf(source, paragraphBlock("tail", "꼬리")),
+    );
+    const before = editorState(editor, tiptap);
+    expect(editor.commands.setBlockTextAlignment("p-1", "justify")).toEqual(
+      notApplicable("setBlockTextAlignment"),
+    );
+    expect(editorState(editor, tiptap)).toEqual(before);
+
+    expect(editor.commands.setBlockTextAlignment("p-1", "left")).toEqual(
+      okResult,
+    );
+    expect(editor.getDocument().blocks[0]).toEqual(
+      paragraphWithProps("p-1", "본문", { textAlignment: "left" }),
+    );
+  });
+
   it("이미 같은 정렬이 설정된 상태에서 같은 값을 다시 호출하면 무변경 COMMAND_NOT_APPLICABLE이다", () => {
     const source = paragraphWithProps("p-1", "본문", {
       textAlignment: "center",
@@ -239,10 +301,10 @@ describe("setBlockTextAlignment", () => {
     const before = editorState(editor, tiptap);
 
     expect(
-      editor.commands.setBlockTextAlignment("p-1", "justify" as never),
+      editor.commands.setBlockTextAlignment("p-1", "start" as never),
     ).toEqual({
       ok: false,
-      error: { code: "INVALID_ALIGN", align: "justify" },
+      error: { code: "INVALID_ALIGN", align: "start" },
     });
     expect(editorState(editor, tiptap)).toEqual(before);
   });
@@ -352,6 +414,83 @@ describe("TextBlockProps 적용 대상 판정 공통 계약", () => {
       backgroundColor: "#112233",
       textAlignment: "center",
     });
+  });
+});
+
+describe("justify는 텍스트 블록 종류 전체에서 저장→편집기→저장으로 유지된다", () => {
+  const justify = { textAlignment: "justify" } as const;
+  const blocks: Block[] = [
+    {
+      id: "b-paragraph",
+      type: "paragraph",
+      content: [{ text: "a" }],
+      ...justify,
+    },
+    {
+      id: "b-heading",
+      type: "heading",
+      level: 2,
+      content: [{ text: "a" }],
+      ...justify,
+    },
+    { id: "b-quote", type: "quote", content: [{ text: "a" }], ...justify },
+    {
+      id: "b-bullet",
+      type: "bulletListItem",
+      content: [{ text: "a" }],
+      ...justify,
+    },
+    {
+      id: "b-numbered",
+      type: "numberedListItem",
+      content: [{ text: "a" }],
+      ...justify,
+    },
+    {
+      id: "b-check",
+      type: "checkListItem",
+      content: [{ text: "a" }],
+      checked: false,
+      ...justify,
+    },
+    {
+      id: "b-toggle",
+      type: "toggleListItem",
+      content: [{ text: "a" }],
+      ...justify,
+    },
+    {
+      id: "b-callout",
+      type: "callout",
+      icon: "💡",
+      content: [{ text: "a" }],
+      ...justify,
+    },
+  ];
+
+  it.each(blocks.map((block) => [block.type, block] as const))(
+    "%s: justify가 getDocument에서 그대로 나온다",
+    (_type, block) => {
+      const { editor } = mounted(documentOf(block, tailParagraphBlock));
+      expect(editor.getDocument().blocks).toEqual([block, tailParagraphBlock]);
+    },
+  );
+});
+
+describe("미디어 정렬은 justify를 계속 거절한다", () => {
+  it("setMediaTextAlignment는 justify를 INVALID_ALIGN으로 거절하고 문서를 바꾸지 않는다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(mediaBlock("image", "m-1"), tailParagraphBlock),
+    );
+    const before = editorState(editor, tiptap);
+
+    expect(
+      editor.commands.setMediaTextAlignment("m-1", "justify" as never),
+    ).toEqual({
+      ok: false,
+      error: { code: "INVALID_ALIGN", align: "justify" },
+    });
+    expect(editorState(editor, tiptap)).toEqual(before);
   });
 });
 

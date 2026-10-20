@@ -16,6 +16,7 @@ import {
   type Result,
   sameMarks,
   type TableBlock,
+  type TextBlockAlignment,
   type TextBlockProps,
   type TextMark,
 } from "@cp949/geul-model";
@@ -452,7 +453,7 @@ const blockContainerToModel = (
       : { backgroundColor: backgroundColor as string }),
     ...(textAlignment === undefined || textAlignment === null
       ? {}
-      : { textAlignment: textAlignment as "left" | "center" | "right" }),
+      : { textAlignment: textAlignment as TextBlockAlignment }),
   };
 
   if (contentNode.type === "paragraph") {

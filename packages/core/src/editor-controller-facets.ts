@@ -4,6 +4,7 @@ import type {
   Document as BlockDocument,
   DocumentBlock,
   Result,
+  TextBlockAlignment,
   TextMark,
 } from "@cp949/geul-model";
 
@@ -325,7 +326,7 @@ export interface BlockCommands {
     ): Result<void, EditorError>;
     setBlockTextAlignment(
       blockId: string,
-      align: "left" | "center" | "right" | null,
+      align: TextBlockAlignment | null,
     ): Result<void, EditorError>;
     insertDivider(
       afterBlockId: string,
