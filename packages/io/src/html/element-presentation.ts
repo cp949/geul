@@ -20,6 +20,7 @@ import {
   readDumpAuthorDeclarations,
   readInlineStyleMarks,
   readStyleColorStates,
+  readTextAlignWinner,
 } from "../css/style-declarations.js";
 import {
   type CssDeclaration,
@@ -61,6 +62,10 @@ export const EMPTY_INLINE_PRESENTATION: InlinePresentation = {
 export type BlockPresentation = {
   // 블록 속성이 되는 색이다. 호출부가 data-geul-*와 합친다.
   colors: { textColor?: string; backgroundColor?: string };
+  // style `text-align`의 승자 값(소문자)이다. 허용값인지는 호출부가 판정한다.
+  // 허용 밖 값도 그대로 싣는다. 안쪽 요소가 정한 값이 바깥 요소의 값으로
+  // 되돌아가지 않게 하려는 것이다. 덤프 판정은 색과 같다.
+  textAlign?: string;
   // 안쪽 텍스트가 받는 서식이다. 블록 속성이 없어 마크가 유일한 표현이다.
   format: TextFormat;
 };
@@ -77,10 +82,13 @@ const UNSET_COLOR_STATES: ColorStates = {
 // 덤프 안쪽의 테마 색은 작성자가 쓴 색이 아니다. 앵커가 없으면 색을 읽지 않는다.
 // 서식 선언은 시각 값이라 호출부가 style 전체에서 읽는다. 덤프 판정은 이 한
 // 곳이다(Issue #334, #338, #341, #342).
+const authorDeclarationsOf = (
+  declarations: readonly CssDeclaration[],
+): readonly CssDeclaration[] =>
+  readDumpAuthorDeclarations(declarations) ?? declarations;
+
 const colorStatesOf = (declarations: readonly CssDeclaration[]): ColorStates =>
-  readStyleColorStates(
-    readDumpAuthorDeclarations(declarations) ?? declarations,
-  );
+  readStyleColorStates(authorDeclarationsOf(declarations));
 
 // `mark`의 기본 배경이다. 브라우저가 `mark`에 칠하는 노랑이다.
 const MARK_DEFAULT_BACKGROUND = "#FFFF00";
@@ -294,14 +302,16 @@ export const inlineElementPresentation = (
   }
 };
 
-// 블록 요소 style의 색과 서식이다. 블록 요소의 기본 굵기(`h1`)는 읽지 않고
+// 블록 요소 style의 색·정렬과 서식이다. 블록 요소의 기본 굵기(`h1`)는 읽지 않고
 // style이 정한 굵기만 읽는다.
 export const blockPresentation = (node: HtmlElementNode): BlockPresentation => {
   const style = node.properties.style;
   if (typeof style !== "string") return { colors: {}, format: {} };
   const declarations = parseCssDeclarations(style);
   const states = colorStatesOf(declarations);
+  const textAlign = readTextAlignWinner(authorDeclarationsOf(declarations));
   return {
+    ...(textAlign === undefined ? {} : { textAlign }),
     colors: {
       ...(states.color.kind === "color"
         ? { textColor: states.color.color }

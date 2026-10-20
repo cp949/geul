@@ -7,8 +7,8 @@ import {
   appendOrMergeInlineItem,
   type IdFactory,
   type InlineContent,
-  isCanonicalCellAlign,
   isCanonicalCellColor,
+  isCanonicalTextBlockAlign,
   isValidCodeBlockLanguage,
   sanitizeInlineText,
   type TextBlockProps,
@@ -57,13 +57,13 @@ export const validOptionalValue = <T extends string | number>(
 // TextBlockProps(RD-001) 3필드를 data-geul-*에서 읽는다. 표 셀 import의
 // textColor/backgroundColor/align 읽기(import-html-table.ts의 modelRows
 // 구성부)와 같은 전략이다. 값은 model 판정(isCanonicalCellColor,
-// isCanonicalCellAlign)으로 거른다(G-CNV-001). 무효 값은 그 필드만 버리고
+// isCanonicalTextBlockAlign)으로 거른다(G-CNV-001). 무효 값은 그 필드만 버리고
 // 경고한다(Issue #358). 버린 필드는 style로 되살리지 않는다.
-// data-geul-*가 없는 textColor/backgroundColor는 style의 color·
-// background-color에서 채운다(Issue #334 단계 B, 외부 HTML). 필드별로 따진다 —
-// data-geul-*가 있는 필드는 style을 보지 않고, 없는 필드만 style이 채운다. style
-// 값은 canonical #RRGGBB 대문자로만 낸다(반투명·무효는 값 없음).
-// textAlignment는 data-geul-*만 읽는다.
+// data-geul-*가 없는 필드는 style에서 채운다(Issue #334 단계 B, Issue #424
+// 외부 HTML). 필드별로 따진다 — data-geul-*가 있는 필드는 style을 보지 않고,
+// 없는 필드만 style이 채운다. 색은 canonical #RRGGBB 대문자로만 낸다(반투명·
+// 무효는 값 없음). 정렬은 style `text-align`의 cascade 승자가 허용값일 때만
+// 낸다. 승자가 허용 밖이면 값 없음이다(앞 선언으로 되돌아가지 않는다).
 // styleOnly는 평범한 문단 div용이다 — data-geul-*는 p·h1~h6·blockquote·li·
 // callout의 계약이라 div에서는 읽지 않고(정렬 포함) style만 읽는다(Issue #334
 // 리뷰 MINOR-2).
@@ -98,37 +98,50 @@ export const textBlockPropsFromElement = (
     rawBackgroundColor,
     isCanonicalCellColor,
   );
-  // 두 필드가 모두 data-geul-*로 정해졌으면 style을 읽지 않는다(자기 export
+  const rawTextAlignment = styleOnly
+    ? undefined
+    : propertyString(element, "dataGeulTextAlignment");
+  // validOptionalValue는 값 타입을 좁히지 못해 판정을 통과한 값으로 단언한다.
+  const dataTextAlignment = validOptionalValue(
+    context,
+    element,
+    "dataGeulTextAlignment",
+    rawTextAlignment,
+    isCanonicalTextBlockAlign,
+  ) as TextBlockProps["textAlignment"] | undefined;
+  // 세 필드가 모두 data-geul-*로 정해졌으면 style을 읽지 않는다(자기 export
   // 에코가 이 경우다). 무효라 버린 필드도 정해진 것으로 본다. 덤프가 붙은
-  // style은 표식 뒤 text-decoration* 선언 뒤의 작성자 선언만 색으로 읽는다
+  // style은 표식 뒤 text-decoration* 선언 뒤의 작성자 선언만 읽는다
   // (blockPresentation).
   const styled =
-    rawTextColor !== undefined && rawBackgroundColor !== undefined
+    rawTextColor !== undefined &&
+    rawBackgroundColor !== undefined &&
+    rawTextAlignment !== undefined
       ? undefined
-      : blockPresentation(element).colors;
-  // li·blockquote가 content로 승격한 p는 element 안쪽이라 element의 style 색을
+      : blockPresentation(element);
+  // li·blockquote가 content로 승격한 p는 element 안쪽이라 element의 style을
   // 이긴다. data-geul-*는 여전히 먼저다(Issue #342).
   const promoted =
     styled === undefined || options?.promoted === undefined
       ? undefined
-      : blockPresentation(options.promoted).colors;
+      : blockPresentation(options.promoted);
   const textColor =
     rawTextColor === undefined
-      ? (promoted?.textColor ?? styled?.textColor)
+      ? (promoted?.colors.textColor ?? styled?.colors.textColor)
       : dataTextColor;
   const backgroundColor =
     rawBackgroundColor === undefined
-      ? (promoted?.backgroundColor ?? styled?.backgroundColor)
+      ? (promoted?.colors.backgroundColor ?? styled?.colors.backgroundColor)
       : dataBackgroundColor;
-  const textAlignment = styleOnly
-    ? undefined
-    : (validOptionalValue(
-        context,
-        element,
-        "dataGeulTextAlignment",
-        propertyString(element, "dataGeulTextAlignment"),
-        isCanonicalCellAlign,
-      ) as TextBlockProps["textAlignment"] | undefined);
+  // 승격한 p가 정렬을 정했으면 허용 밖 값이어도 element 값으로 되돌아가지 않는다.
+  const styleTextAlign = promoted?.textAlign ?? styled?.textAlign;
+  const textAlignment =
+    rawTextAlignment === undefined
+      ? styleTextAlign !== undefined &&
+        isCanonicalTextBlockAlign(styleTextAlign)
+        ? styleTextAlign
+        : undefined
+      : dataTextAlignment;
   return {
     ...(textColor === undefined ? {} : { textColor }),
     ...(backgroundColor === undefined ? {} : { backgroundColor }),

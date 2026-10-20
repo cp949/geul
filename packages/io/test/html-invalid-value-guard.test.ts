@@ -168,7 +168,7 @@ const TEXT_FIELDS = [
   {
     name: "textAlignment",
     attribute: "data-geul-text-alignment",
-    invalid: ' data-geul-text-alignment="justify"',
+    invalid: ' data-geul-text-alignment="start"',
     kept: ' data-geul-text-color="#112233"',
     keptProps: { textColor: "#112233" },
   },
@@ -213,7 +213,7 @@ describe("텍스트 블록 선택 표시 필드 무효 값", () => {
 
   it("한 요소의 필드 둘이 무효이면 필드마다 경고 1건씩이다", () => {
     const { document, warnings } = imported(
-      '<p data-geul-text-color="red" data-geul-text-alignment="justify" data-geul-background-color="#112233">x</p>',
+      '<p data-geul-text-color="red" data-geul-text-alignment="start" data-geul-background-color="#112233">x</p>',
     );
     expect(document.blocks[0]).toMatchObject({ backgroundColor: "#112233" });
     expect(document.blocks[0]).not.toHaveProperty("textColor");
@@ -362,7 +362,7 @@ describe("미디어 블록 선택 표시 필드 무효 값", () => {
     "$name, 무효 textAlignment: 그 필드만 버리고 경고 1건을 낸다",
     (shape) => {
       const { document, warnings } = imported(
-        shape.html(' data-geul-text-alignment="justify" data-geul-name="n"'),
+        shape.html(' data-geul-text-alignment="start" data-geul-name="n"'),
         PERMISSIVE,
       );
       const [block] = document.blocks;

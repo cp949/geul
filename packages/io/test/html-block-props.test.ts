@@ -129,7 +129,7 @@ describe("블록 props HTML import", () => {
 
   it("허용 목록 밖 data-geul-text-alignment 값은 textAlignment만 버리고 경고한다 (Issue #358)", () => {
     const result = importHtml(
-      '<p data-geul-block-id="paragraph-1" data-geul-text-alignment="justify">x</p>',
+      '<p data-geul-block-id="paragraph-1" data-geul-text-alignment="start">x</p>',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;

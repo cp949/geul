@@ -91,6 +91,26 @@ const readStyleSlots = (
   return { color, background, align };
 };
 
+// 텍스트 블록용 `text-align` 판독이다. 브라우저 cascade로 이긴 선언의 값을
+// ASCII 소문자로 돌려준다. `!important`가 먼저이고 같은 중요도는 뒤가 이긴다.
+// - 이긴 값이 허용값인지는 호출부가 model `isCanonicalTextBlockAlign`으로 판정한다.
+//   허용값만 후보로 남기면 `center; start`가 `center`로 읽혀 브라우저가 보여 준
+//   정렬과 달라진다. 셀 전용 `align`(readStyleDeclarations)은 그 방식이라 바꾸지 않는다.
+// - 선언이 없으면 undefined다.
+export const readTextAlignWinner = (
+  declarations: readonly CssDeclaration[],
+): string | undefined => {
+  let winner: string | undefined;
+  let winnerImportant = false;
+  for (const { name, text, important } of declarations) {
+    if (name !== "text-align") continue;
+    if (winnerImportant && !important) continue;
+    winner = asciiLowerCase(text);
+    winnerImportant = important;
+  }
+  return winner;
+};
+
 // 선언 목록에서 color/background-color/background/text-align 네 선언만
 // 읽는다. 나머지 선언은 조용히 버린다 — 파싱 실패로 전체 붙여넣기를 거절하지
 // 않는다. 선언 목록은 `parseCssDeclarations`(css/declarations.ts)가 만든다.
