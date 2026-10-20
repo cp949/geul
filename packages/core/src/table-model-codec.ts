@@ -72,6 +72,7 @@ const marksFromNode = (
     const decoded = decodeTextMark({
       type: mark.type.name,
       href: mark.attrs.href,
+      target: mark.attrs.target,
       color: mark.attrs.color,
     });
     if (!decoded.ok) {

@@ -18,6 +18,7 @@ import {
   isKnownTextMarkType,
   isLeafBlock,
   isMediaBlock,
+  isCanonicalLinkTarget,
   isSupportedLinkHref,
   isTextRunItem,
   isValidInlineText,
@@ -174,6 +175,16 @@ export const inlineContentViolation = (
           reason: "contains an unsupported link URL",
         };
       }
+      if (
+        mark.type === "link" &&
+        mark.target !== undefined &&
+        !isCanonicalLinkTarget(mark.target)
+      ) {
+        return {
+          code: "DOCUMENT_INVALID",
+          reason: "contains an unsupported link target",
+        };
+      }
     }
     if (!isCanonicalTextMarks(knownMarks)) {
       return {
@@ -276,7 +287,13 @@ const markToTiptap = (mark: TextMark): TiptapJsonMark => {
     case "code":
       return { type: "code" };
     case "link":
-      return { type: "link", attrs: { href: mark.href } };
+      return {
+        type: "link",
+        attrs:
+          mark.target === undefined
+            ? { href: mark.href }
+            : { href: mark.href, target: mark.target },
+      };
     case "textColor":
       return { type: "textColor", attrs: { color: mark.color } };
     case "backgroundColor":

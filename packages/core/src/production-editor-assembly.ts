@@ -543,6 +543,10 @@ export const createProductionEditor = (options: {
         heading: false,
         link: {
           openOnClick: false,
+          // Tiptap Link의 기본값(target: _blank, rel: noopener noreferrer nofollow)을 끈다.
+          // 켜 두면 새로 만든 모든 링크가 target을 갖고, model로 디코드할 때 `_blank`가
+          // 주입된다(Issue #424). target은 model 문서가 가진 값만 PM attr로 오간다.
+          HTMLAttributes: { target: null, rel: null, class: null },
           isAllowedUri: (url) => isSupportedLinkHref(url),
           shouldAutoLink: (url) => isSupportedLinkHref(url),
         },

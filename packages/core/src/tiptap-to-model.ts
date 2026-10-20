@@ -49,6 +49,7 @@ const markFromTiptap = (
   const decoded = decodeTextMark({
     type: mark.type,
     href: mark.attrs?.href,
+    target: mark.attrs?.target,
     color: mark.attrs?.color,
   });
   return decoded.ok ? decoded : invalid(decoded.error);

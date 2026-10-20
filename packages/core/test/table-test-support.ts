@@ -203,6 +203,9 @@ const TABLE_FIXTURE_EXTENSIONS: Extensions = [
     // nestableBlockContent 그룹, blockContainer로 감싸여야 한다).
     paragraph: false,
     heading: false,
+    // production-editor-assembly.ts와 같은 Link 기본값 제거 — 켜 두면 라이브 PM 노드 경로의
+    // 디코드가 모든 링크에 `_blank`를 주입한다(Issue #424).
+    link: { HTMLAttributes: { target: null, rel: null, class: null } },
     trailingNode: false,
   }),
   FixtureParagraphExtension,

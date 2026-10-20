@@ -293,8 +293,9 @@ describe("에디터 컨트롤러 링크", () => {
         type: "link",
         attrs: {
           href: "https://example.com",
-          target: "_blank",
-          rel: "noopener noreferrer nofollow",
+          // Tiptap Link 기본값(target _blank, rel nofollow)을 끈 뒤의 값이다(Issue #424).
+          target: null,
+          rel: null,
           class: null,
           title: null,
         },
