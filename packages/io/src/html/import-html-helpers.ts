@@ -347,6 +347,7 @@ export const paragraphContentFromNodes = (
     inlineContentFromNodes(nodes, {
       ...(baseFormat === undefined ? {} : { baseFormat }),
       onText: context.codePoints.inlineText,
+      onTargetRead: (node) => context.preserved.mark(node, "target"),
     }),
   );
 

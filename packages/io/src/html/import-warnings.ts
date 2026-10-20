@@ -338,6 +338,11 @@ const isOwnEchoStyle = (
 const isBlockBoundaryTag = (tagName: string): boolean =>
   NESTED_BOUNDARY_TAG_NAMES.has(tagName) || isTransparentListTag(tagName);
 
+// exportHtml이 target="_blank" 링크에 내는 rel이다(inline-content.ts의 wrapMark와 같은 값).
+const isOwnEchoLinkRel = (node: HtmlElementNode, rel: unknown): boolean =>
+  node.properties.target === "_blank" &&
+  (Array.isArray(rel) ? rel.join(" ") : rel) === "noopener noreferrer";
+
 const collectFromNodes = (
   nodes: HtmlNode[],
   warnings: HtmlImportWarning[],
@@ -405,6 +410,15 @@ const collectFromNodes = (
         attribute === "style" &&
         typeof value === "string" &&
         isOwnEchoStyle(node, value, parentFigurePreviewWidthStyle)
+      ) {
+        continue;
+      }
+      // export가 `_blank` 링크에 내는 rel은 target에서 다시 만들어지므로 읽지 않아도 손실이
+      // 아니다. 정확히 같은 값일 때만 경고를 생략한다(nofollow 등 추가 토큰은 그대로 보고).
+      if (
+        node.tagName === "a" &&
+        attribute === "rel" &&
+        isOwnEchoLinkRel(node, value)
       ) {
         continue;
       }

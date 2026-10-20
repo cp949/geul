@@ -11,7 +11,7 @@
 //
 // `data-geul-*` 우선순위는 호출부가 갖는다. 저장 원본의 에코라 요소 표현이
 // 아니다.
-import type { TextMark } from "@cp949/geul-model";
+import { normalizeLinkTarget, type TextMark } from "@cp949/geul-model";
 
 import { readLegacyAttributeColor } from "../css/css-color.js";
 import {
@@ -226,9 +226,21 @@ export const inlineElementPresentation = (
   switch (node.tagName) {
     case "a": {
       const href = node.properties.href;
-      return typeof href === "string"
-        ? { presentation: {}, marks: [{ type: "link", href }] }
-        : EMPTY_INLINE_PRESENTATION;
+      if (typeof href !== "string") return EMPTY_INLINE_PRESENTATION;
+      // 허용 밖 target은 버린다. 경고는 변환 뒤 감사가 낸다(onTargetRead 참고).
+      const rawTarget = node.properties.target;
+      const target =
+        typeof rawTarget === "string"
+          ? normalizeLinkTarget(rawTarget)
+          : undefined;
+      return {
+        presentation: {},
+        marks: [
+          target === undefined
+            ? { type: "link", href }
+            : { type: "link", href, target },
+        ],
+      };
     }
     case "strong":
     case "b": {

@@ -92,7 +92,14 @@ export const htmlImportSanitizeSchema = {
     // 태그일 때 data-geul-*를 직접 갖는다(RD-001-DELTA-01 export 계약) — 기존
     // href는 공유 목록(htmlAllowedAttributes.a)에 이미 있어 스프레드로
     // 유지된다.
-    a: [...(sanitizeAllowedAttributes.a ?? []), ...mediaDataAttributeNames],
+    // target은 링크 mark가 읽는다(Issue #424). 경고 기준(htmlAllowedAttributes)에는 없어
+    // 감사 대상이다 — 변환기가 읽은 target은 조용하고, 허용 밖이라 버린 target은 감사가
+    // 경고한다. rel은 읽지 않으므로 이전처럼 수집기가 제거를 보고한다.
+    a: [
+      ...(sanitizeAllowedAttributes.a ?? []),
+      "target",
+      ...mediaDataAttributeNames,
+    ],
     // img의 style은 구 에디터가 저장한 인라인 px 폭을 previewWidth로 읽으려고 남긴다
     // (Issue #424). 읽기 전용이라 경고 기준(htmlAllowedAttributes)에는 없다 — 다른 선언은
     // 버려지므로 raw 경고는 이전처럼 style 제거를 보고한다.

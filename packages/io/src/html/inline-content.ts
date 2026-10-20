@@ -289,6 +289,7 @@ const readInlineNodes = (
   content: InlineContent,
   breaks: BlockBreakState | undefined,
   onText: ((node: HtmlTextNode) => void) | undefined,
+  onTargetRead: ((node: HtmlElementNode) => void) | undefined,
 ): void => {
   for (const node of nodes) {
     if (node.type === "text") {
@@ -320,12 +321,21 @@ const readInlineNodes = (
       readsCellBlockStyle(node, breaks.tagNames)
         ? cellBlockPresentation(node)
         : inlineElementPresentation(node);
+    if (node.tagName === "a" && node.properties.target !== undefined) {
+      // 링크가 만들어졌는데 target이 거절된 경우만 읽지 못한 것이다. 링크가 만들어지지
+      // 않은 a(href 무효)의 target은 href 경고가 이미 손실을 알리므로 따로 경고하지 않는다.
+      const link = own.marks.find((mark) => mark.type === "link");
+      if (link === undefined || link.target !== undefined) {
+        onTargetRead?.(node);
+      }
+    }
     readInlineNodes(
       node.children,
       inheritInlinePresentation(inherited, own),
       content,
       breaks,
       onText,
+      onTargetRead,
     );
     if (isBlock && breaks !== undefined) breaks.pending = true;
   }
@@ -356,6 +366,9 @@ export const inlineContentFromNodes = (
     blockBreakTagNames?: ReadonlySet<string>;
     baseFormat?: TextFormat;
     onText?: (node: HtmlTextNode) => void;
+    // a의 target을 변환기가 처리했을 때 부른다(읽었거나, 링크 자체가 없어 의미가 없을 때).
+    // importHtml 변환기가 속성 보존 표시를 하는 자리다. 부르지 않은 target은 감사가 경고한다.
+    onTargetRead?: (node: HtmlElementNode) => void;
   },
 ): InlineContent => {
   const content: InlineContent = [];
@@ -370,6 +383,7 @@ export const inlineContentFromNodes = (
       ? undefined
       : { tagNames, pending: false, seenText: false },
     options?.onText,
+    options?.onTargetRead,
   );
   return content;
 };
@@ -386,7 +400,16 @@ const wrapMark = (
 ): HtmlElementNode => {
   switch (mark.type) {
     case "link":
-      return element("a", { href: mark.href }, [node]);
+      // target이 _blank일 때만 rel을 붙인다. nofollow 같은 소비자 정책은 붙이지 않는다.
+      return element(
+        "a",
+        {
+          href: mark.href,
+          ...(mark.target === undefined ? {} : { target: mark.target }),
+          ...(mark.target === "_blank" ? { rel: "noopener noreferrer" } : {}),
+        },
+        [node],
+      );
     case "bold":
       return element("strong", {}, [node]);
     case "italic":

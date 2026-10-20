@@ -83,7 +83,10 @@ export type MarkdownLoss = {
     | "HARD_BREAK_LOST"
     // Issue #402. 표 셀 code 런의 홀수 개 백슬래시 뒤 `|`는 표 파서가 열 구분자로
     // 읽는다. 셀당 1건이고 표 밖 code 런은 대상이 아니다.
-    | "INLINE_CODE_TABLE_PIPE";
+    | "INLINE_CODE_TABLE_PIPE"
+    // Issue #424. GFM 링크 `[text](url)`에는 target을 실을 수 없다. target이 있는 link mark가
+    // content 어디에 있든 보고하고, 블록·셀당 1건이다.
+    | "LINK_TARGET";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -110,6 +113,16 @@ const hasColorMark = (content: InlineContent): boolean =>
       isTextRunItem(item) &&
       (item.marks ?? []).some(
         (mark) => mark.type === "textColor" || mark.type === "backgroundColor",
+      ),
+  );
+
+const hasLinkTarget = (content: InlineContent): boolean =>
+  content.some(
+    (item) =>
+      isTextRunItem(item) &&
+      (item.marks ?? []).some(
+        (mark) =>
+          mark.type === "link" && "target" in mark && mark.target !== undefined,
       ),
   );
 
@@ -242,6 +255,13 @@ const collectTableLosses = (
           kind: "INLINE_COLOR",
           ...location,
           message: `Cell ${cell.id} contains inline text or background color`,
+        });
+      }
+      if (hasLinkTarget(cell.content)) {
+        losses.push({
+          kind: "LINK_TARGET",
+          ...location,
+          message: `Cell ${cell.id} contains a link with a target; GFM links cannot carry it`,
         });
       }
     }
@@ -396,6 +416,13 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
       kind: "INLINE_COLOR",
       blockId: block.id,
       message: `Block ${block.id} contains inline text or background color`,
+    });
+  }
+  if (hasLinkTarget(block.content)) {
+    losses.push({
+      kind: "LINK_TARGET",
+      blockId: block.id,
+      message: `Block ${block.id} contains a link with a target; GFM links cannot carry it`,
     });
   }
   if (block.textColor !== undefined || block.backgroundColor !== undefined) {

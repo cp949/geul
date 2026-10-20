@@ -253,6 +253,7 @@ export const parseTable = (
             blockBreakTagNames: flattenBlockBoundaryTagNames,
             baseFormat: styled.format,
             onText: context.codePoints.inlineText,
+            onTargetRead: (node) => context.preserved.mark(node, "target"),
           }),
         ),
         ...(textColor === undefined ? {} : { textColor }),
