@@ -23,6 +23,7 @@ const OWN_FIELDS: readonly MediaOwnField[] = [
   "previewWidth",
   "textAlignment",
   "aspectRatio",
+  "alt",
 ];
 
 const SAMPLE_VALUES: Record<MediaOwnField, unknown> = {
@@ -30,6 +31,7 @@ const SAMPLE_VALUES: Record<MediaOwnField, unknown> = {
   previewWidth: 320,
   textAlignment: "center",
   aspectRatio: "16:9",
+  alt: "대체 텍스트",
 };
 
 const documentOf = (block: unknown) => ({
@@ -72,6 +74,7 @@ describe("MEDIA_BLOCK_FIELDS — types.ts와의 일치(컴파일 타임)", () =>
     expectTypeOf<
       MediaBlockTypeWithField<"aspectRatio">
     >().toEqualTypeOf<"iframe">();
+    expectTypeOf<MediaBlockTypeWithField<"alt">>().toEqualTypeOf<"image">();
   });
 });
 

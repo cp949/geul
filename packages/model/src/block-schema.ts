@@ -101,6 +101,7 @@ const imageBlockSchema = z
   .object({
     id: z.string(),
     type: z.literal("image"),
+    alt: z.string().optional(),
     showPreview: z.boolean().optional(),
     previewWidth: z.number().optional(),
     textAlignment: z.string().optional(),

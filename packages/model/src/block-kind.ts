@@ -152,11 +152,11 @@ export const isLeafBlock = <B extends { type: string }>(
 //   실패한다. 손으로 쓴 Block 타입과의 일치는 media-block-fields.test.ts가
 //   컴파일 타임에 고정한다.
 export type MediaOwnField =
-  "showPreview" | "previewWidth" | "textAlignment" | "aspectRatio";
+  "showPreview" | "previewWidth" | "textAlignment" | "aspectRatio" | "alt";
 
 export const MEDIA_BLOCK_FIELDS = {
   file: [],
-  image: ["showPreview", "previewWidth", "textAlignment"],
+  image: ["showPreview", "previewWidth", "textAlignment", "alt"],
   video: ["showPreview", "previewWidth", "textAlignment"],
   audio: ["showPreview"],
   iframe: ["previewWidth", "textAlignment", "aspectRatio"],
@@ -185,6 +185,7 @@ const MEDIA_FIELD_OWNERS: Record<MediaOwnField, ReadonlySet<string>> = {
   previewWidth: typesOwningField("previewWidth"),
   textAlignment: typesOwningField("textAlignment"),
   aspectRatio: typesOwningField("aspectRatio"),
+  alt: typesOwningField("alt"),
 };
 
 export const mediaBlockTypeHasField = <F extends MediaOwnField>(

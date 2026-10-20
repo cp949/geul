@@ -137,9 +137,13 @@ export type FileBlock = { id: string; type: "file" } & MediaBlockCommon;
 // previewWidth/textAlignment는 image/video만 갖는다(BlockNote 실측과 정확히
 // 대응, spec §3.1). previewWidth는 양의 유한수만 검증하고 상한을 두지
 // 않는다(media-block.ts의 isValidMediaPreviewWidth, spec §5.3).
+// alt는 image만 갖는 선택 필드다(Issue #424 D4). 빈 문자열도 유효값이다. 없을 때만 출력
+// alt가 `caption ?? name ?? ""`로 대체된다(spec §2.2 개정). name·caption 변경이 alt를
+// 바꾸지 않는다.
 export type ImageBlock = {
   id: string;
   type: "image";
+  alt?: string;
   showPreview?: boolean;
   previewWidth?: number;
   textAlignment?: "left" | "center" | "right";
