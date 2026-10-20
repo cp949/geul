@@ -6,7 +6,7 @@
  *   이긴다.
  * - 승자가 단일 `px` 길이가 아니면 값 없음이다. 허용값만 후보로 남겨 앞 선언으로 되돌아가지
  *   않는다(`width: 320px; width: 50%` → 값 없음).
- * - 유한한 px 길이는 부호·크기와 상관없이 그대로 돌려준다. 양수 검증은 호출부가 model
+ * - CSS 길이는 음수를 받지 않는다. 0과 유한한 양수 px 길이를 돌려주고 저장형 양수 검증은 model
  *   `isValidMediaPreviewWidth`로 한다(G-CNV-001).
  */
 import { describe, expect, it } from "vitest";
@@ -29,7 +29,6 @@ describe("readStylePxWidth 값", () => {
     ["width: 320px /* 주석 */", 320],
     ["wid\\74 h: 320px", 320],
     ["width: 0px", 0],
-    ["width: -5px", -5],
   ])("%j는 %s px로 읽는다", (style, expected) => {
     expect(readStylePxWidth(style)).toBe(expected);
   });
@@ -71,6 +70,7 @@ describe("readStylePxWidth 값 없음", () => {
     "min-width: 320px",
     "border-width: 320px",
     "--width: 320px",
+    "width: -5px",
     "width: 50%",
     "width: calc(320px)",
     "width: calc(100px + 220px)",
@@ -92,4 +92,15 @@ describe("readStylePxWidth 값 없음", () => {
   ])("%j는 값 없음이다", (style) => {
     expect(readStylePxWidth(style)).toBeUndefined();
   });
+});
+
+describe("무효 width 선언은 앞의 폭을 지우지 않는다", () => {
+  it.each(["bogus", "-5px", "320 px", "320px 100px", "10unknown", "-1%"])(
+    "%s를 건너뛴다",
+    (invalid) => {
+      expect(readStylePxWidth(`width:320px;width:${invalid} !important`)).toBe(
+        320,
+      );
+    },
+  );
 });

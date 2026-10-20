@@ -40,6 +40,8 @@ describe("legacy img inline px 폭", () => {
     ["max-width: 100%; width: 320px", 320],
     ["width: 320px !important; width: 100px", 320],
     ["width: 100px; width: 320px", 320],
+    ["width: 320px; width: bogus !important", 320],
+    ["width: 320px; width: -5px", 320],
   ] as const)("style=%j는 previewWidth %s로 읽힌다", (style, expected) => {
     const { document } = imported(IMG(`style="${style}"`));
     expect(document.blocks).toMatchObject([
