@@ -29,7 +29,7 @@ roadmap R3 범위 bullet에 없는 항목은 구현하지 않는다. `_tmp/block
 - **업로드 진행률(%) UI** — roadmap 완료조건은 성공·실패·취소 결과만 요구한다(2026-09-04 사용자 확정). `UploadFile` 콜백에 progress 인자를 두지 않는다.
 - **공동 편집 동기화**(다른 사용자의 교체·삭제 반영, 재생 상태 비동기화 등) — roadmap이 R6("공동 편집, 댓글과 버전 parity")로 명시 배정했고 geul에 아직 실시간 협업 자체가 없다.
 - **transcript, subtitle track, poster, picture-in-picture, playback rate, exclusive playback** — roadmap R3 bullet("재생, 일시정지, 시간 탐색, 음량과 전체 화면"에 대응하는 표현 없음)에 없다. 네이티브 `<video>`/`<audio>` 태그가 기본 제공하는 것 이상 신규 UI를 만들지 않는다.
-- **별도 `alt` prop 신설** — BlockNote parity 대상 자체가 `name`/`caption`뿐이고 별도 alt 필드가 없다(2026-09-04 사용자 확정). HTML 출력 `<img alt>`는 caption이 있으면 caption, 없으면 name을 재사용한다.
+- **alt 입력 UI와 alt 설정 명령** — `ImageBlock`은 선택 `alt` 필드를 가지지만(2026-10-21 Issue #424 D4로 개정, §3.1), 이를 입력·수정하는 UI와 명령은 이 범위가 아니다. 원래 결정(2026-09-04)은 BlockNote parity 대상에 별도 alt 필드가 없다는 이유로 alt prop을 두지 않고 HTML 출력 `<img alt>`에 `caption ?? name`을 재사용했다. 구 에디터가 저장한 HTML의 `img[alt]`(빈 문자열 포함)를 보존해야 해서 필드를 추가했다. `alt`가 없을 때만 기존 대체 규칙(`caption ?? name ?? ""`)을 쓴다.
 - **WCAG 정량 접근성 기준**(pointer target 24×44px, live region 등) — R1/R2 완료판정에 a11y 게이트 전례가 없다(2026-09-04 사용자 확정). 기존 키보드 도달성(focus·Enter·Escape) 관례는 그대로 따른다.
 - **i18n 프레임워크** — 기존 관례(영어 UI 문구 하드코딩, Issue #38 슬라이스 2 전례)와 충돌해 유지한다.
 - **서버 측 보안**(file signature 검증, malware scan, SSRF 방어, signed URL 해석/proxy, quarantine) — geul은 파일 서버·백엔드를 갖지 않는다(완료조건: "소비자 callback 외의 특정 파일 서버에 의존하지 않는다"). 전부 소비자 백엔드 책임이며 geul 공개 계약 범위 밖이다.
@@ -57,6 +57,7 @@ export type FileBlock = { id: string; type: "file" } & MediaBlockCommon;
 export type ImageBlock = {
   id: string;
   type: "image";
+  alt?: string; // 빈 문자열도 유효값. 없을 때만 출력 alt가 caption ?? name ?? ""(Issue #424 D4)
   showPreview?: boolean; // 기본 true
   previewWidth?: number; // 양의 유한수만, 상한은 model이 두지 않음(§5.3)
   textAlignment?: "left" | "center" | "right";
@@ -180,21 +181,27 @@ URL이 있는 미디어 블록 선택 시 전용 toolbar를 표시한다 — rep
   data-geul-preview-width="..."
   data-geul-text-alignment="..."
 >
-  <img src="URL" alt="caption 또는 name" />
+  <img src="URL" alt="alt, 없으면 caption 또는 name" />
   <!-- image -->
   <figcaption>caption</figcaption>
 </figure>
 <!-- caption 없음 -->
-<img src="URL" alt="name" data-geul-...="..." />
+<img src="URL" alt="alt, 없으면 name" data-geul-...="..." />
 ```
 
 video/audio는 `<video>`/`<audio controls>`로, file은 `<a href="URL">name</a>`로 매핑한다. `showPreview:false`(image/video/audio)는 미디어 태그 대신 `<a>`로 출력한다. `previewWidth`/`showPreview`/`textAlignment`/`backgroundColor`는 `data-geul-*` 속성(기존 표 셀 색상과 같은 패턴)으로 왕복한다.
+
+**alt (Issue #424 D4).** image의 `alt` 필드가 있을 때만 `data-geul-alt`를 outer 요소(bare `img`, `figure`, 링크로 강등된 `a`)에 싣는다. 값이 빈 문자열이어도 싣고 `<img alt="">`도 빈 문자열이다. 출력 alt만으로는 명시적 alt와 `caption`·`name` 대체값을 구분할 수 없어서 별도 속성을 둔다. Import 규칙은 셋이다.
+
+1. `data-geul-alt`가 있으면 그 값을 `alt`로 읽는다(빈 문자열 포함).
+2. 없고 own-format 마커 `data-geul-media-type`가 있으면 `alt` 필드를 만들지 않는다. 자체 export의 `img[alt]`는 대체값일 수 있다.
+3. 마커가 없는 legacy `img`는 `img[alt]` 속성이 있을 때 그 값을 `alt`로 읽는다. `alt=""`는 빈 문자열 `alt`다. 속성이 없으면 필드를 만들지 않는다.
 
 Import는 `<figure>` 안의 media 요소 + `<figcaption>`을 **블록 1개**로만 디코드한다(figure와 media 요소를 별도 2개 블록으로 중복 생성하지 않는 가드).
 
 ### 7.2 GFM 계약과 손실 정책
 
-- Image만 `![name](url)`로 strict round-trip 가능(url/name만). `previewWidth`/`showPreview`/`textAlignment`/`backgroundColor`/caption은 표현 불가 — 새 손실 카테고리(`MEDIA_PREVIEW_WIDTH`/`MEDIA_SHOW_PREVIEW`/`MEDIA_TEXT_ALIGNMENT`/`MEDIA_CAPTION`)로 strict 거절, lossy는 값 폐기+경고(`INLINE_COLOR` 계열과 동일 패턴).
+- Image만 `![name](url)`로 strict round-trip 가능(url/name만). export는 `![alt ?? name ?? url](url)`을 쓰고 import는 md 이미지 텍스트를 `name`으로 읽는다. md 이미지는 텍스트 하나뿐이라 `alt`가 있고 `name`과 다르면(`name`이 없을 때는 빈 문자열과 비교) 새 손실 카테고리 `IMAGE_ALT`로 strict 거절, lossy는 `alt`를 텍스트로 쓰고 경고한다(Issue #424 D4). `previewWidth`/`showPreview`/`textAlignment`/`backgroundColor`/caption은 표현 불가 — 새 손실 카테고리(`MEDIA_PREVIEW_WIDTH`/`MEDIA_SHOW_PREVIEW`/`MEDIA_TEXT_ALIGNMENT`/`MEDIA_CAPTION`)로 strict 거절, lossy는 값 폐기+경고(`INLINE_COLOR` 계열과 동일 패턴).
 - Video/Audio/File은 GFM 표현 수단이 없어 strict 거절, lossy는 `[name](url)` 링크로 강등한다. raw HTML `<figure>`를 GFM 출력에 끼워 넣는 하이브리드 fallback은 쓰지 않는다 — 기존 strict/lossy 이분법을 유지한다(R1/R2 전례 없음, 사용자 확정).
 - 완료 조건 문구가 "JSON/HTML round-trip"만 요구하므로 GFM 손실은 조건 위반이 아니다.
 

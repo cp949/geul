@@ -213,9 +213,9 @@ const previewWidthStyleAttrs = (
 };
 
 // image/video/audio의 정상(showPreview !== false) 시각 태그. alt는 spec
-// §2.2·§7.1대로 caption이 있으면 caption, 없으면 name을 재사용한다(별도 alt
-// prop 신설 없음 — 2026-09-04 사용자 확정, core ImageBlockExtension과 동일
-// 공식).
+// §3.1·§7.1대로 명시적 alt 필드가 있으면(빈 문자열 포함) 그 값이고, 없을 때만
+// caption, 없으면 name을 재사용한다(Issue #424 D4, core ImageBlockExtension과
+// 동일 공식).
 const mediaVisualNode = (
   block: Extract<MediaBlock, { type: "image" | "video" | "audio" }>,
   url: string,
