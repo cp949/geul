@@ -1,9 +1,9 @@
 import { isNestableBlockType, type NestableBlockType } from "./block-kind.js";
-import { isCanonicalCellAlign } from "./cell-align.js";
 import { isCanonicalCellColor } from "./cell-color.js";
 import { invalid, type DocumentPath } from "./document-validation-helpers.js";
 import type { DocumentError } from "./errors.js";
 import type { Result } from "./result.js";
+import { isCanonicalTextBlockAlign } from "./text-block-align.js";
 import type { Block, DocumentBlock } from "./types.js";
 
 // TextBlockProps(textColor/backgroundColor/textAlignment) 정규형 검증이다.
@@ -44,11 +44,11 @@ const validateTextBlockPropsAt = (
     }
     if (
       nestable.textAlignment !== undefined &&
-      !isCanonicalCellAlign(nestable.textAlignment)
+      !isCanonicalTextBlockAlign(nestable.textAlignment)
     ) {
       return invalid(
         [...blockPath, "textAlignment"],
-        "textAlignment must be one of left, center, right",
+        "textAlignment must be one of left, center, right, justify",
       );
     }
 

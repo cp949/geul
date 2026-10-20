@@ -22,6 +22,11 @@ export {
   mediaBlockTypeHasField,
 } from "./block-kind.js";
 export { isCanonicalCellAlign } from "./cell-align.js";
+export {
+  isCanonicalTextBlockAlign,
+  TEXT_BLOCK_ALIGNMENTS,
+} from "./text-block-align.js";
+export type { TextBlockAlignment } from "./text-block-align.js";
 export { isCanonicalCellColor } from "./cell-color.js";
 export {
   canonicalizeCodeBlockLanguage,

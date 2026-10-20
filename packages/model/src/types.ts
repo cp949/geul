@@ -1,3 +1,5 @@
+import type { TextBlockAlignment } from "./text-block-align.js";
+
 export type TextMark =
   | { type: "bold" | "italic" | "underline" | "strike" | "code" }
   | { type: "link"; href: string; target?: string }
@@ -34,12 +36,13 @@ export type InlineContentItem =
 // optional 필드다(spec §3.3). `table`/`divider`/`codeBlock`에는 붙이지
 // 않는다 — 표는 이미 셀 단위 색상·정렬을 갖고, divider는 콘텐츠가 없고,
 // codeBlock은 구문 강조 색상과 충돌한다. 값의 정규형(색상 `#RRGGBB` 대문자,
-// 정렬 enum)은 표 셀과 같은 `isCanonicalCellColor`/`isCanonicalCellAlign`을
-// 재사용해 schema.ts가 검증한다(G-CNV-001).
+// 정렬 enum)은 색상은 표 셀과 같은 `isCanonicalCellColor`를 재사용하고, 정렬은
+// `justify`를 포함하는 텍스트 블록 전용 `isCanonicalTextBlockAlign`으로 검증한다
+// (Issue #424). 표 셀·미디어 정렬은 `isCanonicalCellAlign`(left/center/right)을 그대로 쓴다.
 export type TextBlockProps = {
   textColor?: string;
   backgroundColor?: string;
-  textAlignment?: "left" | "center" | "right";
+  textAlignment?: TextBlockAlignment;
 };
 
 export type ParagraphBlock = {

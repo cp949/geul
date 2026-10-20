@@ -290,7 +290,8 @@ describe("새 종류 블록의 잘못된 입력은 뮤테이션 전에 거절한
       clipBlock({
         type: "quote",
         content: [],
-        textAlignment: "justify" as "left",
+        // justify는 텍스트 블록 정규형이 됐다(Issue #424). 허용 밖 정렬 키워드로 start를 쓴다.
+        textAlignment: "start" as "left",
       }),
       expect.stringContaining("textAlignment"),
     ],

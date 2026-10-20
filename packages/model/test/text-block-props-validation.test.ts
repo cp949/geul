@@ -92,7 +92,7 @@ describe("독립 문서 모델 - TextBlockProps 검증", () => {
     });
   });
 
-  it("textAlignment가 left/center/right 밖이면 거절한다", () => {
+  it("textAlignment가 left/center/right/justify 밖이면 거절한다", () => {
     expect(
       parseDocument({
         formatVersion: 1,
@@ -102,7 +102,8 @@ describe("독립 문서 모델 - TextBlockProps 검증", () => {
             id: "p-1",
             type: "paragraph",
             content: [],
-            textAlignment: "justify",
+            // justify는 텍스트 블록 정규형이 됐다(Issue #424). 정렬 키워드 중 허용 밖인 start로 확인한다.
+            textAlignment: "start",
           },
         ],
       }),
