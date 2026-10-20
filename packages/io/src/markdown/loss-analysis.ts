@@ -86,7 +86,11 @@ export type MarkdownLoss = {
     | "INLINE_CODE_TABLE_PIPE"
     // Issue #424. GFM 링크 `[text](url)`에는 target을 실을 수 없다. target이 있는 link mark가
     // content 어디에 있든 보고하고, 블록·셀당 1건이다.
-    | "LINK_TARGET";
+    | "LINK_TARGET"
+    // Issue #424. GFM 이미지 `![alt](url)`는 alt 하나뿐이고 재가져오기 때 name으로 읽는다.
+    // image의 alt가 있고 name과 다르면(둘 다 없는 경우의 빈 alt는 같다고 본다) alt와 name의
+    // 구분이 사라진다. 블록당 1건이다.
+    | "IMAGE_ALT";
   blockId: string;
   rowId?: string;
   cellId?: string;
@@ -326,6 +330,17 @@ const collectBlockLosses = (block: Block, losses: MarkdownLoss[]): void => {
         kind: "BLOCK_COLOR",
         blockId: block.id,
         message: `Block ${block.id} has a background color`,
+      });
+    }
+    if (
+      mediaBlockHasField(block, "alt") &&
+      block.alt !== undefined &&
+      block.alt !== (block.name ?? "")
+    ) {
+      losses.push({
+        kind: "IMAGE_ALT",
+        blockId: block.id,
+        message: `Block ${block.id} has an alt text different from its name; GFM images carry a single alt text`,
       });
     }
     if (block.caption !== undefined) {

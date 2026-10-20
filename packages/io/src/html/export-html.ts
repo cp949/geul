@@ -138,6 +138,11 @@ const mediaDataAttributes = (
   dataGeulBlockId: block.id,
   dataGeulMediaType: block.type,
   ...(block.name === undefined ? {} : { dataGeulName: block.name }),
+  // alt는 image만 갖는다. 출력 alt는 caption·name 대체값일 수 있어 명시적 alt와 구분할 수
+  // 없으므로, 필드가 있을 때만(빈 문자열 포함) 별도로 싣는다(Issue #424 D4).
+  ...(mediaBlockHasField(block, "alt") && block.alt !== undefined
+    ? { dataGeulAlt: block.alt }
+    : {}),
   ...(block.backgroundColor === undefined
     ? {}
     : { dataGeulBackgroundColor: block.backgroundColor }),
@@ -222,7 +227,7 @@ const mediaVisualNode = (
       "img",
       {
         src: url,
-        alt: block.caption ?? block.name ?? "",
+        alt: block.alt ?? block.caption ?? block.name ?? "",
         ...widthStyle,
         ...extraAttrs,
       },

@@ -260,6 +260,8 @@ const blockNode = (block: Block): MarkdownOutputNode => {
   if (isMediaBlock(block)) {
     const url = block.url ?? "";
     const text = block.name ?? url;
+    // image의 alt가 있으면 md 이미지 텍스트로 쓴다. 링크 강등(아래)은 name을 쓴다.
+    const imageText = block.type === "image" ? (block.alt ?? text) : text;
     // Image는 showPreview:false일 때만 링크로 강등한다(html export의
     // `block.type !== "file" && block.showPreview === false`와 동일 조건 —
     // 재import가 `![]()`만 Image로 인식하므로(spec §7.3) 강등된 이미지도
@@ -269,7 +271,7 @@ const blockNode = (block: Block): MarkdownOutputNode => {
     if (block.type === "image" && block.showPreview !== false) {
       return {
         type: "paragraph",
-        children: [{ type: "image", url, alt: text }],
+        children: [{ type: "image", url, alt: imageText }],
       };
     }
     return {

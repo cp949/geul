@@ -21,6 +21,7 @@ const mediaDataAttributeNames = [
   "dataGeulBlockId",
   "dataGeulMediaType",
   "dataGeulName",
+  "dataGeulAlt",
   "dataGeulBackgroundColor",
   "dataGeulShowPreview",
   "dataGeulPreviewWidth",

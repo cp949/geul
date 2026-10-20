@@ -95,7 +95,8 @@ describe("블록을 품은 font·mark는 태그만 벗겨 블록 구조를 유�
     [
       "font > img",
       '<font color="red"><img src="https://example.com/a.png" alt="x"></font>',
-      [{ type: "image", url: "https://example.com/a.png" }],
+      // 마커 없는 legacy img[alt]는 alt로 읽는다(Issue #424 D4).
+      [{ type: "image", url: "https://example.com/a.png", alt: "x" }],
     ],
     [
       "li 안 font > 글자와 표",

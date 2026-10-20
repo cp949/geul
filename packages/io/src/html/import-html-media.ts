@@ -101,6 +101,7 @@ const markMediaDataAttributes = (
     "dataGeulBlockId",
     "dataGeulMediaType",
     "dataGeulName",
+    "dataGeulAlt",
     "dataGeulBackgroundColor",
     "dataGeulShowPreview",
     "dataGeulPreviewWidth",
@@ -139,6 +140,25 @@ const resolvedIframeUrl = (
   resolveIframeEmbedDecision(rawSrc, iframeEmbedConfig).allowed
     ? rawSrc
     : undefined;
+
+// image의 alt를 읽는다(Issue #424 D4). 빈 문자열도 유효값이라 속성 부재와 구분한다 —
+// propertyString은 빈 문자열을 undefined로 돌려주므로 쓰지 않는다.
+// (1) data-geul-alt가 있으면 그 값. (2) 없고 own-format 마커(data-geul-media-type)가 있으면
+// alt 없음 — 자체 export의 img[alt]는 caption·name 대체값일 수 있다. (3) 마커 없는 legacy
+// img는 img[alt]가 있을 때 그 값.
+const imageAltFromNode = (
+  mediaType: MediaBlock["type"],
+  node: HtmlElementNode,
+  visualNode: HtmlElementNode | undefined,
+): string | undefined => {
+  if (!mediaBlockTypeHasField(mediaType, "alt")) return undefined;
+  const stored = node.properties.dataGeulAlt;
+  if (typeof stored === "string") return stored;
+  if (node.properties.dataGeulMediaType !== undefined) return undefined;
+  if (visualNode?.tagName !== "img") return undefined;
+  const legacy = visualNode.properties.alt;
+  return typeof legacy === "string" ? legacy : undefined;
+};
 
 // geul data 속성이 없는 legacy image의 폭이다. 안쪽 img의 인라인 `width: <n>px`만 읽는다
 // (RD-004.md 결정: video·audio·img[width] 속성·figure의 style 폭은 읽지 않는다). 출처가
@@ -273,6 +293,7 @@ export const mediaBlockFromNode = (
 
   const id = propertyString(node, "dataGeulBlockId") ?? createId();
   const name = propertyString(node, "dataGeulName");
+  const alt = imageAltFromNode(mediaType, node, visualNode);
   const backgroundColor = validOptionalValue(
     context,
     node,
@@ -340,6 +361,7 @@ export const mediaBlockFromNode = (
     id,
     ...(url === undefined ? {} : { url }),
     ...(name === undefined ? {} : { name }),
+    ...(alt === undefined ? {} : { alt }),
     ...(caption === undefined ? {} : { caption }),
     ...(backgroundColor === undefined ? {} : { backgroundColor }),
   };
