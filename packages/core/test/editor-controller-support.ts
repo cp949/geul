@@ -28,7 +28,7 @@ import {
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import type { NodeType, Schema } from "@tiptap/pm/model";
-import { NodeSelection } from "@tiptap/pm/state";
+import { NodeSelection, type Transaction } from "@tiptap/pm/state";
 import { expect } from "vitest";
 import { findBlockPosition } from "../src/block-position.js";
 import {
@@ -662,6 +662,23 @@ export const growUndoHistory = (tiptap: TiptapEditor, count: number): void => {
     const transaction = closeHistory(tiptap.state.tr.insertText("x", insertAt));
     tiptap.view.dispatch(transaction);
   }
+};
+
+/**
+ * 이후 `view.dispatch`로 들어오는 transaction을 순서대로 모은다. 원래 dispatch는
+ * 그대로 실행한다. jsdom은 실제 스크롤을 못 하므로 `scrolledIntoView` 같은
+ * transaction 플래그를 단언할 때 쓴다.
+ */
+export const collectDispatched = (
+  tiptap: Pick<TiptapEditor, "view">,
+): Transaction[] => {
+  const dispatched: Transaction[] = [];
+  const originalDispatch = tiptap.view.dispatch.bind(tiptap.view);
+  tiptap.view.dispatch = (transaction) => {
+    dispatched.push(transaction);
+    originalDispatch(transaction);
+  };
+  return dispatched;
 };
 
 /**

@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import { contentTextStart } from "./block-test-support.js";
 import {
   caretAt,
+  collectDispatched,
   documentOf,
   editorState,
   mounted,
@@ -1135,15 +1136,6 @@ describe("CodeBlock 경계 변환의 selection 스크롤 표시", () => {
   // 변환이 selection을 대상 블록으로 직접 옮기므로, 화면 밖 블록이면 결과
   // selection이 보이도록 transaction에 scrollIntoView를 표시해야 한다.
   // jsdom은 실제 스크롤을 못 하므로 transaction 플래그로 고정한다.
-  const collectDispatched = (tiptap: ReturnType<typeof mounted>["tiptap"]) => {
-    const dispatched: (typeof tiptap.state.tr)[] = [];
-    const originalDispatch = tiptap.view.dispatch.bind(tiptap.view);
-    tiptap.view.dispatch = (transaction) => {
-      dispatched.push(transaction);
-      originalDispatch(transaction);
-    };
-    return dispatched;
-  };
 
   it("문단 → CodeBlock 변환 transaction은 selection을 화면 안으로 스크롤하도록 표시한다", () => {
     const { editor, tiptap } = mounted(
