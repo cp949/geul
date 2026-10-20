@@ -111,3 +111,22 @@ export const nearestBlockContainerId = (state: EditorState): string | null => {
   }
   return null;
 };
+
+// head가 positions의 블록 콘텐츠 노드 중 하나의 안에 있는지 판정한다. 텍스트
+// 시작·끝(빈 블록이면 둘이 같다)은 안으로 보고, 노드 바로 앞·뒤 position은
+// 밖으로 본다. 블록 타입 변환은 이 판정이 참일 때만 결과 selection을 화면
+// 안으로 스크롤한다 — 사이드 메뉴 Turn into처럼 selection이 대상 밖이면
+// 스크롤이 화면 밖 옛 selection으로 뷰를 튀게 한다(#426). doc과 head는
+// 변환 transaction 적용 후 값을 넘긴다. 콘텐츠 삭제로 노드 크기가 바뀌므로
+// 노드는 doc에서 다시 읽는다.
+export const isHeadInsideBlockContent = (
+  doc: ProseMirrorNode,
+  head: number,
+  positions: readonly number[],
+): boolean =>
+  positions.some((position) => {
+    const node = doc.nodeAt(position);
+    if (node === null) return false;
+    const contentStart = position + 1;
+    return head >= contentStart && head <= contentStart + node.content.size;
+  });

@@ -303,6 +303,53 @@ test("서식 툴바의 select로 블록 종류를 바꿔도 내용을 보존한�
   await expect(editable.locator("p")).toHaveText("Hello R1");
 });
 
+test("짧은 뷰포트에서 /h1로 변환한 직후 캐럿과 변환된 블록 상단이 뷰포트 안에 있다 (Issue #426)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 240 });
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("line 0");
+  for (let index = 1; index < 20; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/h1");
+  await page.getByRole("option", { name: /^Heading 1/ }).click();
+
+  const heading = editable.locator("h1");
+  await expect(heading).toBeAttached();
+  // 빈 블록은 DOM Range rect가 0이라 캐럿 위치는 PM coordsAtPos로 읽는다.
+  // 변환 직후 데모 상단 패널이 커지는데, 블록 상단이 보이는 것은 Chromium
+  // scroll anchoring 보정 덕도 있다. 캐럿 하단은 scrollIntoView가 있어야
+  // 뷰포트 안에 든다. 스크롤 반영은 poll로 기다린다.
+  await expect
+    .poll(async () => {
+      const caretBottom = await editable.evaluate((root) => {
+        const { view } = (
+          root as unknown as {
+            editor: {
+              view: {
+                state: { selection: { head: number } };
+                coordsAtPos(position: number): { bottom: number };
+              };
+            };
+          }
+        ).editor;
+        return view.coordsAtPos(view.state.selection.head).bottom;
+      });
+      const box = await heading.boundingBox();
+      const viewport = page.viewportSize();
+      if (box === null || viewport === null) return null;
+      return {
+        caretInside: caretBottom <= viewport.height,
+        blockTopInside: box.y >= 0,
+      };
+    })
+    .toEqual({ caretInside: true, blockTopInside: true });
+});
+
 test("문서 하단에서 슬래시 메뉴를 열어도 Audio 항목까지 뷰포트 안에서 클릭할 수 있다 (PIT-0011)", async ({
   page,
 }) => {

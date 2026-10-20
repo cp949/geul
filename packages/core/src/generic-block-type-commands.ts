@@ -9,6 +9,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 
+import { isHeadInsideBlockContent } from "./block-position.js";
 import {
   evaluateBlockTypeChange,
   evaluateBlockTypesChange,
@@ -211,6 +212,14 @@ export const createGenericBlockTypeCommands = (
             ? { startNumber: numberedStartNumber }
             : {};
       transaction = transaction.setNodeMarkup(target.position, nodeType, attrs);
+      // 콘텐츠 삭제와 setNodeMarkup은 target.position을 옮기지 않는다.
+      if (
+        isHeadInsideBlockContent(transaction.doc, transaction.selection.head, [
+          target.position,
+        ])
+      ) {
+        transaction.scrollIntoView();
+      }
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
     });
@@ -277,6 +286,16 @@ export const createGenericBlockTypeCommands = (
           attrs,
         );
       });
+      // 건너뛴 대상도 판정에 넣는다. 앞 블록이 커지면 그 안의 캐럿도 밀린다.
+      if (
+        isHeadInsideBlockContent(
+          transaction.doc,
+          transaction.selection.head,
+          targets.map((target) => target.position),
+        )
+      ) {
+        transaction.scrollIntoView();
+      }
       session.editor.view.dispatch(closeHistory(transaction));
       return true;
     });

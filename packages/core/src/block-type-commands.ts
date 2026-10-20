@@ -2,7 +2,10 @@ import { isNestableBlockType, type Result } from "@cp949/geul-model";
 import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 
-import { findEditableBlockContent } from "./block-position.js";
+import {
+  findEditableBlockContent,
+  isHeadInsideBlockContent,
+} from "./block-position.js";
 import { blockNotFound, commandNotApplicable } from "./command-results.js";
 import type { EditorError } from "./errors.js";
 
@@ -64,6 +67,14 @@ export const setBlockTypeCommand = (
     nodeType,
     attrs,
   );
+  // setBlockType 일반 경로와 같은 조건으로 결과 selection을 화면 안에 둔다.
+  if (
+    isHeadInsideBlockContent(transaction.doc, transaction.selection.head, [
+      target.position,
+    ])
+  ) {
+    transaction.scrollIntoView();
+  }
   editor.view.dispatch(closeHistory(transaction));
   return { ok: true, value: undefined };
 };
