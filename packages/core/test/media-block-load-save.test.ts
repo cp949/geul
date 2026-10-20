@@ -4,6 +4,7 @@
  * codec 자체(encode/decode 무손실)는 media-block-codec.test.ts가 소유한다
  * — 여기는 production 경계(createTiptapEditor·readEditorDocument)만 본다.
  */
+import { exportHtml } from "@cp949/geul-io";
 import type { Document } from "@cp949/geul-model";
 import { describe, expect, it } from "vitest";
 
@@ -137,5 +138,56 @@ describe("로컬 프리뷰 — 저장 후 재로드(Issue #168 roadmap RD-002 �
 
     expect(wrapper?.hasAttribute("data-geul-media-local-preview")).toBe(false);
     expect(wrapper?.getAttribute("data-geul-media-empty")).toBe("image");
+  });
+});
+
+// Issue #424 RD-004 — 문서가 가진 소수 폭이 편집기를 거치며 정수로 잘리지 않는다. 저장 경로는
+// getDocument(), 발행 경로는 exportHtml이다.
+describe("production load/save — 소수 previewWidth", () => {
+  it("replaceDocument → getDocument → exportHtml에서 image·video·iframe의 소수 폭이 유지된다", () => {
+    const editor = createEditor({
+      initialDocument: {
+        formatVersion: 1,
+        revision: 0,
+        blocks: [{ id: "p-1", type: "paragraph", content: [] }],
+      },
+      createId: sequentialIds("id"),
+    });
+    mountTiptapEditor(editor);
+
+    const next: Document = {
+      formatVersion: 1,
+      revision: 0,
+      blocks: [
+        {
+          id: "image-1",
+          type: "image",
+          url: "https://example.com/pic.png",
+          previewWidth: 320.5,
+        },
+        {
+          id: "video-1",
+          type: "video",
+          url: "https://example.com/a.mp4",
+          previewWidth: 480.25,
+        },
+        { id: "iframe-1", type: "iframe", previewWidth: 640.75 },
+        { id: "tail-1", type: "paragraph", content: [] },
+      ],
+    };
+    expect(editor.replaceDocument(next)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+
+    const saved = editor.getDocument();
+    expect(saved.blocks).toEqual(next.blocks);
+
+    const html = exportHtml(saved);
+    expect(html.ok).toBe(true);
+    if (!html.ok) return;
+    expect(html.value).toContain('data-geul-preview-width="320.5"');
+    expect(html.value).toContain('data-geul-preview-width="480.25"');
+    expect(html.value).toContain('data-geul-preview-width="640.75"');
   });
 });

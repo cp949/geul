@@ -18,7 +18,7 @@ import {
 } from "@cp949/geul-model";
 
 import { MEDIA_VISUAL_TAG_NAMES } from "./block-tag-names.js";
-import { propertyInteger, propertyString } from "./hast-properties.js";
+import { propertyDecimal, propertyString } from "./hast-properties.js";
 import type { HtmlImportContext } from "./import-context.js";
 import {
   isElementNode,
@@ -264,9 +264,9 @@ export const mediaBlockFromNode = (
   );
   const showPreviewRaw = propertyString(node, "dataGeulShowPreview");
   // 아래 세 필드는 소유한 종류(MEDIA_BLOCK_FIELDS)만 읽는다. 다른 종류는
-  // 읽지도 경고하지도 않는다. previewWidth는 정수가 아니면 이전처럼 조용히
-  // 없는 값이고, 정수인데 양수가 아니면 버리고 경고한다.
-  const previewWidthRaw = propertyInteger(
+  // 읽지도 경고하지도 않는다. previewWidth는 십진수(소수 포함) 문법이 아니면
+  // 이전처럼 조용히 없는 값이고, 문법은 맞는데 양수가 아니면 버리고 경고한다.
+  const previewWidthRaw = propertyDecimal(
     node,
     "dataGeulPreviewWidth",
     Number.NaN,

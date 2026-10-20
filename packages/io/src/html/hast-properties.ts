@@ -78,3 +78,29 @@ export const propertyInteger = (
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isInteger(parsed) ? parsed : Number.NaN;
 };
+
+// 십진 소수 문법이다. 지수·공백·`0x`·소수점만 있는 꼴(`.5`, `5.`)은 받지 않는다.
+// export가 `String(value)`로 내는 꼴(`320.5`)을 되읽되 정수 판독(propertyInteger)의
+// 부호 허용은 그대로 둔다.
+const DECIMAL_PATTERN = /^[+-]?\d+(?:\.\d+)?$/;
+
+// data-* 속성은 property-information이 숫자로 바꾸지 않아 HAST 값이 원문 문자열
+// 그대로다. 그래서 propertyInteger와 달리 raw lexeme 메타데이터가 필요 없다.
+// 문법이 맞지 않으면 NaN이다. 호출부가 값 범위(양수 등)를 따로 검증한다.
+export const propertyDecimal = (
+  element: HtmlElementNode,
+  name: string,
+  fallback: number,
+): number => {
+  const value = element.properties[name];
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : Number.NaN;
+  }
+  if (typeof value !== "string" || !DECIMAL_PATTERN.test(value)) {
+    return Number.NaN;
+  }
+  // 자릿수가 너무 많아 Infinity가 되는 입력은 propertyInteger처럼 조용히 값 없음이다.
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+};
