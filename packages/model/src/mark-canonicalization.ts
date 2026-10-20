@@ -1,3 +1,4 @@
+import { normalizeLinkTarget } from "./link-policy.js";
 import type { Result } from "./result.js";
 import type { TextMark } from "./types.js";
 
@@ -24,12 +25,15 @@ const storedMarkOrder: Record<TextMark["type"], number> = {
   backgroundColor: 7,
 };
 
-// 같은 종류인지 판정한다. link는 href까지, 색 mark는 color를 보지 않는다.
+// 같은 종류인지 판정한다. link는 href와 target까지, 색 mark는 color를 보지 않는다.
 // canonicalizeTextMarks의 중복 제거는 이것만 쓴다 — 한 조각에 같은 종류 색
 // mark가 둘 남으면 isCanonicalTextMarks와 충돌한다.
 const sameMarkKind = (left: TextMark, right: TextMark): boolean =>
   left.type === right.type &&
-  (left.type !== "link" || (right.type === "link" && left.href === right.href));
+  (left.type !== "link" ||
+    (right.type === "link" &&
+      left.href === right.href &&
+      left.target === right.target));
 
 // 값까지 같은지 판정한다. textColor/backgroundColor는 color도 비교한다.
 // 색이 다른 인접 조각을 합치지 않기 위함이다(Issue #331).
@@ -107,6 +111,7 @@ export const firstNonCanonicalTextMarkIndex = (
 export type TextMarkNameInput = {
   type: string;
   href?: unknown;
+  target?: unknown;
   color?: unknown;
 };
 
@@ -123,9 +128,22 @@ export const decodeTextMark = (
   mark: TextMarkNameInput,
 ): Result<TextMark, string> => {
   if (mark.type === "link") {
-    return typeof mark.href === "string"
-      ? { ok: true, value: { type: "link", href: mark.href } }
-      : { ok: false, error: "Link mark requires an href" };
+    if (typeof mark.href !== "string") {
+      return { ok: false, error: "Link mark requires an href" };
+    }
+    // target은 정규화해 받고 허용 밖 값은 거절하지 않고 버린다. PM이 붙여넣기로 받은
+    // 임의 target 때문에 문서 전체가 거절되지 않게 하려는 것이다.
+    const target =
+      typeof mark.target === "string"
+        ? normalizeLinkTarget(mark.target)
+        : undefined;
+    return {
+      ok: true,
+      value:
+        target === undefined
+          ? { type: "link", href: mark.href }
+          : { type: "link", href: mark.href, target },
+    };
   }
   if (mark.type === "textColor" || mark.type === "backgroundColor") {
     return typeof mark.color === "string"

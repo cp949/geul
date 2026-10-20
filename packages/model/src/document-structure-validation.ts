@@ -14,7 +14,11 @@ import {
 import { invalid, type DocumentPath } from "./document-validation-helpers.js";
 import type { DocumentError } from "./errors.js";
 import { isTextRunItem } from "./inline-content-kind.js";
-import { isSupportedLinkHref, isSupportedMediaUrl } from "./link-policy.js";
+import {
+  isCanonicalLinkTarget,
+  isSupportedLinkHref,
+  isSupportedMediaUrl,
+} from "./link-policy.js";
 import { firstNonCanonicalTextMarkIndex } from "./mark-canonicalization.js";
 import { isValidMediaPreviewWidth } from "./media-block.js";
 import type { Result } from "./result.js";
@@ -81,6 +85,16 @@ const validateContent = (
         return invalid(
           [...contentPath, contentIndex, "marks", markIndex, "href"],
           "Unsupported link URL",
+        );
+      }
+      if (
+        mark.type === "link" &&
+        mark.target !== undefined &&
+        !isCanonicalLinkTarget(mark.target)
+      ) {
+        return invalid(
+          [...contentPath, contentIndex, "marks", markIndex, "target"],
+          "Link target must be one of _blank, _self, _parent, _top",
         );
       }
       if (

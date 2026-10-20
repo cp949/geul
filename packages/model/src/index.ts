@@ -41,7 +41,14 @@ export type {
 export { resolveIframeEmbedDecision } from "./iframe-embed-policy.js";
 export { isTextRunItem } from "./inline-content-kind.js";
 export { appendOrMergeInlineItem } from "./inline-content-merge.js";
-export { isSupportedLinkHref, isSupportedMediaUrl } from "./link-policy.js";
+export {
+  isCanonicalLinkTarget,
+  isSupportedLinkHref,
+  isSupportedMediaUrl,
+  LINK_TARGETS,
+  normalizeLinkTarget,
+} from "./link-policy.js";
+export type { LinkTarget } from "./link-policy.js";
 export { isValidMediaPreviewWidth } from "./media-block.js";
 export {
   canonicalizeTextMarks,

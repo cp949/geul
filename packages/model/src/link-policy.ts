@@ -24,6 +24,25 @@ const isSupportedUrl = (url: string, protocol: RegExp): boolean =>
   !url.includes("\\") &&
   (protocol.test(url) || (!anyProtocol.test(url) && !url.startsWith("//")));
 
+// link mark의 `target` 허용값이다(Issue #424 D3). HTML browsing context 키워드 4종만
+// 저장형으로 인정하고, 이름 지정 browsing context(`frame1` 등)는 받지 않는다.
+export const LINK_TARGETS = ["_blank", "_self", "_parent", "_top"] as const;
+
+export type LinkTarget = (typeof LINK_TARGETS)[number];
+
+// 저장형 판정이다. 대소문자를 접지 않는다 — 정규화는 입력 경로가 normalizeLinkTarget으로 한다.
+export const isCanonicalLinkTarget = (target: string): target is LinkTarget =>
+  (LINK_TARGETS as readonly string[]).includes(target);
+
+// ASCII 대문자만 소문자로 접는다. `toLowerCase()`는 켈빈 기호(U+212A)를 `k`로 바꿔
+// `_blan\u212A`가 `_blank`로 통과한다. 허용 밖이면 undefined다.
+export const normalizeLinkTarget = (target: string): LinkTarget | undefined => {
+  const folded = target.replace(/[A-Z]/g, (character) =>
+    String.fromCharCode(character.charCodeAt(0) + 0x20),
+  );
+  return isCanonicalLinkTarget(folded) ? folded : undefined;
+};
+
 export const isSupportedLinkHref = (href: string): boolean =>
   isSupportedUrl(href, supportedLinkProtocol);
 

@@ -1,6 +1,6 @@
 export type TextMark =
   | { type: "bold" | "italic" | "underline" | "strike" | "code" }
-  | { type: "link"; href: string }
+  | { type: "link"; href: string; target?: string }
   | { type: "textColor"; color: string }
   | { type: "backgroundColor"; color: string };
 

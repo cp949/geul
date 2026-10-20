@@ -6,7 +6,12 @@ import type { CustomTextMark, TextMark } from "./types.js";
 
 const textMarkSchema = z.discriminatedUnion("type", [
   z.object({ type: z.enum(PLAIN_TEXT_MARK_TYPES) }),
-  z.object({ type: z.literal("link"), href: z.string() }),
+  z.object({
+    type: z.literal("link"),
+    href: z.string(),
+    // 값 검증(정규형)은 document-structure-validation.ts가 한다.
+    target: z.string().optional(),
+  }),
   z.object({ type: z.literal("textColor"), color: z.string() }),
   z.object({ type: z.literal("backgroundColor"), color: z.string() }),
 ]);
