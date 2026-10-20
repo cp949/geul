@@ -124,7 +124,8 @@ function splitBlockContainer(editor: Editor): boolean {
     return false;
   }
 
-  view.dispatch(tr);
+  // 분할 결과 캐럿이 화면 밖에 남지 않게 스크롤한다(Issue #427).
+  view.dispatch(tr.scrollIntoView());
   return true;
 }
 
@@ -172,7 +173,7 @@ function enterOverCodeBlockRange(
   } else if (!splitAtCaret(tr)) {
     return false;
   }
-  editor.view.dispatch(tr);
+  editor.view.dispatch(tr.scrollIntoView());
   return true;
 }
 

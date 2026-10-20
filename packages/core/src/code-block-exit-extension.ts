@@ -69,7 +69,8 @@ function exitCodeBlockOnDoubleEnter(editor: Editor): boolean {
   // 파생 state와 live state는 같은 doc이라 $from을 live tr에 그대로 쓴다.
   const tr = liveState.tr;
   if (!appendDoubleEnterExit(tr, referenceState.selection.$from)) return false;
-  editor.view.dispatch(tr);
+  // newlineInCode처럼 결과 캐럿을 화면 안으로 스크롤한다(Issue #427).
+  editor.view.dispatch(tr.scrollIntoView());
   return true;
 }
 
@@ -152,7 +153,7 @@ function splitCodeBlockOnShiftEnter(editor: Editor): boolean {
 
   if (!splitCodeBlockAtCaret(tr)) return false;
 
-  view.dispatch(tr);
+  view.dispatch(tr.scrollIntoView());
   return true;
 }
 

@@ -21,7 +21,10 @@ import {
   restored,
   tailParagraphBlock,
 } from "./editor-controller-support.js";
-import { withNativeCaret } from "./native-selection-test-support.js";
+import {
+  withNativeCaret,
+  withoutScrollCrash,
+} from "./native-selection-test-support.js";
 
 /**
  * 실제 DOM caret은 target 목록에 두고 PM selection만 stale 목록으로 되돌린다.
@@ -47,7 +50,9 @@ function withStaleListCaret(
           TextSelection.create(tiptap.state.doc, stalePosition),
         ),
       );
-      fn();
+      // Enter 분할은 scrollIntoView를 표시한다(Issue #427). 네이티브 caret이
+      // 있으면 jsdom에서 scrollToSelection이 던지므로 막는다.
+      withoutScrollCrash(tiptap, fn);
     },
     targetDom.node,
     targetDom.offset,
@@ -259,9 +264,10 @@ describe("목록 항목 Enter split", () => {
     const targetDom = tiptap.view.domAtPos(targetPosition);
     withNativeCaret(
       tiptap.view.dom,
-      () => {
-        expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
-      },
+      () =>
+        withoutScrollCrash(tiptap, () => {
+          expect(dispatchKeydown(tiptap, "Enter")).toBe(true);
+        }),
       targetDom.node,
       targetDom.offset,
     );
