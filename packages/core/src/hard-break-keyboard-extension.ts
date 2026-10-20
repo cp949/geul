@@ -39,7 +39,12 @@ export const HardBreakKeyboardExtension = Extension.create({
           return true;
         }
 
-        return this.editor.chain().insertContent({ type: "hardBreak" }).run();
+        // insertContent는 스크롤을 걸지 않아 문서 끝 줄바꿈이 뷰포트 밖에 남는다(#428).
+        return this.editor
+          .chain()
+          .insertContent({ type: "hardBreak" })
+          .scrollIntoView()
+          .run();
       },
     };
   },
