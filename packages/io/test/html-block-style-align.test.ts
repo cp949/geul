@@ -124,6 +124,52 @@ describe("같은 요소의 text-align 선언은 브라우저 cascade로 고른�
     ).not.toHaveProperty("textAlignment");
   });
 
+  it("문법상 무효한 값의 선언은 브라우저처럼 버려 앞 값이 남는다", () => {
+    for (const invalid of ["foo", "center left", '"left"', "10px", ""]) {
+      expect(
+        alignmentOf(`<p style="text-align:center;text-align:${invalid}">x</p>`),
+      ).toBe("center");
+    }
+  });
+
+  it("!important인 무효 선언도 버려 앞의 !important 값이 남는다", () => {
+    expect(
+      alignmentOf(
+        '<p style="text-align:center !important;text-align:foo !important">x</p>',
+      ),
+    ).toBe("center");
+  });
+
+  it("무효 선언뿐이면 값 없음이다", () => {
+    expect(firstBlock('<p style="text-align:foo">x</p>')).not.toHaveProperty(
+      "textAlignment",
+    );
+  });
+
+  it.each([
+    "inherit",
+    "initial",
+    "unset",
+    "revert",
+    "revert-layer",
+    "INHERIT",
+    "var(--align)",
+    "-webkit-right",
+    "-webkit-center",
+    "-webkit-left",
+    "-webkit-match-parent",
+    "justify-all",
+    "match-parent",
+    "end",
+  ])(
+    "유효하지만 지원하지 않는 값 %s가 이기면 앞의 center로 되돌아가지 않고 값 없음이다",
+    (value) => {
+      expect(
+        firstBlock(`<p style="text-align:center;text-align:${value}">x</p>`),
+      ).not.toHaveProperty("textAlignment");
+    },
+  );
+
   it("문법 오류 선언은 버려 앞 값이 남는다", () => {
     expect(alignmentOf('<p style="text-align:center;text-align:">x</p>')).toBe(
       "center",

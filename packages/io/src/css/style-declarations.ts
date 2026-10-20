@@ -91,11 +91,40 @@ const readStyleSlots = (
   return { color, background, align };
 };
 
+// `text-align`이 parse 단계에서 받아들이는 값이다(소문자). 브라우저는 이 밖의
+// 값의 선언을 버려 앞 선언이 남는다. 접두 키워드와 CSS-wide 키워드도 받아들인다.
+const VALID_TEXT_ALIGN_VALUES: ReadonlySet<string> = new Set([
+  "start",
+  "end",
+  "left",
+  "right",
+  "center",
+  "justify",
+  "justify-all",
+  "match-parent",
+  "-webkit-left",
+  "-webkit-right",
+  "-webkit-center",
+  "-webkit-match-parent",
+  "inherit",
+  "initial",
+  "unset",
+  "revert",
+  "revert-layer",
+]);
+
+const isValidTextAlignValue = (value: string): boolean =>
+  VALID_TEXT_ALIGN_VALUES.has(value) || /^var\(.*\)$/s.test(value);
+
 // 텍스트 블록용 `text-align` 판독이다. 브라우저 cascade로 이긴 선언의 값을
 // ASCII 소문자로 돌려준다. `!important`가 먼저이고 같은 중요도는 뒤가 이긴다.
-// - 이긴 값이 허용값인지는 호출부가 model `isCanonicalTextBlockAlign`으로 판정한다.
-//   허용값만 후보로 남기면 `center; start`가 `center`로 읽혀 브라우저가 보여 준
-//   정렬과 달라진다. 셀 전용 `align`(readStyleDeclarations)은 그 방식이라 바꾸지 않는다.
+// - 문법상 무효한 값(`foo`, 여러 토큰 등)의 선언은 브라우저처럼 선언이 없는
+//   것으로 보고 건너뛴다. 앞 선언이 남는다.
+// - 문법상 유효한 값은 허용 밖이어도(`start`, `inherit`, `var()` 등) 승자가 될
+//   수 있다. 이긴 값이 허용값인지는 호출부가 model `isCanonicalTextBlockAlign`으로
+//   판정한다. 허용값만 후보로 남기면 `center; start`가 `center`로 읽혀 브라우저가
+//   보여 준 정렬과 달라진다. 셀 전용 `align`(readStyleDeclarations)은 그 방식이라
+//   바꾸지 않는다.
 // - 선언이 없으면 undefined다.
 export const readTextAlignWinner = (
   declarations: readonly CssDeclaration[],
@@ -104,8 +133,10 @@ export const readTextAlignWinner = (
   let winnerImportant = false;
   for (const { name, text, important } of declarations) {
     if (name !== "text-align") continue;
+    const value = asciiLowerCase(text);
+    if (!isValidTextAlignValue(value)) continue;
     if (winnerImportant && !important) continue;
-    winner = asciiLowerCase(text);
+    winner = value;
     winnerImportant = important;
   }
   return winner;
