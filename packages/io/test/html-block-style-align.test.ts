@@ -61,6 +61,12 @@ describe("블록 style의 text-align은 textAlignment로 읽는다", () => {
     );
   });
 
+  it("이스케이프한 정렬 키워드도 토큰 값으로 읽는다", () => {
+    expect(alignmentOf(String.raw`<p style="text-align:c\65 nter">x</p>`)).toBe(
+      "center",
+    );
+  });
+
   it("키워드 대소문자와 앞뒤 공백을 무시한다", () => {
     expect(alignmentOf('<p style="text-align:  CENTER ">x</p>')).toBe("center");
     expect(alignmentOf('<p style="TEXT-ALIGN: Justify">x</p>')).toBe("justify");
@@ -125,7 +131,15 @@ describe("같은 요소의 text-align 선언은 브라우저 cascade로 고른�
   });
 
   it("문법상 무효한 값의 선언은 브라우저처럼 버려 앞 값이 남는다", () => {
-    for (const invalid of ["foo", "center left", '"left"', "10px", ""]) {
+    for (const invalid of [
+      "foo",
+      "var(foo)",
+      "var()",
+      "center left",
+      '"left"',
+      "10px",
+      "",
+    ]) {
       expect(
         alignmentOf(`<p style="text-align:center;text-align:${invalid}">x</p>`),
       ).toBe("center");
@@ -154,6 +168,7 @@ describe("같은 요소의 text-align 선언은 브라우저 cascade로 고른�
     "revert-layer",
     "INHERIT",
     "var(--align)",
+    "var(--align",
     "-webkit-right",
     "-webkit-center",
     "-webkit-left",
@@ -192,19 +207,22 @@ describe("data-geul-text-alignment가 style보다 우선한다", () => {
     );
   });
 
-  it("무효 data 값은 필드 없이 경고하고 style로 복구하지 않는다", () => {
-    const value = imported(
-      '<p data-geul-block-id="p1" data-geul-text-alignment="start" style="text-align:right">x</p>',
-    );
-    expect(value.document.blocks[0]).not.toHaveProperty("textAlignment");
-    expect(value.warnings).toContainEqual({
-      kind: "UNSAFE_ATTRIBUTE_REMOVED",
-      element: "p",
-      attribute: "data-geul-text-alignment",
-      message:
-        "Unsupported data-geul-text-alignment attribute was removed from p",
-    });
-  });
+  it.each(["start", ""])(
+    "무효 data 값 %j는 필드 없이 경고하고 style로 복구하지 않는다",
+    (invalid) => {
+      const value = imported(
+        `<p data-geul-block-id="p1" data-geul-text-alignment="${invalid}" style="text-align:right">x</p>`,
+      );
+      expect(value.document.blocks[0]).not.toHaveProperty("textAlignment");
+      expect(value.warnings).toContainEqual({
+        kind: "UNSAFE_ATTRIBUTE_REMOVED",
+        element: "p",
+        attribute: "data-geul-text-alignment",
+        message:
+          "Unsupported data-geul-text-alignment attribute was removed from p",
+      });
+    },
+  );
 
   it("li·blockquote·callout도 같은 규칙이다", () => {
     expect(

@@ -12,3 +12,5 @@
 - io: GFM strict export는 `justify`를 기존 정렬과 같은 `BLOCK_ALIGN` 손실로 거절한다.
 - core: `setBlockTextAlignment`가 `justify`를 받는다. 공개 타입의 `align`이 `TextBlockAlignment | null`로 넓어졌다. 편집 화면은 정렬을 blockContent 노드에 `text-align`으로 보여 준다. 이전에는 저장만 되고 화면에 보이지 않았다. 자식 블록은 부모 정렬을 상속하지 않는다. `justify` 버튼은 없다. 블록 메뉴는 현재 정렬을 바꾸지 않는 한 `justify` 블록을 덮어쓰지 않는다.
 - 0.2.3 호환(0.2.3 패키지로 실측): `textAlignment: "justify"`가 있는 문서를 0.2.3 model `parseDocument`와 core `createEditor`가 `DOCUMENT_INVALID`(`textAlignment must be one of left, center, right`)로 거절한다. `replaceDocument`는 `{ ok: false }`를 돌려준다. 0.2.3 `importHtml`은 `data-geul-text-alignment="justify"`를 필드 없이 제거하고 `UNSAFE_ATTRIBUTE_REMOVED` 경고를 낸다. 0.2.3은 `style`의 `text-align`을 읽지 않고 `style` 제거 경고를 낸다.
+
+- 빈 `data-geul-text-alignment`도 무효 속성으로 경고하고 style로 복구하지 않는다. CSS 정렬 키워드는 이스케이프를 푼 토큰으로 읽으며, 잘못된 `var(foo)`·`var()` 선언은 앞 유효 정렬을 지우지 않는다.

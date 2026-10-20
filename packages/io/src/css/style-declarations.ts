@@ -113,8 +113,29 @@ const VALID_TEXT_ALIGN_VALUES: ReadonlySet<string> = new Set([
   "revert-layer",
 ]);
 
-const isValidTextAlignValue = (value: string): boolean =>
-  VALID_TEXT_ALIGN_VALUES.has(value) || /^var\(.*\)$/s.test(value);
+// 원문 대신 토큰을 읽어 CSS 이스케이프와 EOF의 암묵적 함수 닫기를 보존한다.
+const textAlignValue = (
+  parts: readonly CssComponentValue[],
+): string | undefined => {
+  const values = parts.filter((part) => part.type !== "whitespace");
+  const value = values[0];
+  if (values.length !== 1 || value === undefined) return undefined;
+  if (value.type === "ident") {
+    const keyword = asciiLowerCase(value.value);
+    return VALID_TEXT_ALIGN_VALUES.has(keyword) ? keyword : undefined;
+  }
+  if (value.type !== "function" || asciiLowerCase(value.name) !== "var")
+    return undefined;
+  const args = value.value.filter((part) => part.type !== "whitespace");
+  const name = args[0];
+  const next = args[1];
+  return name?.type === "ident" &&
+    name.value.startsWith("--") &&
+    name.value.length > 2 &&
+    (next === undefined || next.type === "comma")
+    ? "var()"
+    : undefined;
+};
 
 // 텍스트 블록용 `text-align` 판독이다. 브라우저 cascade로 이긴 선언의 값을
 // ASCII 소문자로 돌려준다. `!important`가 먼저이고 같은 중요도는 뒤가 이긴다.
@@ -131,10 +152,10 @@ export const readTextAlignWinner = (
 ): string | undefined => {
   let winner: string | undefined;
   let winnerImportant = false;
-  for (const { name, text, important } of declarations) {
+  for (const { name, value: parts, important } of declarations) {
     if (name !== "text-align") continue;
-    const value = asciiLowerCase(text);
-    if (!isValidTextAlignValue(value)) continue;
+    const value = textAlignValue(parts);
+    if (value === undefined) continue;
     if (winnerImportant && !important) continue;
     winner = value;
     winnerImportant = important;

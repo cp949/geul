@@ -100,7 +100,9 @@ export const textBlockPropsFromElement = (
   );
   const rawTextAlignment = styleOnly
     ? undefined
-    : propertyString(element, "dataGeulTextAlignment");
+    : element.properties.dataGeulTextAlignment === undefined
+      ? undefined
+      : String(element.properties.dataGeulTextAlignment);
   // validOptionalValue는 값 타입을 좁히지 못해 판정을 통과한 값으로 단언한다.
   const dataTextAlignment = validOptionalValue(
     context,
