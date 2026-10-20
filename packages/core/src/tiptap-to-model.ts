@@ -355,9 +355,18 @@ const mediaBlockFromTiptapJson = (node: TiptapJsonNode, id: string): Block => {
 
   const imageOrVideoProps = { ...showPreviewProp, ...previewProps };
 
-  return node.type === "video"
-    ? { id, type: "video", ...common, ...imageOrVideoProps }
-    : { id, type: "image", ...common, ...imageOrVideoProps };
+  if (node.type === "video") {
+    return { id, type: "video", ...common, ...imageOrVideoProps };
+  }
+  // 빈 문자열도 유효한 alt라 truthy가 아니라 문자열 타입으로 승격한다.
+  const alt = attrs.alt;
+  return {
+    id,
+    type: "image",
+    ...common,
+    ...(typeof alt === "string" ? { alt } : {}),
+    ...imageOrVideoProps,
+  };
 };
 
 // blockContainer 1개를 재귀로 model Block으로 디코드한다(D19). 컨테이너의

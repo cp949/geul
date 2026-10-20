@@ -489,6 +489,7 @@ const mediaBlockToTiptapJson = (
     name: block.name ?? null,
     caption: block.caption ?? null,
     backgroundColor: block.backgroundColor ?? null,
+    ...(mediaBlockHasField(block, "alt") ? { alt: block.alt ?? null } : {}),
     ...(mediaBlockHasField(block, "showPreview")
       ? { showPreview: block.showPreview ?? null }
       : {}),

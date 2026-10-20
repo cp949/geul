@@ -254,14 +254,16 @@ export const ImageBlockExtension = Node.create({
   addAttributes: () => ({
     ...mediaBlockCommonAttributes(),
     ...previewAttributes(),
+    // image만 갖는 선택 alt다(Issue #424 D4). null이 부재이고 빈 문자열도 유효값이다.
+    alt: { default: null, renderHTML: () => ({}) },
   }),
 
   renderHTML({ HTMLAttributes, node }) {
     const source = mediaSourceUrl(node.attrs);
     const name = nonEmptyString(node.attrs.name);
     const caption = nonEmptyString(node.attrs.caption);
-    // alt는 caption이 있으면 caption, 없으면 name을 재사용한다(spec §6.3,
-    // 별도 alt prop 신설 없음 — 2026-09-04 사용자 확정). showPreview:false면
+    // alt는 명시적 alt 필드가 있으면(빈 문자열 포함) 그 값이고, 없을 때만 caption, 없으면
+    // name을 재사용한다(spec §2.2·§6.3, Issue #424 D4로 개정). showPreview:false면
     // img 대신 <a>를 낸다(슬라이스5 RD-002 DELTA-01). 소스는 url 우선, 없으면
     // 로컬 프리뷰(Issue #168 roadmap RD-002 DELTA-01).
     const children: DOMOutputSpec[] =
@@ -274,7 +276,10 @@ export const ImageBlockExtension = Node.create({
                 "img",
                 {
                   src: source.url,
-                  alt: caption ?? name ?? "",
+                  alt:
+                    typeof node.attrs.alt === "string"
+                      ? node.attrs.alt
+                      : (caption ?? name ?? ""),
                   ...previewWidthStyleAttrs(node.attrs),
                 },
               ],
