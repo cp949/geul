@@ -11,14 +11,20 @@
  * 커밋 메시지 자체가 "소스 추적 확인(코드 수정 안 함)"이라 실측 재현은
  * 없었다.
  *
- * 2026-09-13 재조사: divider.test.ts와 같은 DOM 부착 round-trip(아래)과
- * 실 Chromium e2e 4가지 변형(문서 유일 블록·앞뒤 블록 있음·Delete·CDP
- * 무지연 클릭+keydown) 전부에서 정상 삭제됐다 — 오판이 재현되지 않는다.
- * resolveSelectionAwareState가 이 NodeSelection을 그대로 인식해(anchor/head
- * 일치) live state를 반환하므로 selectionIsStale이 false로 남고,
- * joinBackwardAtBlockStart는 non-stale·caretContext null 분기에서 false를
- * 반환해 기본 keymap의 deleteSelection으로 폴스루한다 — divider가 두 번째
- * 키에서 타는 경로와 같다. 이 파일은 그 정상 동작을 회귀로 고정한다.
+ * 2026-09-13 재조사는 divider.test.ts와 같은 DOM 부착 round-trip(아래)에서
+ * 오판이 재현되지 않음을 확인했다. resolveSelectionAwareState가 이
+ * NodeSelection을 그대로 인식해(anchor/head 일치) live state를 반환하므로
+ * selectionIsStale이 false로 남고, joinBackwardAtBlockStart는 non-stale·
+ * caretContext null 분기에서 false를 반환해 기본 keymap의 deleteSelection으로
+ * 폴스루한다 — divider가 두 번째 키에서 타는 경로와 같다. 이 파일은 그 정상
+ * 동작을 회귀로 고정한다. 편집기에 포커스가 있다는 전제다.
+ *
+ * 2026-10-21 정정: 실제 브라우저에서 빈 미디어 블록을 클릭하면 File Panel이
+ * 열려 포커스가 입력창으로 가므로(의도된 동작) 클릭 직후 Backspace는 블록을
+ * 지우지 않는다. 그때 "실 Chromium e2e로 정상 삭제를 확인했다"던 서술은
+ * 틀렸다(그 e2e는 도입 때부터 실패했다). Escape로 패널을 닫아 포커스를
+ * 편집기로 돌린 뒤 Backspace를 누르면 지워진다 — e2e/media-file-panel.spec.ts
+ * 참고.
  */
 import { describe, expect, it, vi } from "vitest";
 

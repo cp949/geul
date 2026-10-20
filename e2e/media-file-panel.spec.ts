@@ -160,19 +160,15 @@ test("Close 버튼으로 URL 없이 패널을 닫아도 남은 빈 미디어 블
   await expect(emptyBlock).toHaveCount(0);
 });
 
-// 이 커밋 이전엔 여기서 "클릭으로 이 블록을 선택한 뒤 Backspace/Delete
-// 키를 누르는 경로는 안 먹는다"는 결함을 기록했었다(QA-090 커밋 6552c4a,
-// 2026-09-08) — resolveSelectionAwareState가 자식 0개 atom의 NodeSelection을
-// native DOM selection과 재동기화할 때 posAtDOM이 어긋나 stale로 오판한다는
-// 진단이었지만, 그 커밋 자체가 "소스 추적 확인(코드 수정 안 함)"이라 실측
-// 재현은 없었다. 2026-09-13 재조사 — 아래 케이스를 포함해 실 Chromium
-// 4가지 변형(문서 유일 블록·앞뒤 블록 있음·Delete 키·CDP 무지연 클릭+
-// keydown)과 claude-in-chrome 실 Chrome(NodeSelection의
-// `class="ProseMirror-selectednode"` 부여를 DOM으로 직접 확인 후 Backspace)
-// 전부에서 정상 삭제됐다. 오판 자체가 재현되지 않아 정정한다.
-// packages/core/test/block-join/media-atom.test.ts가 같은 정상 동작을
-// core 레벨에서 회귀로 고정한다.
-test("빈 미디어 블록을 클릭 선택한 뒤 Backspace를 누르면 실제로 지워진다", async ({
+// 빈 미디어 블록을 클릭하면 NodeSelection이 서고 File Panel이 열리며 포커스가
+// 패널 입력창(Image file)으로 옮겨진다(file-panel.tsx, Notion과 같은 의도된
+// 동작). 그래서 클릭 직후 Backspace는 입력창으로 가고 블록을 지우지 않는다.
+// Escape로 패널을 닫아 포커스를 편집기로 돌려야 Backspace가 블록을 지운다.
+// 이전에는 "클릭 뒤 Backspace가 안 먹는 결함은 재현되지 않는다"고 정정했지만
+// 틀렸다. 그 근거로 5fe445ba가 추가한 이 e2e는 도입 때부터 실패했다.
+// packages/core/test/block-join/media-atom.test.ts가 NodeSelection 삭제를
+// core 레벨에서 고정한다.
+test("빈 미디어 블록을 클릭 선택하고 File Panel을 Escape로 닫은 뒤 Backspace를 누르면 지워진다", async ({
   page,
 }) => {
   const { editable } = await openDemo(page);
@@ -186,6 +182,10 @@ test("빈 미디어 블록을 클릭 선택한 뒤 Backspace를 누르면 실제
   const emptyBlock = editable.locator('[data-geul-media-empty="image"]');
   await expect(emptyBlock).toBeVisible();
   await emptyBlock.click();
+  // 클릭이 연 File Panel이 포커스를 가져가므로 Escape로 편집기에 돌려준다.
+  // 패널이 열리기 전에 Escape를 누르면 뒤늦게 포커스를 가져가므로 먼저 기다린다.
+  await expect(page.getByRole("toolbar", { name: "File panel" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Backspace");
 
   await expect(emptyBlock).toHaveCount(0);
