@@ -100,6 +100,7 @@ import {
 } from "./media-local-preview-lifecycle-extension.js";
 import type { LocalPreviewAttrs } from "./media-local-preview.js";
 import { NearestBlockClickExtension } from "./nearest-block-click-extension.js";
+import { TextAlignmentPresentationExtension } from "./text-alignment-presentation-extension.js";
 import { ToggleCollapseArrowKeyExtension } from "./toggle-collapse-arrow-key-extension.js";
 import { ToggleCollapseMarkerExtension } from "./toggle-collapse-marker-extension.js";
 import { ToggleCollapseSelectionGuardExtension } from "./toggle-collapse-selection-guard-extension.js";
@@ -702,6 +703,7 @@ export const createProductionEditor = (options: {
       ),
       ListPresentationExtension,
       CalloutBackgroundPresentationExtension,
+      TextAlignmentPresentationExtension,
       HideNativeSelectionExtension,
       CheckListItemMarkerExtension,
       PlaceholderExtension.configure({

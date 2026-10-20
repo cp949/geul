@@ -630,11 +630,11 @@ test("Enter로 블록을 분리하면 새 블록에 유효한 id가 발급된다
 test("블록 메뉴에서 글자색을 적용하면 문서에 반영되고 undo 1회로 복원된다 (RD-003 DELTA-02) @core", async ({
   page,
 }) => {
-  // 블록 수준 textColor/backgroundColor/textAlignment는 편집 화면에 시각
-  // 렌더가 없다(block-container-extension.ts:57-59, RD-003.md D5) — 인라인
+  // 블록 수준 textColor/backgroundColor는 편집 화면에 시각 렌더가 없다
+  // (block-container-extension.ts, RD-003.md D5) — 인라인
   // 색상(formatting-toolbar.spec.ts)과 달리 computed style 대신 "Save
   // JSON"으로 읽은 문서 값으로 반영을 검증한다(editor-round-trip.spec.ts와
-  // 같은 패턴).
+  // 같은 패턴). textAlignment 렌더는 text-alignment.spec.ts가 본다.
   const { editable } = await openDemo(page);
   await editable.click();
   await page.keyboard.type("color me");

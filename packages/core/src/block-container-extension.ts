@@ -65,7 +65,9 @@ export const BlockContainerExtension = Node.create<{
       // 않는다. codeBlock도 이 컨테이너를 쓰지만 TextBlockProps 대상이
       // 아니라(model-to-tiptap.ts) 이 필드를 받지 않는다. toggleListItem의
       // collapsed와 같은 저장 전용 attrs다(`rendered: false`, null=필드
-      // 부재) — 편집기 내 시각 렌더는 이 DELTA 범위 밖이다.
+      // 부재). textColor/backgroundColor는 편집기 내 시각 렌더가 없다.
+      // textAlignment는 text-alignment-presentation-extension.ts가
+      // blockContent 노드에 decoration으로 보여 준다(Issue #424).
       textColor: { default: null, rendered: false },
       backgroundColor: { default: null, rendered: false },
       textAlignment: { default: null, rendered: false },
