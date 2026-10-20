@@ -180,7 +180,13 @@ export const createGenericBlockTypeCommands = (
               isInsideTarget ? contentStart + toOffset(head) : contentStart,
             ),
           );
+          // selection을 대상 블록으로 옮겼으므로 화면 밖이면 결과 selection이
+          // 보이도록 스크롤한다. 앵커 오버레이는 앵커가 뷰포트 밖이면
+          // 숨겨진다(#277, #425).
+          transaction.scrollIntoView();
         } else {
+          // 언어만 바꾸면 selection을 옮기지 않는다. 스크롤을 걸면 대상
+          // 밖에 있는 옛 selection으로 뷰가 튀므로 걸지 않는다.
           transaction.setSelection(
             Selection.fromJSON(
               transaction.doc,

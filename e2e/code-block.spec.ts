@@ -285,6 +285,40 @@ test("짧은 뷰포트에서 팝오버 크기가 바뀌어도 네 경계 안에�
   await expect(editable).toBeFocused();
 });
 
+test("짧은 뷰포트에서 /code로 변환한 직후 CodeBlock 상단이 뷰포트 안으로 스크롤되고 language 트리거가 보인다", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 240 });
+  const { editable } = await openDemo(page);
+  await editable.click();
+  await page.keyboard.type("line 0");
+  for (let index = 1; index < 20; index += 1) {
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(`line ${index}`);
+  }
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/code");
+  await page.getByRole("option", { name: /Code/ }).click();
+
+  const codeBlock = editable.locator("pre[data-geul-code-block]");
+  await expect(codeBlock).toBeAttached();
+  // 변환 직후 CodeBlock이 화면 밖에 남으면 앵커가 밖이라 툴바가 숨겨진다
+  // (#277). scrollIntoView는 selection 기준이라 블록 하단까지는 보장하지
+  // 않는다 — 앵커인 상단이 뷰포트 안에 있고 트리거가 보이는지만 확인한다.
+  // 스크롤 반영은 poll로 기다린다.
+  await expect
+    .poll(async () => {
+      const box = await codeBlock.boundingBox();
+      const viewport = page.viewportSize();
+      if (box === null || viewport === null) return null;
+      return box.y >= 0 && box.y < viewport.height;
+    })
+    .toBe(true);
+  await expect(
+    page.getByRole("button", { name: "Code language" }),
+  ).toBeVisible();
+});
+
 test("scroll과 viewport resize 뒤 language 트리거가 활성 CodeBlock 우상단을 추적하고 좁은 화면에서도 팝오버가 네 경계 안에 머문다", async ({
   page,
 }) => {

@@ -1130,3 +1130,97 @@ describe("hardBreak와 CodeBlock 경계 변환(Issue #226)", () => {
     ]);
   });
 });
+
+describe("CodeBlock 경계 변환의 selection 스크롤 표시", () => {
+  // 변환이 selection을 대상 블록으로 직접 옮기므로, 화면 밖 블록이면 결과
+  // selection이 보이도록 transaction에 scrollIntoView를 표시해야 한다.
+  // jsdom은 실제 스크롤을 못 하므로 transaction 플래그로 고정한다.
+  const collectDispatched = (tiptap: ReturnType<typeof mounted>["tiptap"]) => {
+    const dispatched: (typeof tiptap.state.tr)[] = [];
+    const originalDispatch = tiptap.view.dispatch.bind(tiptap.view);
+    tiptap.view.dispatch = (transaction) => {
+      dispatched.push(transaction);
+      originalDispatch(transaction);
+    };
+    return dispatched;
+  };
+
+  it("문단 → CodeBlock 변환 transaction은 selection을 화면 안으로 스크롤하도록 표시한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        paragraphBlock("source", "/code"),
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    const dispatched = collectDispatched(tiptap);
+
+    expect(
+      editor.commands.setBlockType(
+        "source",
+        { type: "codeBlock" },
+        { clearContent: true },
+      ),
+    ).toEqual({ ok: true, value: undefined });
+
+    const conversions = dispatched.filter((tr) => tr.docChanged);
+    expect(conversions).toHaveLength(1);
+    expect(conversions[0]?.scrolledIntoView).toBe(true);
+  });
+
+  it("CodeBlock → 문단 변환 transaction도 selection을 화면 안으로 스크롤하도록 표시한다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        {
+          id: "code",
+          type: "codeBlock",
+          content: [{ text: "x" }],
+          language: "text",
+        },
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    const dispatched = collectDispatched(tiptap);
+
+    expect(editor.commands.setBlockType("code", { type: "paragraph" })).toEqual(
+      { ok: true, value: undefined },
+    );
+
+    const conversions = dispatched.filter((tr) => tr.docChanged);
+    expect(conversions).toHaveLength(1);
+    expect(conversions[0]?.scrolledIntoView).toBe(true);
+  });
+
+  it("CodeBlock language만 바꾸면 selection을 옮기지 않으므로 스크롤을 표시하지 않는다", () => {
+    const { editor, tiptap } = mounted(
+      documentOf(
+        {
+          id: "code",
+          type: "codeBlock",
+          content: [{ text: "x" }],
+          language: "text",
+        },
+        paragraphBlock("tail", "tail"),
+      ),
+    );
+    // 사이드 메뉴 Turn into처럼 selection이 대상 밖에 있어도 뷰가 튀지 않아야 한다.
+    const tailStart = contentTextStart(tiptap, "tail");
+    tiptap.view.dispatch(
+      tiptap.state.tr.setSelection(
+        TextSelection.create(tiptap.state.doc, tailStart),
+      ),
+    );
+    const dispatched = collectDispatched(tiptap);
+
+    expect(
+      editor.commands.setBlockType("code", {
+        type: "codeBlock",
+        language: "javascript",
+      }),
+    ).toEqual({ ok: true, value: undefined });
+
+    const conversions = dispatched.filter((tr) => tr.docChanged);
+    expect(conversions).toHaveLength(1);
+    expect(conversions[0]?.scrolledIntoView).toBe(false);
+    expect(tiptap.state.selection.from).toBe(tailStart);
+  });
+});
