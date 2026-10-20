@@ -197,6 +197,8 @@ video/audio는 `<video>`/`<audio controls>`로, file은 `<a href="URL">name</a>`
 2. 없고 own-format 마커 `data-geul-media-type`가 있으면 `alt` 필드를 만들지 않는다. 자체 export의 `img[alt]`는 대체값일 수 있다.
 3. 마커가 없는 legacy `img`는 `img[alt]` 속성이 있을 때 그 값을 `alt`로 읽는다. `alt=""`는 빈 문자열 `alt`다. 속성이 없으면 필드를 만들지 않는다.
 
+**폭 import (Issue #424).** `data-geul-preview-width`는 소수를 읽는다(`^[+-]?\d+(\.\d+)?$`, 유한수). 문법은 맞지만 양수가 아닌 값은 필드 없이 `UNSAFE_ATTRIBUTE_REMOVED` 경고를 낸다. image의 `data-geul-preview-width`가 없으면 안쪽 `<img style="width: Npx">`(구 에디터 저장 형식)를 `previewWidth`로 읽는다. `%`·`auto`·`calc()` 등 px가 아닌 값은 읽지 않는다. video에는 이 규칙을 적용하지 않는다.
+
 Import는 `<figure>` 안의 media 요소 + `<figcaption>`을 **블록 1개**로만 디코드한다(figure와 media 요소를 별도 2개 블록으로 중복 생성하지 않는 가드).
 
 ### 7.2 GFM 계약과 손실 정책
