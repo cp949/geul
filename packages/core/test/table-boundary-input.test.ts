@@ -1251,15 +1251,26 @@ describe("붙일 내용이 없는 붙여넣기는 경계 범위를 지우지 않
   it.each(EMPTY)(
     "대조군 $name: 같은 문단 안 범위에서도 문서가 그대로다",
     ({ entries }) => {
-      const result = run(
-        d1(),
-        inBlock("w", 1),
-        inBlock("w", 3),
-        paste(entries),
-      );
+      // 경계 밖 일반 선택은 핸들러가 소비하지 않아 PM이 capturePaste 폴백을
+      // 50ms 뒤로 예약한다. fake timer로 이 테스트 안에서 흘려보내지 않으면
+      // 파일 teardown 뒤 fire돼 "document is not defined"로 샌다.
+      vi.useFakeTimers();
+      try {
+        const result = run(
+          d1(),
+          inBlock("w", 1),
+          inBlock("w", 3),
+          paste(entries),
+        );
+        vi.runAllTimers();
 
-      expect(result.dispatchCount).toBe(0);
-      expect(editorState(result.editor, result.tiptap)).toEqual(result.before);
+        expect(result.dispatchCount).toBe(0);
+        expect(editorState(result.editor, result.tiptap)).toEqual(
+          result.before,
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     },
   );
 
