@@ -1,5 +1,18 @@
 # @cp949/geul-react
 
+## 0.3.0
+
+### Patch Changes
+
+- Updated dependencies [04f7f99]
+- Updated dependencies [790aee0]
+- Updated dependencies [1a94e1b]
+- Updated dependencies [21a7847]
+- Updated dependencies [6fb3b6b]
+- Updated dependencies [6fb3b6b]
+- Updated dependencies [6fb3b6b]
+  - @cp949/geul-core@0.3.0
+
 ## 0.2.3
 
 ### Patch Changes
