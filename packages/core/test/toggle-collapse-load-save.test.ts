@@ -77,13 +77,28 @@ describe("createEditor round trip", () => {
   });
 });
 
+/**
+ * 마운트된 editable의 최상위 컨테이너를 `document.body`에 붙이고 떼는
+ * 함수를 돌려준다. `mountTiptapEditor`의 컨테이너는 문서에 붙지 않아서
+ * jsdom 31부터 `getComputedStyle`이 빈 문자열을 낸다(브라우저도 분리된
+ * 노드에는 빈 값을 낸다). 계산 스타일을 읽는 테스트만 쓴다.
+ */
+const attachToDocument = (editable: HTMLElement): (() => void) => {
+  let root: HTMLElement = editable;
+  while (root.parentElement !== null) root = root.parentElement;
+  document.body.append(root);
+  return () => root.remove();
+};
+
 describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
   it("collapsed: true인 toggleListItem의 자식 blockGroup만 DOM에서 숨겨지고 저장 children은 유지된다", () => {
     const editor = createEditor({
       initialDocument: toggleListItemDocument(),
     });
+    let detach = () => {};
     try {
       const { editable } = mountTiptapEditor(editor);
+      detach = attachToDocument(editable);
 
       const hiddenGroup = editable.querySelector(
         '[data-geul-block-id="toggle-collapsed"] > [data-geul-block-group]',
@@ -105,6 +120,7 @@ describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
       expect(editor.getDocument()).toEqual(toggleListItemDocument());
     } finally {
       editor.destroy();
+      detach();
     }
   });
 
@@ -112,12 +128,14 @@ describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
     const editor = createEditor({
       initialDocument: paragraphDocument("이전"),
     });
+    let detach = () => {};
     try {
       expect(editor.replaceDocument(toggleListItemDocument())).toEqual({
         ok: true,
         value: undefined,
       });
       const { editable } = mountTiptapEditor(editor);
+      detach = attachToDocument(editable);
 
       const hiddenGroup = editable.querySelector(
         '[data-geul-block-id="toggle-collapsed"] > [data-geul-block-group]',
@@ -130,6 +148,7 @@ describe("collapsed DOM 숨김(완료 조건 6·7)", () => {
       });
     } finally {
       editor.destroy();
+      detach();
     }
   });
 });

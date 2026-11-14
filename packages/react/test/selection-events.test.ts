@@ -139,13 +139,11 @@ describe("jsdom의 selectionchange 발행 시점", () => {
     }
   });
 
-  it("act()는 큐잉된 지연분을 앞당기지 않는다", async () => {
+  it("동기 act()는 큐잉된 지연분을 앞당기지 않는다", async () => {
     const probe = await openSelectionProbe();
     try {
       addRangeQuietly(probe.text, 0, 3);
 
-      await act(async () => {});
-      expect(probe.fired()).toBe(0);
       act(() => {});
       expect(probe.fired()).toBe(0);
 

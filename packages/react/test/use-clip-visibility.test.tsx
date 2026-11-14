@@ -378,11 +378,16 @@ describe("useClipVisibility", () => {
       const host = mountFrameContainer();
       const frameDocument = host.ownerDocument;
       makeScrollContainer(host);
+      // frame body를 render container로 쓰면 React가 body 자식(host)을 비워
+      // host가 문서에서 떨어진다. 떨어진 노드는 계산 스타일이 비어 스크롤 영역
+      // 판정이 사라진다(jsdom 31, 브라우저도 같다). 별도 container를 쓴다.
+      const renderContainer = frameDocument.createElement("div");
+      frameDocument.body.append(renderContainer);
 
       const options = { a: {} };
       const { container, rerender } = render(
         <Probe element={host} options={options} />,
-        { container: frameDocument.body },
+        { container: renderContainer },
       );
       const overlay = byId(container, "a");
       stubRect(overlay, OUTSIDE);

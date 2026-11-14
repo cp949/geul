@@ -36,6 +36,10 @@ const buildWrapper = (contentTag: string, lineHeight?: string): HTMLElement => {
   const content = document.createElement(contentTag);
   if (lineHeight !== undefined) content.style.lineHeight = lineHeight;
   wrapper.appendChild(content);
+  // jsdom 31부터 문서에 붙지 않은 노드의 getComputedStyle은 빈 문자열을 낸다.
+  // 브라우저도 같다. 계산 스타일을 읽는 판독 함수라 body에 붙이고 afterEach가 뗀다.
+  document.body.appendChild(wrapper);
+  mountedRoots.push(wrapper);
   return wrapper;
 };
 

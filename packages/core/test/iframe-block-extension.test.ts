@@ -108,7 +108,9 @@ describe("iframe 렌더링 — 채워진 상태(src 있음)", () => {
     const iframe = dom.querySelector<HTMLElement>(
       '[data-geul-block-id="iframe-1"] iframe',
     );
-    expect(iframe?.style.aspectRatio).toBe("16/9");
+    // CSSOM 직렬화는 jsdom 30에서 `16/9`, jsdom 31과 Chromium에서 `16 / 9`다.
+    // 공백만 다르므로 공백을 지우고 비교해 두 직렬화를 모두 받는다.
+    expect(iframe?.style.aspectRatio.replaceAll(" ", "")).toBe("16/9");
   });
 });
 
