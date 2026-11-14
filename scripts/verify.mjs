@@ -289,7 +289,7 @@ function runFailed(state) {
       "format:check",
       FORMAT_EXTENSIONS,
       "format:check",
-      ["exec", "prettier", "--check", "--ignore-unknown"],
+      ["exec", "oxfmt", "--check", "--no-error-on-unmatched-pattern"],
     ],
   ])) {
     const files = changed.filter((file) => pattern.test(file));

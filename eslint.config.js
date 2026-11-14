@@ -1,7 +1,6 @@
 // @cp949/geul 워크스페이스 전체를 한 번에 검사하는 루트 flat config다.
 // biome.json을 대체한다 — 패키지별 eslint.config는 두지 않는다(단일 실행 방식 유지).
 import js from "@eslint/js";
-import eslintConfigPrettier from "eslint-config-prettier";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
@@ -23,7 +22,6 @@ export default [
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  eslintConfigPrettier,
   {
     languageOptions: {
       ecmaVersion: "latest",

@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "ignorePatterns": [
+    ".worktrees/",
+    "_tmp/",
+    "_works/",
+    "**/.turbo/",
+    "**/.vite/",
+    "**/dist/",
+    "**/coverage/",
+    "**/playwright-report/",
+    "**/test-results/",
+    "pnpm-lock.yaml"
+  ],
+  "sortPackageJson": false
+}
