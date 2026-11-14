@@ -72,7 +72,8 @@ const frameHost = (): HostDocument => {
   );
   const frameDocument = iframe.contentDocument;
   const frameWindow = iframe.contentWindow as
-    (Window & typeof globalThis) | null;
+    | (Window & typeof globalThis)
+    | null;
   if (frameDocument === null || frameWindow === null) {
     throw new Error("iframe 문서가 없다");
   }

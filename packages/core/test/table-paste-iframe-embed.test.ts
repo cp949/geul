@@ -52,7 +52,8 @@ const pastedIframe = (
     found = editor
       .getDocument()
       .blocks.find((block) => block.type === "iframe") as
-      Record<string, unknown> | undefined;
+      | Record<string, unknown>
+      | undefined;
     expect(errors).toEqual([]);
   });
   editor.destroy();

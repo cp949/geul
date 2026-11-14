@@ -9,7 +9,14 @@
  * 뿐이다 — 실제 저장 값은 `value`(hex)뿐이다.
  */
 export type TableCellColorId =
-  "gray" | "red" | "orange" | "yellow" | "green" | "blue" | "purple" | "pink";
+  | "gray"
+  | "red"
+  | "orange"
+  | "yellow"
+  | "green"
+  | "blue"
+  | "purple"
+  | "pink";
 
 export type TableCellColor = { id: TableCellColorId; value: string };
 

@@ -51,7 +51,8 @@ export type CustomStyleDefinition = {
   render: (
     value: CustomTextMark,
   ) =>
-    HTMLElement | { className?: string; style?: Partial<CSSStyleDeclaration> };
+    | HTMLElement
+    | { className?: string; style?: Partial<CSSStyleDeclaration> };
   // 미등록 시 io HTML 손실 정책(spec §4.5, 범위 밖)이 적용된다 — 이번
   // DELTA는 이 필드를 저장만 하고 io로 연결하지 않는다.
   toHtml?: (value: CustomTextMark) => string;

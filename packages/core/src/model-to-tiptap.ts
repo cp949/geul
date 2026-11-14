@@ -117,7 +117,8 @@ export const inlineContentViolation = (
   const customStyleTypes = options?.customStyleTypes ?? new Set<string>();
   // 직전 텍스트 런의 알려진 마크와 커스텀 마크 서명. 직전 런이 없으면 undefined.
   let previousRun:
-    { known: readonly TextMark[]; customSignature: string } | undefined;
+    | { known: readonly TextMark[]; customSignature: string }
+    | undefined;
 
   for (const item of content) {
     if (!isTextRunItem(item)) {

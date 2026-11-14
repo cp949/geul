@@ -130,7 +130,8 @@ export type BlockTypeChoice = {
 // 변환 대상. 한 블록이면 `getBlockTypeBlocker`, 여러 블록 선택이면
 // `getBlockTypesBlocker`로 질의한다. null이면 대상이 없다.
 export type BlockTypeTarget =
-  { blockId: string } | { blockIds: readonly string[] };
+  | { blockId: string }
+  | { blockIds: readonly string[] };
 
 type BlockTypeChoiceEditor = Pick<
   SelectionQuery,

@@ -72,10 +72,13 @@ type CommandResult = {
 };
 
 type ReplaceMediaFileResult =
-  { ok: true; value: undefined } | { ok: false; error: EditorError };
+  | { ok: true; value: undefined }
+  | { ok: false; error: EditorError };
 
 type MediaUploadState =
-  "uploading" | { status: "error"; code: string; message: string } | null;
+  | "uploading"
+  | { status: "error"; code: string; message: string }
+  | null;
 
 type FakeControllerOptions = {
   getSelectionMediaBlock?: () => SelectionMediaBlock | null;

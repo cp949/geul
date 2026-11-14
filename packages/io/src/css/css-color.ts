@@ -19,7 +19,9 @@ import type { CssComponentValue, CssFunction } from "./component-values.js";
 import { asciiLowerCase } from "./tokens.js";
 
 export type CssColorResult =
-  { kind: "color"; color: string } | { kind: "clear" } | { kind: "invalid" };
+  | { kind: "color"; color: string }
+  | { kind: "clear" }
+  | { kind: "invalid" };
 
 const CLEAR: CssColorResult = { kind: "clear" };
 const INVALID: CssColorResult = { kind: "invalid" };

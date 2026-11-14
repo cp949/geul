@@ -205,7 +205,8 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
           block.type === "paragraph" &&
           (
             (block as ParagraphBlock).content[0] as
-              Extract<InlineContentItem, { text: string }> | undefined
+              | Extract<InlineContentItem, { text: string }>
+              | undefined
           )?.text === "t1",
       );
       expect(parent?.type === "paragraph" && parent.children).toMatchObject([
@@ -242,7 +243,8 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
           block.type === "paragraph" &&
           (
             (block as ParagraphBlock).content[0] as
-              Extract<InlineContentItem, { text: string }> | undefined
+              | Extract<InlineContentItem, { text: string }>
+              | undefined
           )?.text === "parent",
       );
       expect(
@@ -255,7 +257,8 @@ describe("중첩 보존 교차(RD-002·RD-003, 완료 조건 5)", () => {
           block.type === "bulletListItem" &&
           (
             (block as BulletListItemBlock).content[0] as
-              Extract<InlineContentItem, { text: string }> | undefined
+              | Extract<InlineContentItem, { text: string }>
+              | undefined
           )?.text === "parent",
       );
       expect(

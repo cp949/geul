@@ -67,7 +67,8 @@ describe("computeGutterTopOffset", () => {
 });
 
 type BlockSpec =
-  { id: string; top: number; height: number } | { id: string; hidden: true };
+  | { id: string; top: number; height: number }
+  | { id: string; hidden: true };
 
 const mountedRoots: HTMLElement[] = [];
 

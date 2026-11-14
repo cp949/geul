@@ -34,7 +34,8 @@ describe("iframe container 헬퍼", () => {
   it("container는 iframe 문서 소속의 iframe realm 요소다", () => {
     const container = mountFrameContainer();
     const frameWindow = container.ownerDocument.defaultView as
-      (Window & typeof globalThis) | null;
+      | (Window & typeof globalThis)
+      | null;
 
     expect(container.ownerDocument).not.toBe(document);
     expect(container instanceof Element).toBe(false);

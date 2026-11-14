@@ -190,7 +190,8 @@ describe("미디어 figure의 figcaption", () => {
       '<figure><img src="https://example.com/a.png" alt="a"><figcaption style="font-weight:bold;color:red">cap</figcaption></figure>',
     );
     const caption = blocks.find((block) => "content" in block) as
-      TextLike | undefined;
+      | TextLike
+      | undefined;
     expect(caption?.textColor).toBe("#FF0000");
     expect(caption?.content[0]?.marks?.map((mark) => mark.type)).toEqual([
       "bold",

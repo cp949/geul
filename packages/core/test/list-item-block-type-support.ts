@@ -65,7 +65,9 @@ export const codeBlockBlock = (id: string, text: string): Block => ({
 // 안전해 RD-004 DELTA-02에서 추가했다. 이 support가 실제로 조립하는 세
 // 종류만 남긴다.
 export type ListItemType =
-  "bulletListItem" | "numberedListItem" | "toggleListItem";
+  | "bulletListItem"
+  | "numberedListItem"
+  | "toggleListItem";
 
 /**
  * 목록 keyboard 계약이 목록 판별자, 명시 시작 번호와 자식 배치를 독립적으로

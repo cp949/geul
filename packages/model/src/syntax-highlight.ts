@@ -27,4 +27,5 @@ export type SyntaxHighlighter = (input: {
   source: string;
   language: string | undefined;
 }) =>
-  readonly SyntaxHighlightToken[] | Promise<readonly SyntaxHighlightToken[]>;
+  | readonly SyntaxHighlightToken[]
+  | Promise<readonly SyntaxHighlightToken[]>;

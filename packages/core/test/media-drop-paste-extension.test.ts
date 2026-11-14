@@ -626,7 +626,8 @@ describe("업로드 콜백 미등록 — 로컬 프리뷰(Issue #168 roadmap RD-
             block.type === "paragraph" &&
             (
               (block as ParagraphBlock).content[0] as
-                Extract<InlineContentItem, { text: string }> | undefined
+                | Extract<InlineContentItem, { text: string }>
+                | undefined
             )?.text === "world",
         ),
       ).toBe(false);

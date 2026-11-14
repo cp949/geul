@@ -73,7 +73,8 @@ const cellItemAt = (
   itemIndex = 0,
 ): Extract<InlineContentItem, { text: string }> | undefined =>
   table.rows[row]?.cells[col]?.content[itemIndex] as
-    Extract<InlineContentItem, { text: string }> | undefined;
+    | Extract<InlineContentItem, { text: string }>
+    | undefined;
 
 describe("표에 표 형태 데이터를 붙여넣는다", () => {
   it("두 문단에 걸친 선택에서 호출하면 선택을 지우고 캐럿을 새 표로 옮긴다", () => {

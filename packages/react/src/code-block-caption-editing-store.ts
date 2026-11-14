@@ -37,8 +37,7 @@ type CodeBlockCaptionEditingPayload = {
   blockId: string;
   draft: string;
 };
-export type CodeBlockCaptionEditingState =
-  CodeBlockCaptionEditingPayload | null;
+export type CodeBlockCaptionEditingState = CodeBlockCaptionEditingPayload | null;
 
 const store = createEditingStore<CodeBlockCaptionEditingPayload>();
 

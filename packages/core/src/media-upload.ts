@@ -22,4 +22,5 @@ export type UploadFile = (
 // 흔적을 남기지 않고 상태가 사라진다(null) — 이 유니온엔 success/cancelled
 // 케이스가 없다. 실패만 code·message로 남아 UI가 에러·retry를 표시한다.
 export type MediaUploadState =
-  "uploading" | { status: "error"; code: string; message: string };
+  | "uploading"
+  | { status: "error"; code: string; message: string };

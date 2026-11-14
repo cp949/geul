@@ -50,7 +50,9 @@ const invalid = (
 });
 
 export type TableSizeViolation =
-  "TOO_MANY_COLUMNS" | "TOO_MANY_CELLS" | "INVALID_SIZE";
+  | "TOO_MANY_COLUMNS"
+  | "TOO_MANY_CELLS"
+  | "INVALID_SIZE";
 
 /**
  * 표 크기가 MAX_TABLE_COLUMNS/MAX_TABLE_LOGICAL_CELLS 예산 안에 있는지

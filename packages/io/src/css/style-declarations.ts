@@ -44,7 +44,9 @@ const slotColor = (slot: ColorSlot): string | undefined =>
 // 구분한다: `mark`는 clear일 때 기본 노랑을 내지 않고, `font`는 clear일 때
 // color 속성을 쓰지 않는다.
 export type ColorState =
-  { kind: "unset" } | { kind: "clear" } | { kind: "color"; color: string };
+  | { kind: "unset" }
+  | { kind: "clear" }
+  | { kind: "color"; color: string };
 
 const UNSET: ColorState = { kind: "unset" };
 const CLEAR_STATE: ColorState = { kind: "clear" };
@@ -261,7 +263,11 @@ export const readDumpAuthorDeclarations = (
 // - other: 굵기를 정하지 않는다. revert·revert-layer(UA 굵기로 돌아간다)다.
 //   무효한 값(`foo`·`0`·`1001`·`calc()`)은 선언이 버려져 분류가 없다.
 export type InlineFontWeight =
-  "bold" | "normal" | "light" | "inherit" | "other";
+  | "bold"
+  | "normal"
+  | "light"
+  | "inherit"
+  | "other";
 
 // font-style 선언 하나의 분류다. 선언이 없거나 UA 값으로 돌아가는
 // revert·revert-layer면 undefined다.

@@ -115,7 +115,8 @@ describe("buildOutOfTableSequence", () => {
     expect(
       (
         firstTable?.data.rows[0]?.cells[0]?.content[0] as
-          Extract<InlineContentItem, { text: string }> | undefined
+          | Extract<InlineContentItem, { text: string }>
+          | undefined
       )?.text,
     ).toBe("A");
   });
@@ -203,7 +204,8 @@ describe("buildOutOfTableSequence", () => {
     expect(
       (
         result.value.firstTable?.data.rows[0]?.cells[0]?.content[0] as
-          Extract<InlineContentItem, { text: string }> | undefined
+          | Extract<InlineContentItem, { text: string }>
+          | undefined
       )?.text,
     ).toBe("A");
   });

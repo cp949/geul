@@ -112,7 +112,9 @@ describe("4종 미디어 블록 GFM export", () => {
       // 묶어 넘긴다 — 판별 유니온 리터럴 할당이 아니라 캐스트가 필요하다.
       blocks: [
         { id: "media-1", type, url, name } as
-          FileBlock | VideoBlock | AudioBlock,
+          | FileBlock
+          | VideoBlock
+          | AudioBlock,
       ],
     };
 

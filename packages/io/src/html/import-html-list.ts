@@ -22,7 +22,10 @@ import type { HtmlElementNode } from "./inline-content.js";
 // RD-003이 편입하는 목록류 4종. toggleListItem은 ListItemBlock 유니온
 // 밖이지만(model D2 경계) production 마커 인식은 4종을 동일하게 다룬다.
 type ProductionListItemType =
-  "bulletListItem" | "numberedListItem" | "checkListItem" | "toggleListItem";
+  | "bulletListItem"
+  | "numberedListItem"
+  | "checkListItem"
+  | "toggleListItem";
 
 // 목록류 4종의 production own-content 존재 마커 — 값은 항상 빈 문자열이라
 // (dataGeulBlockGroup과 같은 이유) propertyString이 아닌 raw property 존재만

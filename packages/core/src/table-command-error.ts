@@ -35,4 +35,5 @@ export type TableCommandError =
 // 만들지 않는다(Issue #36 결정). NOT_TABULAR는 "표 붙여넣기 대상이
 // 아니었던" 폴백 경로라 거절이 아니므로 이 union에 포함하지 않는다.
 export type PasteRejectedReason =
-  Exclude<ClipboardParseError, { code: "NOT_TABULAR" }> | TableCommandError;
+  | Exclude<ClipboardParseError, { code: "NOT_TABULAR" }>
+  | TableCommandError;

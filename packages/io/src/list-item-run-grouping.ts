@@ -16,7 +16,8 @@ import {
 // 통과시켜 각 호출자가 자기 blockNode()로 변환하게 한다 — block-segmenter.ts
 // 가 "판정만 하고 해석은 호출자 몫으로 남긴다" 선례를 따른다.
 export type ListItemRunGroupingResult<T> =
-  { kind: "block"; block: Block } | { kind: "list"; node: T };
+  | { kind: "block"; block: Block }
+  | { kind: "list"; node: T };
 
 export const groupListItemRuns = <T>(
   blocks: Block[],

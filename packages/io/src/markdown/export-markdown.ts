@@ -288,7 +288,8 @@ const blockNode = (block: Block): MarkdownOutputNode => {
     // 블록은 커스텀 inline 원소·mark를 담지 않는다) — 계약 전제 캐스트
     // (export-html.ts::codeBlockNode와 동일 패턴).
     const source = block.content[0] as
-      { text: string; marks?: TextMark[] } | undefined;
+      | { text: string; marks?: TextMark[] }
+      | undefined;
     return {
       type: "code",
       value: source?.text ?? "",

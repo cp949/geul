@@ -29,5 +29,5 @@ const CodeBlockLanguagesContext = createContext<
 export const CodeBlockLanguagesProvider = CodeBlockLanguagesContext.Provider;
 
 export const useCodeBlockLanguages = ():
-  readonly CodeBlockLanguageOption[] | undefined =>
-  useContext(CodeBlockLanguagesContext);
+  | readonly CodeBlockLanguageOption[]
+  | undefined => useContext(CodeBlockLanguagesContext);

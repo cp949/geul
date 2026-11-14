@@ -231,7 +231,8 @@ describe("외부 ul/ol HTML 붙여넣기", () => {
             (
               (block as Extract<Block, { type: InlineContentBlockType }>)
                 .content[0] as
-                Extract<InlineContentItem, { text: string }> | undefined
+                | Extract<InlineContentItem, { text: string }>
+                | undefined
             )?.text === "leaf",
         );
       expect(leaf).toBeDefined();

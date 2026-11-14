@@ -8,7 +8,9 @@ import type { Block } from "./types.js";
 
 /** bulletListItem·numberedListItem·checkListItem — 목록 항목 블록 종류. */
 export type ListItemBlockType =
-  "bulletListItem" | "numberedListItem" | "checkListItem";
+  | "bulletListItem"
+  | "numberedListItem"
+  | "checkListItem";
 
 export const isListItemBlockType = (type: string): type is ListItemBlockType =>
   type === "bulletListItem" ||
@@ -152,7 +154,11 @@ export const isLeafBlock = <B extends { type: string }>(
 //   실패한다. 손으로 쓴 Block 타입과의 일치는 media-block-fields.test.ts가
 //   컴파일 타임에 고정한다.
 export type MediaOwnField =
-  "showPreview" | "previewWidth" | "textAlignment" | "aspectRatio" | "alt";
+  | "showPreview"
+  | "previewWidth"
+  | "textAlignment"
+  | "aspectRatio"
+  | "alt";
 
 export const MEDIA_BLOCK_FIELDS = {
   file: [],

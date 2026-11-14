@@ -116,7 +116,8 @@ describe("에디터 컨트롤러 표", () => {
         block.type === "paragraph" &&
         (
           (block as ParagraphBlock).content[0] as
-            Extract<InlineContentItem, { text: string }> | undefined
+            | Extract<InlineContentItem, { text: string }>
+            | undefined
         )?.text === "intro",
     );
     const tableIndex = document.blocks.findIndex(
@@ -127,7 +128,8 @@ describe("에디터 컨트롤러 표", () => {
         block.type === "paragraph" &&
         (
           (block as ParagraphBlock).content[0] as
-            Extract<InlineContentItem, { text: string }> | undefined
+            | Extract<InlineContentItem, { text: string }>
+            | undefined
         )?.text === "outro",
     );
     expect(introIndex).toBeGreaterThanOrEqual(0);
@@ -139,13 +141,15 @@ describe("에디터 컨트롤러 표", () => {
       expect(
         (
           tableBlock.rows[0]?.cells[0]?.content[0] as
-            Extract<InlineContentItem, { text: string }> | undefined
+            | Extract<InlineContentItem, { text: string }>
+            | undefined
         )?.text,
       ).toBe("a");
       expect(
         (
           tableBlock.rows[0]?.cells[1]?.content[0] as
-            Extract<InlineContentItem, { text: string }> | undefined
+            | Extract<InlineContentItem, { text: string }>
+            | undefined
         )?.text,
       ).toBe("b");
     }
@@ -181,7 +185,8 @@ describe("에디터 컨트롤러 표", () => {
           block.type === "paragraph" &&
           (
             (block as ParagraphBlock).content[0] as
-              Extract<InlineContentItem, { text: string }> | undefined
+              | Extract<InlineContentItem, { text: string }>
+              | undefined
           )?.text === "intro",
       ),
     ).toBe(true);
@@ -191,7 +196,8 @@ describe("에디터 컨트롤러 표", () => {
           block.type === "paragraph" &&
           (
             (block as ParagraphBlock).content[0] as
-              Extract<InlineContentItem, { text: string }> | undefined
+              | Extract<InlineContentItem, { text: string }>
+              | undefined
           )?.text === "outro",
       ),
     ).toBe(true);

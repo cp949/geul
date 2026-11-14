@@ -48,7 +48,10 @@ describe("4종 미디어 블록 codec 왕복", () => {
       // 캐스트해 해소한다.
       expectRoundTrip(
         documentOf({ id: `${type}-min`, type } as
-          FileBlock | ImageBlock | VideoBlock | AudioBlock),
+          | FileBlock
+          | ImageBlock
+          | VideoBlock
+          | AudioBlock),
       );
     },
   );
