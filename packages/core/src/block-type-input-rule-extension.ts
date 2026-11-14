@@ -1,5 +1,5 @@
 import { Extension, InputRule } from "@tiptap/core";
-import type { Mark, NodeType } from "@tiptap/pm/model";
+import type { Mark, NodeType, Schema } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { TextSelection } from "@tiptap/pm/state";
 
@@ -170,58 +170,65 @@ const createDividerInputRule = (): InputRule =>
     },
   });
 
+// 이 파일이 소유한 input rule 목록. Tiptap input rule plugin(Enter·
+// compositionend·simulated 경로)과 custom-text-input-rule-extension.ts의
+// 텍스트 입력 runner가 같은 목록을 쓴다.
+export const createBlockTypeInputRules = (schema: Schema): InputRule[] => {
+  const heading = schema.nodes.heading;
+  const quote = schema.nodes.quote;
+  const checkListItem = schema.nodes.checkListItem;
+  const codeBlock = schema.nodes.codeBlock;
+  if (
+    heading === undefined ||
+    quote === undefined ||
+    checkListItem === undefined ||
+    codeBlock === undefined
+  ) {
+    return [];
+  }
+
+  return [
+    // allowSameTypeRetrigger: true — 이미 heading인 블록 선두에 marker를
+    // 다시 겹쳐 써도(레벨 무관) 뒤 텍스트를 보존한 채 레벨만 바꾼다(Notion
+    // 동일 UX, 사용자 요청).
+    createBlockTypeInputRule(
+      /^(#{1,6})\s$/,
+      heading,
+      (match) => ({
+        level: (match[1] as string).length,
+      }),
+      true,
+    ),
+    createBlockTypeInputRule(/^>\s$/, quote, () => undefined),
+    createDividerInputRule(),
+    // checkListItem은 heading/quote와 같은 nestableBlockContent라 divider
+    // 같은 구조적 예외 없이 setBlockType으로 표현된다(RD-002 DELTA-02).
+    createBlockTypeInputRule(/^\[\s*\]\s$/, checkListItem, () => ({
+      checked: false,
+    })),
+    createBlockTypeInputRule(/^\[[Xx]\]\s$/, checkListItem, () => ({
+      checked: true,
+    })),
+    // codeBlock은 leafBlockContent라 위 allowsChildren 가드가 적용된다
+    // (RD-003.md "결정" (a)). Notion 동일 UX 요청으로 트리거를 세 번째
+    // 백틱 입력 즉시로 바꿨다(공백 불필요) — divider(`---`)와 같은
+    // "트리거 문자 자체가 즉시 발동" 패턴. "```js "처럼 펜스에 언어를
+    // 같이 타이핑해 즉석 지정하던 옛 단축 입력은 이 즉시 트리거와
+    // 구조적으로 공존 불가능하다(``` 매치 시점에 이미 paragraph →
+    // codeBlock으로 바뀌어 그 뒤 "js"는 codeBlock 내부 텍스트가 된다) —
+    // 언어는 항상 "text"로 시작하고 이후 언어 트리거 버튼+팝오버로
+    // 고른다(기존 setBlockType 커맨드의 빈 language 계약과 동일,
+    // generic-block-commands.ts).
+    createBlockTypeInputRule(/^```$/, codeBlock, () => ({
+      language: "text",
+    })),
+  ];
+};
+
 export const BlockTypeInputRuleExtension = Extension.create({
   name: "blockTypeInputRule",
 
   addInputRules() {
-    const heading = this.editor.schema.nodes.heading;
-    const quote = this.editor.schema.nodes.quote;
-    const checkListItem = this.editor.schema.nodes.checkListItem;
-    const codeBlock = this.editor.schema.nodes.codeBlock;
-    if (
-      heading === undefined ||
-      quote === undefined ||
-      checkListItem === undefined ||
-      codeBlock === undefined
-    ) {
-      return [];
-    }
-
-    return [
-      // allowSameTypeRetrigger: true — 이미 heading인 블록 선두에 marker를
-      // 다시 겹쳐 써도(레벨 무관) 뒤 텍스트를 보존한 채 레벨만 바꾼다(Notion
-      // 동일 UX, 사용자 요청).
-      createBlockTypeInputRule(
-        /^(#{1,6})\s$/,
-        heading,
-        (match) => ({
-          level: (match[1] as string).length,
-        }),
-        true,
-      ),
-      createBlockTypeInputRule(/^>\s$/, quote, () => undefined),
-      createDividerInputRule(),
-      // checkListItem은 heading/quote와 같은 nestableBlockContent라 divider
-      // 같은 구조적 예외 없이 setBlockType으로 표현된다(RD-002 DELTA-02).
-      createBlockTypeInputRule(/^\[\s*\]\s$/, checkListItem, () => ({
-        checked: false,
-      })),
-      createBlockTypeInputRule(/^\[[Xx]\]\s$/, checkListItem, () => ({
-        checked: true,
-      })),
-      // codeBlock은 leafBlockContent라 위 allowsChildren 가드가 적용된다
-      // (RD-003.md "결정" (a)). Notion 동일 UX 요청으로 트리거를 세 번째
-      // 백틱 입력 즉시로 바꿨다(공백 불필요) — divider(`---`)와 같은
-      // "트리거 문자 자체가 즉시 발동" 패턴. "```js "처럼 펜스에 언어를
-      // 같이 타이핑해 즉석 지정하던 옛 단축 입력은 이 즉시 트리거와
-      // 구조적으로 공존 불가능하다(``` 매치 시점에 이미 paragraph →
-      // codeBlock으로 바뀌어 그 뒤 "js"는 codeBlock 내부 텍스트가 된다) —
-      // 언어는 항상 "text"로 시작하고 이후 언어 트리거 버튼+팝오버로
-      // 고른다(기존 setBlockType 커맨드의 빈 language 계약과 동일,
-      // generic-block-commands.ts).
-      createBlockTypeInputRule(/^```$/, codeBlock, () => ({
-        language: "text",
-      })),
-    ];
+    return createBlockTypeInputRules(this.editor.schema);
   },
 });

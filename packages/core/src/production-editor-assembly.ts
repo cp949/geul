@@ -32,6 +32,7 @@ import { createCustomBlockExtension } from "./custom-block-extension.js";
 import { createCustomInlineContentExtension } from "./custom-inline-content-extension.js";
 import { CustomKeyboardShortcutsExtension } from "./custom-keyboard-shortcuts-extension.js";
 import { createCustomStyleMark } from "./custom-style-mark-extension.js";
+import { CustomTextInputRuleExtension } from "./custom-text-input-rule-extension.js";
 import { DividerExtension } from "./divider-extension.js";
 // EditorController/CustomBlockDefinition/CustomInlineContentDefinition/
 // CustomStyleDefinition을 import type으로만 참조한다(RD-002-DELTA-11
@@ -585,6 +586,9 @@ export const createProductionEditor = (options: {
         : []),
       ListInputRuleExtension,
       BlockTypeInputRuleExtension,
+      // 위 두 확장 규칙의 텍스트 입력 경로 runner(Tiptap 3.31.4+ 2회 dispatch
+      // 회피, custom-text-input-rule-extension.ts).
+      CustomTextInputRuleExtension,
       ...(isBlockTypeEnabled("quote", options.enabledBlockTypes)
         ? [QuoteExtension]
         : []),

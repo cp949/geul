@@ -1,5 +1,5 @@
 import { Extension, InputRule } from "@tiptap/core";
-import type { Mark, NodeType } from "@tiptap/pm/model";
+import type { Mark, NodeType, Schema } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import {
   Plugin,
@@ -81,6 +81,26 @@ const createListInputRule = (
         .setStoredMarks(storedMarks);
     },
   });
+
+// 이 파일이 소유한 목록 input rule. Tiptap input rule plugin(Enter·
+// compositionend·simulated 경로)과 custom-text-input-rule-extension.ts의
+// 텍스트 입력 runner가 같은 목록을 쓴다.
+export const createListInputRules = (schema: Schema): InputRule[] => {
+  const bullet = schema.nodes.bulletListItem;
+  const numbered = schema.nodes.numberedListItem;
+  if (bullet === undefined || numbered === undefined) return [];
+
+  // 트리거를 리터럴 " "이 아니라 `\s`로 잡는다(block-type-input-rule-
+  // extension.ts의 heading/quote/checkListItem과 같은 계약). 문단 끝(뒤에
+  // 다른 문자 없음)에서 스페이스를 치면 Chrome이 U+0020 대신 U+00A0
+  // (NBSP)를 그대로 넣는 경우가 있다(whitespace-collapsing 회피, 실측:
+  // showcase 프로덕션 에디터) — 리터럴 " "만 받으면 이 경우 조용히
+  // 변환되지 않는다.
+  return [
+    createListInputRule("-", /^-\s$/, bullet),
+    createListInputRule("1.", /^1\.\s$/, numbered),
+  ];
+};
 
 export const ListInputRuleExtension = Extension.create({
   name: "listInputRule",
@@ -171,19 +191,6 @@ export const ListInputRuleExtension = Extension.create({
   },
 
   addInputRules() {
-    const bullet = this.editor.schema.nodes.bulletListItem;
-    const numbered = this.editor.schema.nodes.numberedListItem;
-    if (bullet === undefined || numbered === undefined) return [];
-
-    // 트리거를 리터럴 " "이 아니라 `\s`로 잡는다(block-type-input-rule-
-    // extension.ts의 heading/quote/checkListItem과 같은 계약). 문단 끝(뒤에
-    // 다른 문자 없음)에서 스페이스를 치면 Chrome이 U+0020 대신 U+00A0
-    // (NBSP)를 그대로 넣는 경우가 있다(whitespace-collapsing 회피, 실측:
-    // showcase 프로덕션 에디터) — 리터럴 " "만 받으면 이 경우 조용히
-    // 변환되지 않는다.
-    return [
-      createListInputRule("-", /^-\s$/, bullet),
-      createListInputRule("1.", /^1\.\s$/, numbered),
-    ];
+    return createListInputRules(this.editor.schema);
   },
 });
