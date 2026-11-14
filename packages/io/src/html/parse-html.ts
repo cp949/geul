@@ -233,8 +233,8 @@ const collectFlattenedText = (node: Parse5Child): string => {
 // 노드는 서브트리의 보이는 텍스트를 모은 단일 텍스트 노드로 치환한다
 // (텍스트가 비면 노드 제거). 치환/제거로 결과 트리 깊이는 항상 캡 이하다.
 // 순회도 치환 대상 탐색도 전부 명시적 스택이다. parseFragment 자신이
-// 트리를 만들지 못하고 던지는 입력군(아래 parseHtmlFragment의 경계 catch
-// 참조)은 이 캡의 보존 대상이 아니다.
+// 던지는 입력(아래 parseHtmlFragment의 경계 catch 참조)은 이 캡의 보존
+// 대상이 아니다.
 const capParse5TreeDepth = (fragment: Parse5Fragment): boolean => {
   let truncated = false;
   const stack: { nodes: Parse5Child[]; depth: number }[] = [
@@ -289,13 +289,14 @@ export const parseHtmlFragment = (
   html: string,
 ): ParsedHtmlFragment | undefined => {
   // 의도된 경계 catch — 캡 "이전"인 파서 라이브러리 내부 재귀는 캡이
-  // 원리적으로 못 막는다(실측: parse5 parseFragment의 EOF template 정리,
-  // eofInTemplate ↔ onEof 상호 재귀 — 닫히지 않은 중첩 template이 열린
-  // 개수만큼 프레임을 쌓아 약 10,000단부터 결정적 RangeError). 파서가
-  // 트리를 만들지 못한 입력은 평탄화 보존 대상이 아니라 "파서 실패"다 —
-  // undefined를 반환하면 두 소비자(importHtml·parseClipboardTable)가
-  // 각자의 구조화된 오류(HTML_PARSE_FAILED / NOT_TABULAR)로 바꾸므로,
-  // 이 구간의 최후 방어선이 공유 seam 한 곳에 중앙화된다(G-CNV-001).
+  // 원리적으로 못 막는다. parse5 7.x는 닫히지 않은 중첩 template의 EOF
+  // 정리(eofInTemplate ↔ onEof 상호 재귀)에서 약 10,000단부터 결정적
+  // RangeError를 냈고, 8.x는 이 재귀를 없앴다. 그래도 파서가 트리를 만들지
+  // 못한 입력은 평탄화 보존 대상이 아니라 "파서 실패"다 — undefined를
+  // 반환하면 두 소비자(importHtml·parseClipboardTable)가 각자의 구조화된
+  // 오류(HTML_PARSE_FAILED / NOT_TABULAR)로 바꾸므로, 이 구간의 최후
+  // 방어선이 공유 seam 한 곳에 중앙화된다(G-CNV-001). 현재 parse5 8.1.1에는
+  // 이 catch를 타는 알려진 입력이 없어 회귀 테스트가 없다.
   try {
     const fragment = parseFragment(html, { scriptingEnabled: false });
     const truncated = capParse5TreeDepth(fragment);

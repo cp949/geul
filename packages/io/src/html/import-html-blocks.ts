@@ -677,11 +677,11 @@ const blocksFromListElement = (
 // walk) 재귀와 import-html-helpers.ts의 textValue·createDefaultIdFactory
 // 재귀는 깊이 제한이 없지만, parseHtmlFragment의 깊이-캡(MAX_HTML_TREE_DEPTH,
 // Issue #130)이 HTML 트리 자체를 parse 직후에 절단하므로 전부 그 상수로
-// 유계다. 캡 "이전"인 파서 라이브러리 내부 재귀(parse5의 EOF template
-// 정리 — 닫히지 않은 중첩 template)만은 캡이 못 막는데, 그 구간은 우연한
-// 최외곽 catch가 아니라 parseHtmlFragment 자신의 설계된 경계 catch가 받아
+// 유계다. 캡 "이전"인 파서 라이브러리 내부 재귀가 던지는 입력은 캡이
+// 못 막지만, parseHtmlFragment 자신의 설계된 경계 catch가 받아
 // undefined → HTML_PARSE_FAILED로 흡수된다(PIT-0034가 경계하는 "우연한
-// catch 의존"은 결정 6 + 그 경계 catch로 제거됐다).
+// catch 의존"은 결정 6 + 그 경계 catch로 제거됐다). parse5 7.x의 닫히지
+// 않은 중첩 template 재귀는 8.x에서 없어졌다.
 //
 // precedingBlock은 blocksFromSegments와 같은 관례다. 이 nodes 앞 형제
 // 블록이 따로 만들어졌을 때만 넘긴다(Issue #357 wrapper 이음매).

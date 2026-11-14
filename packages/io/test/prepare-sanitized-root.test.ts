@@ -160,13 +160,14 @@ describe("schema 차이", () => {
   });
 });
 
-describe("실패", () => {
-  it("파서가 루트를 만들지 못하면 undefined다", () => {
-    // 닫히지 않은 중첩 template은 parse5 내부 재귀로 RangeError를 던진다
-    // (parseHtmlFragment 경계 catch).
+describe("깊은 미폐쇄 template", () => {
+  it("parse5가 트리를 만들면 루트를 돌려준다", () => {
+    // 닫히지 않은 중첩 template은 parse5 7.x에서 RangeError였지만 8.x는
+    // 트리를 만든다. 깊이 캡이 절단하므로 던지지 않는다.
     const html = "<template>".repeat(20000);
-    expect(
+    expect(() =>
       prepareSanitizedRoot(html, htmlImportSanitizeSchema),
-    ).toBeUndefined();
+    ).not.toThrow();
+    expect(prepareSanitizedRoot(html, htmlImportSanitizeSchema)).toBeDefined();
   });
 });

@@ -171,36 +171,37 @@ describe("importHtml 깊이 방어(Issue #130)", () => {
     expect(documentVisibleText(result.value.document)).toContain("keep");
   });
 
-  // 아래 30,000단 케이스들은 캡이 원리적으로 못 막는 구간이다 — parse5의
-  // parseFragment 자체가 닫히지 않은 중첩 template의 EOF 정리
-  // (eofInTemplate ↔ onEof 상호 재귀)에서 RangeError를 내며, 캡은
-  // parseFragment "이후"에 돈다. 이 입력군은 파서가 트리를 만들지 못하므로
-  // 평탄화 보존 대상이 아니라 기존 "파서 실패" 계약으로 흡수된다 —
-  // parseHtmlFragment의 설계된 경계 catch가 undefined를 반환하고 두
-  // 소비자가 각자의 구조화된 오류(HTML_PARSE_FAILED / NOT_TABULAR)로
-  // 바꾼다. 30,000은 결정적 RangeError 구간(≥10,000)의 값이다 —
-  // 비결정 구간(4,000~8,000) 값은 쓰지 않는다(PIT-0034).
-  it("파서가 트리를 만들 수 없는 미폐쇄 template 30,000단은 parseHtmlFragment가 throw 없이 undefined를 반환한다", () => {
+  // 닫히지 않은 중첩 template은 parse5 7.x에서 EOF 정리 재귀로 RangeError를
+  // 냈지만(parseHtmlFragment 경계 catch가 HTML_PARSE_FAILED로 흡수) parse5
+  // 8.x는 트리를 만든다. 그래서 이제 일반 깊은 입력처럼 깊이 캡이 절단하고,
+  // template은 안전하지 않은 요소로 제거된다. 이 입력군은 거절이 아니라
+  // 빈 문서와 경고로 성공한다. 30,000은 7.x에서 결정적 RangeError였던 구간
+  // (≥10,000)의 값이다 — 회귀 기준을 그대로 유지한다(PIT-0034).
+  it("미폐쇄 template 30,000단은 parseHtmlFragment가 throw 없이 캡이 절단한 트리를 반환한다", () => {
     const html = "<template>".repeat(30000) + "x";
 
     expect(() => parseHtmlFragment(html)).not.toThrow();
-    expect(parseHtmlFragment(html)).toBeUndefined();
+    expect(parseHtmlFragment(html)?.truncated).toBe(true);
   });
 
-  it("미폐쇄 template 30,000단 import는 예외 유출 없이 HTML_PARSE_FAILED로 거절된다", () => {
+  it("미폐쇄 template 30,000단 import는 예외 유출 없이 빈 문서와 경고로 성공한다", () => {
     const html = "<template>".repeat(30000) + "x";
 
     expect(() => importHtml(html)).not.toThrow();
     const result = importHtml(html);
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.code).toBe("HTML_PARSE_FAILED");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.document.blocks).toEqual([]);
+    expect(result.value.warnings.map((warning) => warning.kind)).toEqual([
+      "DEEP_TREE_FLATTENED",
+      "UNSAFE_ELEMENT_REMOVED",
+    ]);
   });
 
   it("미폐쇄 template 30,000단이 든 클립보드 HTML은 예외 유출 없이 NOT_TABULAR를 반환한다", () => {
     // <table>이 있어야 클립보드 경로가 HTML 파싱에 진입한다 — 표가 있어도
-    // 파서가 트리를 만들지 못하면 구조화된 거절로 떨어져야 한다.
+    // template 안쪽 콘텐츠라 표로 읽히지 않고 구조화된 거절로 떨어져야 한다.
     const html =
       "<template>".repeat(30000) + "<table><tr><td>a</td></tr></table>";
 
