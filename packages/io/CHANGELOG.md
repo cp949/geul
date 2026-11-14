@@ -1,5 +1,18 @@
 # @cp949/geul-io
 
+## 0.4.0
+
+### Minor Changes
+
+- `parse5`를 7.3.0에서 8.1.1로, `hast-util-from-parse5`를 8.0.4로 올린다.
+
+  - 동작 변화: 닫히지 않은 `<template>`을 깊게 중첩한 입력을 `importHtml`이 처리하는 방식이 바뀐다. 이전에는 파서가 `RangeError`를 던져 `HTML_PARSE_FAILED`로 실패했다. 이제는 트리를 만들고 깊이 상한이 잘라내, 빈 문서와 `DEEP_TREE_FLATTENED`·`UNSAFE_ELEMENT_REMOVED` 경고를 담아 성공한다. 이 입력의 실패를 기대하던 호출자는 경고를 확인한다.
+
+### Patch Changes
+
+- Updated dependencies
+  - @cp949/geul-model@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes

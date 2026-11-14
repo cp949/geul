@@ -1,5 +1,21 @@
 # @cp949/geul-core
 
+## 0.4.0
+
+### Minor Changes
+
+- `@tiptap/*`를 3.31.3에서 3.33.1로 올린다. 에디터 동작은 3.31.3과 같게 유지한다.
+
+  - 지원 브라우저 영향: `@tiptap/core` 3.33.1이 `Object.hasOwn`(Chrome 93 이상)을 새로 쓴다. core-js 같은 폴리필 없이 Chrome 93 미만을 지원하는 소비자는 에디터 생성에서 깨진다. 폴리필은 소비자가 제공한다(ADR-0009).
+  - 단축 입력(`- `, `# ` 등 블록 변환 입력 규칙)은 core가 직접 처리한다. tiptap 3.31.4부터 입력 규칙이 트리거 입력을 별도 트랜잭션으로 dispatch해 변경이 2회 일어나고 undo가 `- `를 복원했다. 어댑터가 이를 3.31.3과 같은 1회 변경으로 되돌린다.
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @cp949/geul-io@0.4.0
+  - @cp949/geul-model@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes

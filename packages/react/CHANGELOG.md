@@ -1,5 +1,13 @@
 # @cp949/geul-react
 
+## 0.4.0
+
+### Patch Changes
+
+- `lucide-react`를 1.55.0에서 1.72.0으로, `react`·`react-dom`을 19.3.0에서 19.3.1로 올린다. 세 패키지는 `dependencies`에 정확한 버전으로 고정돼 있다. 공개 API 변화는 없다.
+- Updated dependencies
+  - @cp949/geul-core@0.4.0
+
 ## 0.3.0
 
 ### Patch Changes

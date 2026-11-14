@@ -1,5 +1,11 @@
 # @cp949/geul-model
 
+## 0.4.0
+
+### Patch Changes
+
+- `zod`를 4.6.5에서 4.6.7로 올린다. 공개 API 변화는 없다.
+
 ## 0.3.0
 
 ### Minor Changes
