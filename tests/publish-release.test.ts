@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  RELEASE_PACKAGE_DIRECTORIES,
+  RELEASE_PACKAGE_NAMES,
   findVersionMismatches,
   isVersionPublished,
 } from "../scripts/publish-release.mjs";
@@ -65,13 +65,13 @@ describe("isVersionPublished", () => {
   });
 });
 
-describe("RELEASE_PACKAGE_DIRECTORIES", () => {
+describe("RELEASE_PACKAGE_NAMES", () => {
   it("내부 의존 순서(model, io, core, react)로 배포한다", () => {
-    expect(RELEASE_PACKAGE_DIRECTORIES).toEqual([
-      "packages/model",
-      "packages/io",
-      "packages/core",
-      "packages/react",
+    expect(RELEASE_PACKAGE_NAMES).toEqual([
+      "@cp949/geul-model",
+      "@cp949/geul-io",
+      "@cp949/geul-core",
+      "@cp949/geul-react",
     ]);
   });
 });

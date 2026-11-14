@@ -29,14 +29,20 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { workspacePackageDirectories } from "./workspace-roots.mjs";
+
 const workspaceRoot = resolve(import.meta.dirname, "..");
 
-/** lockstep 4개 패키지. 내부 의존 순서(의존 대상이 앞)를 지킨다. */
-export const RELEASE_PACKAGE_DIRECTORIES = [
-  "packages/model",
-  "packages/io",
-  "packages/core",
-  "packages/react",
+/**
+ * lockstep 4개 패키지 이름. 내부 의존 순서(의존 대상이 앞)를 지킨다.
+ * 디렉터리는 이름으로 workspace 열거에서 찾는다. 경로 리터럴을 두면
+ * `scripts/workspace-roots.mjs`의 단독 소유 계약(`tests/workspace-roots.test.ts`)과 겹친다.
+ */
+export const RELEASE_PACKAGE_NAMES = [
+  "@cp949/geul-model",
+  "@cp949/geul-io",
+  "@cp949/geul-core",
+  "@cp949/geul-react",
 ];
 
 /**
@@ -109,12 +115,22 @@ function readPublishedVersions(name) {
  *   `checkOnly`는 태그·버전 일치만 확인하고 끝낸다. 긴 검증 전에 빨리 실패하게 한다.
  */
 export function publishRelease({ tag, dryRun, checkOnly = false }) {
-  const manifests = RELEASE_PACKAGE_DIRECTORIES.map((directory) => ({
-    directory: resolve(workspaceRoot, directory),
-    ...JSON.parse(
-      readFileSync(resolve(workspaceRoot, directory, "package.json"), "utf8"),
-    ),
-  }));
+  const byName = new Map(
+    workspacePackageDirectories(workspaceRoot).map((directory) => [
+      JSON.parse(readFileSync(resolve(directory, "package.json"), "utf8")).name,
+      directory,
+    ]),
+  );
+  const manifests = RELEASE_PACKAGE_NAMES.map((name) => {
+    const directory = byName.get(name);
+    if (directory === undefined) {
+      throw new Error(`workspace에서 ${name}을 찾지 못했다. 배포를 중단한다.`);
+    }
+    return {
+      directory,
+      ...JSON.parse(readFileSync(resolve(directory, "package.json"), "utf8")),
+    };
+  });
 
   const problems = findVersionMismatches(tag, manifests);
   if (problems.length > 0) {
