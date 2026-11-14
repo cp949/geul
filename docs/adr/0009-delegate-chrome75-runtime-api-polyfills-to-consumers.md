@@ -21,3 +21,4 @@ Geul의 공식 browser floor는 Chrome 75다(ADR 0008). 이 floor를 지키는 �
 - `check:escompat`은 Geul 자기 소스 게이트다 — `packages/*`의 dist JS 전량(목록은 workspace 열거에서 파생)이 대상이고 `pnpm verify`의 build 뒤에 돈다. 디펜던시 코드는 이 게이트의 대상이 아니다(사용처 책임이므로).
 - core-js는 사용처 역할의 앱(`apps/demo`, `apps/showcase`)에만 추가한다. `packages/*`에 추가하지 않는다 — 라이브러리가 전역 polyfill을 로드하면 사용처의 전역 상태를 무단으로 바꾸게 된다.
 - Web API 격차(`crypto.randomUUID` 등)는 core-js 범위 밖이고 Issue #121이 소유한다.
+- 예외: e2e 도구(`playwright-core`)는 배포 산출물이 아니고 사용처가 따로 없어 위임이 성립하지 않는다. Playwright 1.64.0부터 주입 스크립트가 `element.checkVisibility()`(Chrome 105+)를 가드 없이 호출해 Chrome 83 floor project가 전부 실패한다. 주입 스크립트는 main world와 다른 world에서 돌아 `addInitScript`·CDP utility world polyfill로는 막지 못한다(실측). 그래서 이 도구에 한해 `patches/playwright-core@1.65.0.patch`로 가드 1줄을 복원한다. 제거 조건: 업스트림이 폴백을 되돌리거나 chrome83 project를 폐기할 때. Playwright를 올릴 때 패치가 안 붙으면 `pnpm install`이 깨지므로 그때 업스트림 상태를 다시 확인한다.

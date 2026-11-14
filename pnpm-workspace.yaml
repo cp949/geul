@@ -44,6 +44,7 @@ minimumReleaseAgeExclude:
   - '@tiptap/starter-kit@3.30.1'
 patchedDependencies:
   micromark-extension-gfm-table@2.1.1: patches/micromark-extension-gfm-table@2.1.1.patch
+  playwright-core@1.65.0: patches/playwright-core@1.65.0.patch
 # 전이 의존성 override. pnpm audit 권고 대응과 라이브러리 결함 대응(mdast-util-to-markdown)을 함께 둔다.
 # 취약하거나 결함이 있는 범위만 고친 버전으로 올린다.
 # 선택자가 그 범위만 잡으므로 상위 패키지가 고친 버전을 내면 override가 필요 없어진다.

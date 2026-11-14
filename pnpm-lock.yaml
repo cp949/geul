@@ -171,6 +171,7 @@ overrides:
 
 patchedDependencies:
   micromark-extension-gfm-table@2.1.1: 391cb287cb6e73782017cee53739b5533adc04c1d1852687d2a9f7190cd6c8d1
+  playwright-core@1.65.0: 64c69a1a663cc4a178f825f44587cb98b4485e469dae2c79203588ceed669ae4
 
 importers:
 
@@ -5175,11 +5176,11 @@ snapshots:
 
   pify@2.3.0: {}
 
-  playwright-core@1.65.0: {}
+  playwright-core@1.65.0(patch_hash=64c69a1a663cc4a178f825f44587cb98b4485e469dae2c79203588ceed669ae4): {}
 
   playwright@1.65.0:
     dependencies:
-      playwright-core: 1.65.0
+      playwright-core: 1.65.0(patch_hash=64c69a1a663cc4a178f825f44587cb98b4485e469dae2c79203588ceed669ae4)
 
   postcss-cli@12.0.0(jiti@2.7.0)(postcss@8.5.32)(yaml@2.9.0):
     dependencies:
