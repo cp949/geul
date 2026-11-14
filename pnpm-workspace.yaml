@@ -25,10 +25,15 @@ patchedDependencies:
 # - brace-expansion <5.0.12: GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p
 # - source-map-js <1.2.2: GHSA-68fv-2mgg-jv7q
 # - shell-quote <1.11.0: GHSA-pqg4-j6r4-53mv
+# - minimatch >=7.0.0 <11.0.1: GHSA-g3hv-75wg-m249
 overrides:
   'brace-expansion@>=4.0.0 <5.0.12': 5.0.12
   'source-map-js@>=1.0.0 <1.2.2': 1.2.2
   'shell-quote@>=1.8.4 <1.11.0': 1.12.0
+  # 10.x → 11.x 메이저 점프다. 소비자(eslint, @eslint/config-array, @typescript-eslint/typescript-estree)는
+  # Minimatch 생성자, match(), pattern, minimatch()와 dot·flipNegate 옵션만 쓰며 11에서 그대로다.
+  # eslint 10.15.0·@eslint/config-array 0.23.6은 이미 ^11.0.5를 요구한다.
+  'minimatch@>=7.0.0 <11.0.1': 11.0.8
   # braces <=3.0.3(GHSA-vfj7-8cjw-p6xm)는 패치 버전이 없다. micromatch를 끌어오는
   # @parcel/watcher 2.5.x 대신 picomatch 기반인 2.6.0을 쓴다(sass optionalDependencies ^2.4.1 충족).
   '@parcel/watcher@<2.6.0': 2.6.0
