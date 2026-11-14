@@ -153,6 +153,24 @@ describe("jsdom의 selectionchange 발행 시점", () => {
       probe.dispose();
     }
   });
+
+  // jsdom 31은 selectionchange를 `setImmediate`로 큐잉하고, React의 async act도
+  // Node에서 `setImmediate`로 큐를 비운다. 그래서 `await act(async ...)`가 지연분을
+  // 함께 흘려보낸다. jsdom 30은 `setTimeout(0)`으로 큐잉해 흘려보내지 못했다.
+  it("await act(async)는 jsdom이 setImmediate로 큐잉한 지연분을 함께 흘려보낸다", async () => {
+    const probe = await openSelectionProbe();
+    try {
+      addRangeQuietly(probe.text, 0, 3);
+
+      await act(async () => {});
+      expect(probe.fired()).toBe(1);
+
+      await nextMacrotask();
+      expect(probe.fired()).toBe(1);
+    } finally {
+      probe.dispose();
+    }
+  });
 });
 
 describe("selectText", () => {

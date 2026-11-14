@@ -17,7 +17,8 @@
  * 2회, 선택이 이미 있으면 3회다(`removeAllRanges`와 `addRange`가 각각 1회씩
  * 큐잉한다). `collapseSelection()`은 선택이 있으면 동기 1회·누적 2회이고, 이미
  * 빈 선택에서는 지울 것이 없어 지연분 없이 누적 1회다. 동기 `act()`는 이 지연분을
- * 앞당기지 않는다(실측 확인). 실제 편집기에 캐럿을 놓는 `placeCaret`도 같은
+ * 앞당기지 않는다. jsdom 31은 지연분을 `setImmediate`로 큐잉해서 `await act(async)`는
+ * 흘려보낸다(실측 확인). 실제 편집기에 캐럿을 놓는 `placeCaret`도 같은
  * 지연분을 남긴다 — 두 번째 `selectionchange`가 언제 필요한지는 Issue #85가
  * 소유한다.
  *
