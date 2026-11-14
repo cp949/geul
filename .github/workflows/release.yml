@@ -1,0 +1,68 @@
+name: Release
+
+# v* 태그 push에서 model·io·core·react 4개 패키지를 npm에 함께 배포한다(ADR-0018, ADR-0020).
+# npm 토큰 없이 trusted publishing(OIDC)으로 인증한다. npmjs.com의 4개 패키지 설정마다
+# trusted publisher에 저장소 cp949/geul과 이 파일명(release.yml)이 등록돼 있어야 한다.
+# 파일명을 바꾸면 등록도 바꾼다.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # main 포함 여부를 확인하려면 전체 이력이 필요하다.
+          fetch-depth: 0
+
+      # trusted publishing은 npm CLI 11.5.1 이상이 필요하다. Node 24에 번들된 npm을 쓴다.
+      # registry-url은 지정하지 않는다. 지정하면 토큰 자리표시자가 담긴 .npmrc가 만들어져 OIDC 인증을 가린다.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@12.4.1 --activate
+
+      - name: Install dependencies from lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Check npm CLI supports trusted publishing
+        run: |
+          npm --version
+          node -e "const [a,b,c]=process.argv[1].split('.').map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)" "$(npm --version)"
+
+      # 태그와 4개 package.json 버전이 다르면 긴 검증 전에 멈춘다.
+      - name: Check tag matches package versions
+        run: node scripts/publish-release.mjs "$GITHUB_REF_NAME" --check
+
+      # main에 병합되지 않은 커밋의 태그는 배포하지 않는다.
+      - name: Check tagged commit is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - name: Install pinned Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      # CI와 같은 전체 검증이다. 하나라도 실패하면 배포하지 않는다.
+      - name: Verify distribution and browser flows
+        run: pnpm verify
+
+      # 배포할 dist를 다시 확정한다.
+      - name: Build
+        run: pnpm build
+
+      # 이미 npm에 있는 버전은 건너뛰므로 일부만 올라간 뒤 재실행해도 된다.
+      - name: Publish packages
+        run: node scripts/publish-release.mjs "$GITHUB_REF_NAME"

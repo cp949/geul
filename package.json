@@ -19,7 +19,6 @@
     "build": "turbo run build",
     "changeset": "changeset",
     "changeset:version": "changeset version",
-    "changeset:publish": "pnpm build && changeset publish",
     "check:boundaries": "node scripts/check-package-boundaries.mjs",
     "check:escompat": "node scripts/check-escompat.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",

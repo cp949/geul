@@ -54,17 +54,14 @@ pnpm --filter consumer-fixture typecheck
    pnpm changeset:version
    ```
 
-3. 배포한다 — `pnpm build` 후 로컬 버전이 npm 배포 버전보다 높은 패키지만 배포하고 git 태그를 만든다.
+3. 버전 커밋을 `main`에 병합한 뒤 `v<버전>` 태그를 만들어 push한다. 이 push가 npm 배포를 일으키며 되돌릴 수 없다.
 
    ```bash
-   pnpm changeset:publish
+   git tag v0.4.0
+   git push origin v0.4.0
    ```
 
-4. 태그를 push한다.
-
-   ```bash
-   git push --follow-tags
-   ```
+   태그를 받은 `.github/workflows/release.yml`이 4개 패키지를 배포한다([ADR-0020](./docs/adr/0020-publish-npm-packages-from-tag-push-with-trusted-publishing.md)). 로컬에서 `npm publish`나 `changeset publish`를 실행하지 않는다.
 
 `pnpm changeset status`가 "일부 패키지가 바뀌었는데 changeset이 없다"고 실패할 수 있다 — `baseBranch: main` 기준 비교라 `dev`가 `main`보다 앞서 있는 동안은 정상이고, `main` 병합 뒤 해소된다.
 
