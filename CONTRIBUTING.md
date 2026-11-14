@@ -54,7 +54,9 @@ pnpm --filter consumer-fixture typecheck
    pnpm changeset:version
    ```
 
-3. 버전 커밋을 `main`에 병합한 뒤 `v<버전>` 태그를 만들어 push한다. 이 push가 npm 배포를 일으키며 되돌릴 수 없다.
+3. 로컬에서 `pnpm test:e2e`를 통과시킨다. 릴리스 workflow는 e2e를 실행하지 않는다.
+
+4. 버전 커밋을 `main`에 병합한 뒤 `v<버전>` 태그를 만들어 push한다. 이 push가 npm 배포를 일으키며 되돌릴 수 없다.
 
    ```bash
    git tag v0.4.0

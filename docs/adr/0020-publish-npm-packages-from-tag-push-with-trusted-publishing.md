@@ -14,7 +14,7 @@ status: accepted
 2. 배포 전에 세 가지를 모두 확인한다. 하나라도 실패하면 배포하지 않는다.
    - 태그 이름이 4개 `package.json` 버전과 모두 같다.
    - 태그 커밋이 `main`에 포함된다.
-   - `pnpm verify`(CI와 같은 전체 검증)가 통과한다.
+   - `pnpm verify:quick`(lint, format, build, typecheck, unit test, 경계·라이선스 검사)이 통과한다. e2e는 포함하지 않는다.
 3. 배포는 `scripts/publish-release.mjs`가 한다. 내부 의존 순서(model, io, core, react)로 `pnpm pack`을 만들고 `npm publish <tarball> --provenance --access public`으로 올린다.
    - `workspace:*`는 `pnpm pack`이 실제 버전으로 바꾼다.
    - OIDC 교환은 npm CLI(11.5.1 이상)가 한다. `pnpm publish`가 같은 교환을 하는지는 확인하지 못해 쓰지 않는다.
@@ -25,6 +25,7 @@ status: accepted
 
 ## Consequences
 
+- 릴리스 workflow는 e2e(chromium, mobile)를 실행하지 않는다. e2e는 약 10분이 걸려 릴리스 실행이 16분을 넘었다(2026-11-14, v0.4.0 첫 배포 실측). 릴리스 담당자는 태그 push 전에 로컬에서 `pnpm test:e2e`(또는 `pnpm verify`)를 통과시킨다. 이 확인은 workflow가 강제하지 않는다.
 - 태그 push는 npm에 되돌릴 수 없는 공개 배포를 일으킨다. 태그는 사용자가 직접 push한다.
 - 버전 커밋(`pnpm changeset:version` 결과)을 먼저 `main`에 병합해야 한다. 병합 전 커밋의 태그는 배포되지 않는다.
 - 4개 패키지 중 하나라도 trusted publisher가 등록되지 않으면 그 패키지에서 배포가 멈춘다. 앞선 패키지는 이미 올라가 있을 수 있다. 등록을 마친 뒤 같은 workflow를 다시 실행하면 나머지만 올라간다.

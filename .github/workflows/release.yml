@@ -16,7 +16,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -52,12 +52,10 @@ jobs:
       - name: Check tagged commit is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
-      - name: Install pinned Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
-
-      # CI와 같은 전체 검증이다. 하나라도 실패하면 배포하지 않는다.
-      - name: Verify distribution and browser flows
-        run: pnpm verify
+      # e2e(chromium, mobile)는 릴리스에서 돌리지 않는다. 약 10분이 걸리고, 릴리스 전에
+      # 로컬에서 pnpm test:e2e를 실행한다(ADR-0020). 나머지 전체 검증은 여기서 다시 한다.
+      - name: Verify lint, build, typecheck and unit tests
+        run: pnpm verify:quick
 
       # 배포할 dist를 다시 확정한다.
       - name: Build
