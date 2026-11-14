@@ -78,7 +78,7 @@ const dependencySections = [
 
 const allowedDependencies = {
   "packages/model": {
-    dependencies: { zod: "4.6.5" },
+    dependencies: { zod: "4.6.7" },
     devDependencies: {},
     peerDependencies: {},
     optionalDependencies: {},
@@ -86,7 +86,7 @@ const allowedDependencies = {
   "packages/io": {
     dependencies: {
       "@cp949/geul-model": "workspace:*",
-      "hast-util-from-parse5": "8.0.3",
+      "hast-util-from-parse5": "8.0.4",
       "hast-util-sanitize": "5.0.2",
       parse5: "7.3.0",
       "rehype-stringify": "10.0.1",
@@ -119,18 +119,18 @@ const allowedDependencies = {
   "packages/react": {
     dependencies: {
       "@cp949/geul-core": "workspace:*",
-      "lucide-react": "1.55.0",
-      react: "19.3.0",
-      "react-dom": "19.3.0",
+      "lucide-react": "1.72.0",
+      react: "19.3.1",
+      "react-dom": "19.3.1",
     },
     devDependencies: {
       "@testing-library/react": "16.3.3",
       "@types/node": "22.20.1",
-      autoprefixer: "10.6.1",
+      autoprefixer: "10.6.2",
       esbuild: "0.28.2",
-      postcss: "8.5.29",
+      postcss: "8.5.32",
       "postcss-cli": "12.0.0",
-      sass: "1.105.1",
+      sass: "1.108.2",
     },
     peerDependencies: {},
     optionalDependencies: {},
@@ -142,9 +142,9 @@ const allowedDependencies = {
       "@cp949/geul-react": "workspace:*",
       // Chrome 75 사용처 재현용 런타임 polyfill(ADR-0009, cp949/geul#122).
       // demo(사용처 역할)에만 허용하고 packages/*에는 추가하지 않는다.
-      "core-js": "3.50.0",
-      react: "19.3.0",
-      "react-dom": "19.3.0",
+      "core-js": "3.51.0",
+      react: "19.3.1",
+      "react-dom": "19.3.1",
     },
     devDependencies: {},
     peerDependencies: {},
@@ -157,23 +157,23 @@ const allowedDependencies = {
       "@cp949/geul-react": "workspace:*",
       // Chrome 75 사용처 재현용 런타임 polyfill(ADR-0009, cp949/geul#182).
       // showcase(사용처 역할)에만 허용하고 packages/*에는 추가하지 않는다.
-      "core-js": "3.50.0",
+      "core-js": "3.51.0",
       "prism-react-renderer": "2.4.1",
-      react: "19.3.0",
-      "react-dom": "19.3.0",
-      "react-router": "8.4.0",
+      react: "19.3.1",
+      "react-dom": "19.3.1",
+      "react-router": "8.5.1",
     },
     devDependencies: {
       "@lezer/highlight": "1.2.5",
       "@lezer/javascript": "1.5.6",
       "@testing-library/react": "16.3.3",
-      "@testing-library/user-event": "14.6.7",
+      "@testing-library/user-event": "14.6.10",
       "highlight.js": "11.12.0",
       lowlight: "3.3.0",
       prismjs: "1.30.0",
       refractor: "5.0.0",
-      shiki: "4.5.0",
-      "sugar-high": "2.6.0",
+      shiki: "4.6.0",
+      "sugar-high": "2.6.4",
     },
     peerDependencies: {},
     optionalDependencies: {},
