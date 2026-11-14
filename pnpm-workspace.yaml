@@ -16,32 +16,6 @@ allowBuilds:
   # require.resolve로 먼저 찾을 때만 쓰는 fallback이다. postinstall 미실행 상태에서
   # `bin/esbuild --version`이 정상 출력됨을 실측 확인했다 — 실행 허가가 불필요해 거부한다.
   esbuild: false
-minimumReleaseAgeExclude:
-  - '@tiptap/core@3.30.1'
-  - '@tiptap/extension-blockquote@3.30.1'
-  - '@tiptap/extension-bold@3.30.1'
-  - '@tiptap/extension-bullet-list@3.30.1'
-  - '@tiptap/extension-code-block@3.30.1'
-  - '@tiptap/extension-code@3.30.1'
-  - '@tiptap/extension-document@3.30.1'
-  - '@tiptap/extension-dropcursor@3.30.1'
-  - '@tiptap/extension-gapcursor@3.30.1'
-  - '@tiptap/extension-hard-break@3.30.1'
-  - '@tiptap/extension-heading@3.30.1'
-  - '@tiptap/extension-horizontal-rule@3.30.1'
-  - '@tiptap/extension-italic@3.30.1'
-  - '@tiptap/extension-link@3.30.1'
-  - '@tiptap/extension-list-item@3.30.1'
-  - '@tiptap/extension-list-keymap@3.30.1'
-  - '@tiptap/extension-list@3.30.1'
-  - '@tiptap/extension-ordered-list@3.30.1'
-  - '@tiptap/extension-paragraph@3.30.1'
-  - '@tiptap/extension-strike@3.30.1'
-  - '@tiptap/extension-text@3.30.1'
-  - '@tiptap/extension-underline@3.30.1'
-  - '@tiptap/extensions@3.30.1'
-  - '@tiptap/pm@3.30.1'
-  - '@tiptap/starter-kit@3.30.1'
 patchedDependencies:
   micromark-extension-gfm-table@2.1.1: patches/micromark-extension-gfm-table@2.1.1.patch
   playwright-core@1.65.0: patches/playwright-core@1.65.0.patch
